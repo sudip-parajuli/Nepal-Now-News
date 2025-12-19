@@ -54,7 +54,14 @@ async def main():
     img_fetcher = ImageFetcher()
     rewriter = ScriptRewriter(os.getenv("GEMINI_API_KEY"))
     vgen = VideoShortsGenerator()
-    uploader = YouTubeUploader() if (os.path.exists("client_secrets.json") or os.path.exists("client_secret.json") or os.getenv("YOUTUBE_TOKEN_BASE64")) else None
+    youtube_token = os.getenv("YOUTUBE_TOKEN_BASE64")
+    has_secrets = os.path.exists("client_secrets.json") or os.path.exists("client_secret.json")
+    
+    if youtube_token or has_secrets:
+        uploader = YouTubeUploader()
+    else:
+        print("WARNING: YouTube Uploader not initialized. Missing YOUTUBE_TOKEN_BASE64 secret or client_secrets.json file.")
+        uploader = None
 
     processed_count = 0
     for item in breaking_news:
