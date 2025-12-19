@@ -16,29 +16,32 @@ class TTSEngine:
             
         communicate = edge_tts.Communicate(text, voice)
         
-        word_offsets = []
-        
         # Capture offsets while saving
-        # Note: we need to use stream to get metadata
         with open(output_path, "wb") as f:
             async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
+                ctype = chunk.get("type")
+                if ctype == "audio":
                     f.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
+                elif ctype == "WordBoundary":
                     # Convert microseconds to seconds
                     word_offsets.append({
                         "word": chunk["text"],
                         "start": chunk["offset"] / 10**7,
                         "duration": chunk["duration"] / 10**7
                     })
-                elif chunk["type"] == "Metadata":
-                    # Just for debugging
+                elif ctype == "Metadata":
+                    # Some versions might bundle offsets here
                     pass
         
+        # Verify capture
         if not word_offsets:
-            print("WARNING: No word boundaries were captured!")
+            print(f"CRITICAL WARNING: No word boundaries were captured for text: '{text[:50]}...'. Karaoke will be disabled.")
+            # Fallback check: is the text extremely short?
+            if len(text.strip()) > 5:
+                print("Capturing failed despite non-empty text. Check edge-tts compatibility.")
         else:
-            print(f"Audio saved to {output_path} with {len(word_offsets)} word offsets. Sample: {word_offsets[0]}")
+            print(f"Audio saved to {output_path} with {len(word_offsets)} word offsets. Samples: {word_offsets[:2]}")
+        
         return output_path, word_offsets
 
 if __name__ == "__main__":

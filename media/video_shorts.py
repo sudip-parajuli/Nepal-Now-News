@@ -79,8 +79,12 @@ class VideoShortsGenerator:
         # 3. Audio Mixing
         import glob
         import random
-        # Ensure path is absolute or correct relative to execution root
-        music_dir = os.path.abspath("music")
+        # Detection: Check current dir and project root
+        music_dir = "music"
+        if not os.path.exists(music_dir):
+            # Try one level up if in a subdir
+            music_dir = os.path.join(os.getcwd(), "music")
+            
         music_files = glob.glob(os.path.join(music_dir, "*.mp3")) + glob.glob(os.path.join(music_dir, "*.wav"))
         
         if music_files:
@@ -96,7 +100,7 @@ class VideoShortsGenerator:
                 print(f"Music mix failed: {e}")
                 final_audio = audio
         else:
-            print("No background music files found in music/ folder.")
+            print(f"No background music files found in {os.path.abspath(music_dir)}")
             final_audio = audio
 
         final_video = CompositeVideoClip(clips, size=self.size)
