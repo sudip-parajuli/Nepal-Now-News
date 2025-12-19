@@ -14,11 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Debug Info
+      - name: Debug Path and Music
         run: |
-          ls -R music/ || echo "Music folder not found or empty"
-          pwd
-      
+          echo "Current working directory: $(pwd)"
+          echo "Listing all directories and music files:"
+          find . -maxdepth 3 -name "music" -type d
+          ls -R music/ || echo "Music folder root not found"
+          mkdir -p storage
+          
       - name: Set up Python
         uses: actions/setup-python@v4
         with:

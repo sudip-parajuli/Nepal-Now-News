@@ -21,14 +21,25 @@ FEEDS = [
 POSTED_FILE = "storage/posted_breaking.json"
 
 async def main():
-    if not os.path.exists("storage"):
-        os.makedirs("storage")
+    # Ensure storage exists at the start
+    base_dir = os.getcwd()
+    storage_dir = os.path.join(base_dir, "storage")
+    if not os.path.exists(storage_dir):
+        os.makedirs(storage_dir)
     
-    if os.path.exists(POSTED_FILE):
-        with open(POSTED_FILE, 'r') as f:
+    posted_path = os.path.join(base_dir, POSTED_FILE)
+    
+    # Load posted hashes with fallback to root if storage is empty but root has it
+    if os.path.exists(posted_path):
+        with open(posted_path, 'r') as f:
+            posted_hashes = json.load(f)
+    elif os.path.exists("posted_breaking.json"):
+        with open("posted_breaking.json", 'r') as f:
             posted_hashes = json.load(f)
     else:
         posted_hashes = []
+
+    print(f"Loaded {len(posted_hashes)} previously posted news hashes.")
 
     fetcher = RSSFetcher(FEEDS)
     news_items = fetcher.fetch_all()
@@ -42,33 +53,33 @@ async def main():
     vgen = VideoShortsGenerator()
     uploader = YouTubeUploader() if (os.path.exists("client_secrets.json") or os.path.exists("client_secret.json") or os.getenv("YOUTUBE_TOKEN_BASE64")) else None
 
+    processed_count = 0
     for item in breaking_news:
         if item['hash'] not in posted_hashes:
-            print(f"Processing breaking news: {item['headline']}")
+            print(f"NEW Breaking News detected: {item['headline']}")
             
             script = rewriter.rewrite_for_shorts(item['headline'], item['content'])
             
-            audio_path = f"storage/temp_audio_{item['hash'][:8]}.mp3"
+            audio_path = os.path.join(storage_dir, f"temp_audio_{item['hash'][:8]}.mp3")
             _, word_offsets = await TTSEngine.generate_audio(script, audio_path)
             
-            # Fetch multiple images based on script segments
+            # Fetch multiple images
             sentences = [s.strip() for s in script.split('.') if len(s.strip()) > 10]
             if not sentences: sentences = [item['headline']]
             
-            # Use AI to get better keywords for each segment
             image_queries = []
             for s in sentences[:4]:
                 kw = rewriter.generate_image_keywords(s)
                 image_queries.append(kw)
-                print(f"Segment keywords: {kw}")
                 
             image_paths = img_fetcher.fetch_multi_images(image_queries, f"img_{item['hash'][:8]}")
             
-            video_path = f"storage/breaking_{item['hash'][:8]}.mp4"
+            video_path = os.path.join(storage_dir, f"breaking_{item['hash'][:8]}.mp4")
             vgen.create_shorts(script, audio_path, video_path, word_offsets=word_offsets, image_paths=image_paths)
             
             if uploader:
                 title = f"BREAKING: {item['headline'][:70]}"
+                print(f"Uploading to YouTube: {title}")
                 uploader.upload_video(
                     video_path, 
                     title, 
@@ -77,14 +88,20 @@ async def main():
                 )
             
             posted_hashes.append(item['hash'])
+            # Save immediately to prevent issues if process crashes
+            with open(posted_path, 'w') as f:
+                json.dump(posted_hashes[-200:], f)
+                
             # Clean up
             if os.path.exists(audio_path): os.remove(audio_path)
             for p in image_paths: 
                 if os.path.exists(p): os.remove(p)
-            break 
-
-    with open(POSTED_FILE, 'w') as f:
-        json.dump(posted_hashes[-100:], f)
+            
+            processed_count += 1
+            if processed_count >= 2: # Limit to 2 per run to avoid overwhelming
+                break 
+        else:
+            print(f"Skipping already posted news: {item['headline']}")
 
 if __name__ == "__main__":
     asyncio.run(main())

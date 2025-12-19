@@ -55,7 +55,7 @@ class VideoShortsGenerator:
             print(f"Rendering {len(word_offsets)} points with Phrase-Sync...")
             
             # UI Config
-            FONT_SIZE = 135
+            FONT_SIZE = 110 # Slightly reduced as requested
             TEXT_Y = 1450 # Focus on bottom third
             
             # Phrase Grouping: Show 4 words at a time for rhythm
@@ -88,35 +88,40 @@ class VideoShortsGenerator:
                         # Subtle pop
                         active_clip = active_clip.resize(lambda t: 1.1 + 0.05*t if t < 0.1 else 1.15)
                         clips.append(active_clip)
-                        
-                        # 2. Ghost Context (White & Smaller)
-                        # Show the whole phrase in white at a lower opacity or size, 
-                        # but only when it's NOT the active word? 
-                        # To keep it simple and reliable: show the active word as a "punchy" element.
                     except Exception as e:
                         if i == 0: print(f"Caption engine warning: {e}")
-                        fallback = TextClip(w_text, fontsize=110, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
+                        fallback = TextClip(w_text, fontsize=90, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
                         clips.append(fallback)
         else:
             print("WARNING: Falling back to block captions.")
-            txt = TextClip(self._wrap_text(text, 15), fontsize=90, color='white', bg_color='black', method='caption', size=(self.size[0]-80, None)).set_duration(duration).set_position('center')
+            txt = TextClip(self._wrap_text(text, 15), fontsize=80, color='white', bg_color='black', method='caption', size=(self.size[0]-80, None)).set_duration(duration).set_position('center')
             clips.append(txt)
 
         # 3. Audio Mixing
         import glob
         import random
-        # Detection: Check current dir and project root
-        music_dir = "music"
-        if not os.path.exists(music_dir):
-            # Try one level up if in a subdir
-            music_dir = os.path.join(os.getcwd(), "music")
+        # Detection: Check multiple possible locations for music
+        possible_music_paths = [
+            "music",
+            os.path.join(os.getcwd(), "music"),
+            "international_news_automation/music",
+            os.path.join(os.getcwd(), "..", "music")
+        ]
+        
+        music_dir = None
+        for p in possible_music_paths:
+            if os.path.exists(p) and glob.glob(os.path.join(p, "*.*")):
+                music_dir = p
+                break
             
-        music_files = glob.glob(os.path.join(music_dir, "*.mp3")) + glob.glob(os.path.join(music_dir, "*.wav"))
+        music_files = []
+        if music_dir:
+            music_files = glob.glob(os.path.join(music_dir, "*.mp3")) + glob.glob(os.path.join(music_dir, "*.wav"))
         
         if music_files:
             try:
                 bg_music_path = random.choice(music_files)
-                print(f"Mixing music: {os.path.basename(bg_music_path)}")
+                print(f"Mixing music: {bg_music_path}")
                 bg_music = AudioFileClip(bg_music_path).volumex(0.12).set_duration(duration)
                 if bg_music.duration < duration:
                     bg_music = bg_music.fx(afx.audio_loop, duration=duration)
@@ -126,7 +131,7 @@ class VideoShortsGenerator:
                 print(f"Music mix failed: {e}")
                 final_audio = audio
         else:
-            print(f"No background music files found in {os.path.abspath(music_dir)}")
+            print(f"CRITICAL: No background music files found in any of {possible_music_paths}")
             final_audio = audio
 
         final_video = CompositeVideoClip(clips, size=self.size)
