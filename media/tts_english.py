@@ -16,6 +16,8 @@ class TTSEngine:
             
         communicate = edge_tts.Communicate(text, voice)
         
+        word_offsets = []
+        
         # Capture offsets while saving
         with open(output_path, "wb") as f:
             async for chunk in communicate.stream():
