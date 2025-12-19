@@ -14,8 +14,10 @@ from uploader.youtube_uploader import YouTubeUploader
 load_dotenv()
 
 FEEDS = [
-    "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "https://feeds.aljazeera.com/rss/world"
+    "https://www.onlinekhabar.com/feed",
+    "https://ratopati.com/feed",
+    "https://setopati.com/feed",
+    "https://www.bbc.com/nepali/index.xml"
 ]
 
 async def main():
@@ -61,13 +63,21 @@ async def main():
     if sections:
         vgen.create_daily_summary(sections, audio_path, video_path)
     
-        uploader = YouTubeUploader() if (os.path.exists("client_secrets.json") or os.path.exists("client_secret.json") or os.getenv("YOUTUBE_TOKEN_BASE64")) else None
+        youtube_token = os.getenv("YOUTUBE_TOKEN_BASE64")
+        has_secrets = os.path.exists("client_secrets.json") or os.path.exists("client_secret.json")
+        
+        if youtube_token or has_secrets:
+            uploader = YouTubeUploader()
+        else:
+            print("WARNING: YouTube Uploader not initialized. Missing YOUTUBE_TOKEN_BASE64 secret or client_secrets.json file.")
+            uploader = None
+
         if uploader:
             uploader.upload_video(
                 video_path,
-                f"World News Today | {datetime.now().strftime('%Y-%m-%d')} Global Headlines",
-                f"Global news summary for today.\n\nSummary:\n{script}",
-                ["WorldNews", "DailyNews", "Summary"],
+                f"आजको प्रमुख समाचार | {datetime.now().strftime('%Y-%m-%d')} प्रमुख खबरहरू",
+                f"आजका मुख्य समाचारहरूको सारांश।\n\nSummary:\n{script}\n\n#NepaliNews #DailyNews #Summary",
+                ["NepaliNews", "DailyNews", "Summary"],
                 category_id="25"
             )
 
