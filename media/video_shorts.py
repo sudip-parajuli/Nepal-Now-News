@@ -15,11 +15,11 @@ class VideoShortsGenerator:
         # 1. Background Logic (Rotating images)
         bg_clips = []
         if image_paths and len(image_paths) > 0:
-            section_dur = duration / len(image_paths)
+            transition_time = 4.0 # Change image every 4 seconds for dynamism
             for i, img_path in enumerate(image_paths):
                 if os.path.exists(img_path):
                     try:
-                        img_clip = ImageClip(img_path).set_duration(section_dur).set_start(i * section_dur)
+                        img_clip = ImageClip(img_path).set_duration(transition_time).set_start(i * transition_time)
                         
                         # Resize and crop to fill vertical screen
                         w, h = img_clip.size
@@ -31,11 +31,18 @@ class VideoShortsGenerator:
                         
                         img_clip = img_clip.set_position('center')
                         
-                        # Zoom effect (Ken Burns)
-                        img_clip = img_clip.resize(lambda t: 1 + 0.1 * (t % section_dur)/section_dur)
+                        # Ken Burns + Rapid Shift
+                        img_clip = img_clip.resize(lambda t: 1.05 + 0.1 * (t / transition_time))
                         bg_clips.append(img_clip)
                     except Exception as e:
                         print(f"Error processing image {img_path}: {e}")
+            
+            # Loop background if shorter than audio
+            if bg_clips:
+                total_bg_dur = len(bg_clips) * transition_time
+                if total_bg_dur < duration:
+                    # Simple loop: duplicate the last clip to fill the gap or extend the last one
+                    bg_clips[-1] = bg_clips[-1].set_duration(duration - bg_clips[-1].start)
 
         if not bg_clips:
             bg_clips.append(ColorClip(size=self.size, color=(15, 15, 35), duration=duration))

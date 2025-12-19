@@ -80,7 +80,7 @@ async def main():
             if not sentences: sentences = [item['headline']]
             
             image_queries = []
-            for s in sentences[:4]:
+            for s in sentences[:10]:
                 kw = rewriter.generate_image_keywords(s)
                 image_queries.append(kw)
                 
