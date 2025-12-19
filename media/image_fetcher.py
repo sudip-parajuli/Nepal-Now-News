@@ -78,22 +78,31 @@ class ImageFetcher:
                         filtered_results.append(r['image'])
 
                 if not filtered_results:
-                    # If everything was filtered, take the first 3 original JPGs as last resort
-                    filtered_results = [r['image'] for r in results if r['image'].split('.')[-1].lower() in ['jpg', 'jpeg', 'png']]
+                    print(f"No specific photos found for: {base_query}. Trying general news fallback.")
+                    # Fallback to generic news aesthetic if story-specific search is too restrictive
+                    fallback_results = ddgs.images(
+                        keywords="breaking news world report photo -diagram",
+                        size="large",
+                        type_image="photo"
+                    )
+                    filtered_results = [r['image'] for r in fallback_results if r['image'].split('.')[-1].lower() in ['jpg', 'jpeg', 'png']]
+
+                if not filtered_results:
+                    return None
 
                 random.shuffle(filtered_results)
 
-                for url in filtered_results[:10]:
+                for url in filtered_results[:12]:
                     try:
                         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-                        response = requests.get(url, timeout=8, headers=headers)
+                        response = requests.get(url, timeout=10, headers=headers)
                         if response.status_code == 200:
-                            # Verify it's not a tiny thumbnail
-                            if len(response.content) > 50000: # Min 50KB
+                            # Strict size check: Ensure it's not a small icon/diagram
+                            if len(response.content) > 60000: # 60KB min
                                 with open(save_path, 'wb') as f:
                                     f.write(response.content)
                                 return save_path
-                    except:
+                    except Exception as e:
                         continue
         except Exception as e:
             print(f"DDG Search error: {e}")

@@ -41,21 +41,23 @@ class TTSEngine:
             print(f"Error during TTS streaming: {e}")
         
         # --- FALLBACK: Simulated Word Offsets ---
-        # If WordBoundary events are missing, we manually estimate them based on duration.
         if not word_offsets and len(text.strip()) > 0:
             print("FALLBACK: Simulated Word Sync initiated.")
             from moviepy.editor import AudioFileClip
             try:
                 temp_audio = AudioFileClip(output_path)
                 total_dur = temp_audio.duration
+            except Exception as e:
+                print(f"Warning: Could not read audio duration, estimating... ({e})")
+                total_dur = len(text.split()) * 0.4 # Rough estimate
+            
+            try:
                 words = text.split()
-                # Average duration per word
-                avg_word_dur = total_dur / len(words)
-                
                 start_time = 0
+                total_chars = sum(len(x) for x in words)
                 for w in words:
-                    # Logic: use word length to adjust slightly for better realism
-                    w_dur = (len(w) / sum(len(x) for x in words)) * total_dur
+                    # Logic: use word length proportionality
+                    w_dur = (len(w) / total_chars) * total_dur
                     word_offsets.append({
                         "word": w,
                         "start": start_time,
@@ -63,7 +65,7 @@ class TTSEngine:
                     })
                     start_time += w_dur
             except Exception as e:
-                print(f"Simulated sync failed: {e}")
+                print(f"Final simulated sync attempt failed: {e}")
 
         if not word_offsets:
             print(f"CRITICAL: Failed to generate word offsets for synchronization.")

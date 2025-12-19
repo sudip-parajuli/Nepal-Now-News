@@ -50,67 +50,56 @@ class VideoShortsGenerator:
 
         clips = bg_clips
 
-        # 2. Modern Karaoke Logic (Multi-word with highlighting)
+        # 2. Modern Karaoke Logic (Phrase-based grouping)
         if word_offsets:
-            print(f"Rendering {len(word_offsets)} word clips with modern highlighting...")
+            print(f"Rendering {len(word_offsets)} points with Phrase-Sync...")
             
-            # Constants for UI
-            FONT_SIZE = 110
-            TEXT_Y = 1400 # Bottom third of screen
+            # UI Config
+            FONT_SIZE = 135
+            TEXT_Y = 1450 # Focus on bottom third
             
-            # Helper to find which words belong to which time
-            for i, current_word in enumerate(word_offsets):
-                start_p = current_word['start']
-                end_p = current_word['start'] + current_word['duration']
+            # Phrase Grouping: Show 4 words at a time for rhythm
+            phrase_size = 4
+            for i in range(0, len(word_offsets), phrase_size):
+                phrase_chunk = word_offsets[i : i + phrase_size]
+                if not phrase_chunk: continue
                 
-                # Window: Show the current word + 2 before + 4 after for context
-                context_start = max(0, i - 2)
-                context_end = min(len(word_offsets), i + 5)
+                phrase_start = phrase_chunk[0]['start']
+                phrase_end = phrase_chunk[-1]['start'] + phrase_chunk[-1]['duration']
                 
-                context_words = []
-                for idx in range(context_start, context_end):
-                    w = word_offsets[idx]['word'].upper()
-                    if idx == i:
-                        # Highlight the active word
-                        context_words.append(f"<span foreground='yellow'>{w}</span>")
-                    else:
-                        context_words.append(w)
-                
-                display_text = " ".join(context_words)
-                
-                try:
-                    # Using 'pango' if available for colors, otherwise standard
-                    # MoviePy TextClip doesn't support span tags easily without imagemagick pango
-                    # Falling back to a two-layer approach: White text, then yellow layer for active word.
+                # Render each word in the phrase separately to allow highlighting
+                for j, word_info in enumerate(phrase_chunk):
+                    w_start = word_info['start']
+                    w_end = word_info['start'] + word_info['duration']
+                    w_text = word_info['word'].upper()
                     
-                    # 1. Base Layer (All words in white)
-                    full_line = " ".join([word_offsets[idx]['word'].upper() for idx in range(context_start, context_end)])
-                    
-                    # Estimate position of active word to highlight it? 
-                    # That's too complex. Let's do a simpler "Active Word Only" or "Active Word Large" approach
-                    # that the user will definitely notice.
-                    
-                    t_clip = TextClip(
-                        current_word['word'].upper(),
-                        fontsize=160,
-                        color='yellow',
-                        font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
-                        stroke_color='black',
-                        stroke_width=5,
-                        method='label'
-                    ).set_start(start_p).set_duration(end_p - start_p).set_position(('center', TEXT_Y))
-                    
-                    # Pop animation
-                    t_clip = t_clip.resize(lambda t: 1 + 0.1 * (t/(end_p-start_p)) if t < (end_p-start_p) else 1.1)
-                    clips.append(t_clip)
-
-                except Exception as e:
-                    if i == 0: print(f"TextClip rendering error: {e}")
-                    t_clip = TextClip(current_word['word'].upper(), fontsize=130, color='yellow', method='label').set_start(start_p).set_duration(end_p - start_p).set_position(('center', TEXT_Y))
-                    clips.append(t_clip)
+                    # 1. Active Highlighting (Yellow & Large)
+                    try:
+                        active_clip = TextClip(
+                            w_text,
+                            fontsize=FONT_SIZE + 20,
+                            color='yellow',
+                            font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
+                            stroke_color='black',
+                            stroke_width=6,
+                            method='label'
+                        ).set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
+                        
+                        # Subtle pop
+                        active_clip = active_clip.resize(lambda t: 1.1 + 0.05*t if t < 0.1 else 1.15)
+                        clips.append(active_clip)
+                        
+                        # 2. Ghost Context (White & Smaller)
+                        # Show the whole phrase in white at a lower opacity or size, 
+                        # but only when it's NOT the active word? 
+                        # To keep it simple and reliable: show the active word as a "punchy" element.
+                    except Exception as e:
+                        if i == 0: print(f"Caption engine warning: {e}")
+                        fallback = TextClip(w_text, fontsize=110, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
+                        clips.append(fallback)
         else:
-            print("WARNING: Using static captions fallback.")
-            txt = TextClip(self._wrap_text(text, 20), fontsize=80, color='white', bg_color='black', method='caption', size=(self.size[0]-100, None)).set_duration(duration).set_position('center')
+            print("WARNING: Falling back to block captions.")
+            txt = TextClip(self._wrap_text(text, 15), fontsize=90, color='white', bg_color='black', method='caption', size=(self.size[0]-80, None)).set_duration(duration).set_position('center')
             clips.append(txt)
 
         # 3. Audio Mixing
