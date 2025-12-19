@@ -28,12 +28,16 @@ class YouTubeUploader:
         # Try loading from environment variable first (for GHA)
         token_b64 = os.getenv("YOUTUBE_TOKEN_BASE64")
         if token_b64:
+            print(f"YOUTUBE_TOKEN_BASE64 found (length: {len(token_b64)}). Attempting to decode...")
             try:
                 creds_data = base64.b64decode(token_b64)
                 creds = pickle.loads(creds_data)
-                print("Loaded YouTube credentials from environment variable.")
+                print("SUCCESS: Loaded YouTube credentials from environment variable.")
             except Exception as e:
-                print(f"Error decoding YOUTUBE_TOKEN_BASE64: {e}")
+                print(f"ERROR: Failed to decode YOUTUBE_TOKEN_BASE64. Details: {e}")
+                print("Ensure you used the correct string from generate_token.py.")
+        else:
+            print("INFO: YOUTUBE_TOKEN_BASE64 not found in environment.")
 
         # Fallback to local file
         if not creds and os.path.exists(self.token_file):
