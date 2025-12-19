@@ -17,32 +17,27 @@ class TTSEngine:
         communicate = edge_tts.Communicate(text, voice)
         
         word_offsets = []
-        
         # Capture offsets while saving
-        with open(output_path, "wb") as f:
-            async for chunk in communicate.stream():
-                ctype = chunk.get("type")
-                if ctype == "audio":
-                    f.write(chunk["data"])
-                elif ctype == "WordBoundary":
-                    # Convert microseconds to seconds
-                    word_offsets.append({
-                        "word": chunk["text"],
-                        "start": chunk["offset"] / 10**7,
-                        "duration": chunk["duration"] / 10**7
-                    })
-                elif ctype == "Metadata":
-                    # Some versions might bundle offsets here
-                    pass
+        try:
+            with open(output_path, "wb") as f:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        f.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        word_offsets.append({
+                            "word": chunk["text"],
+                            "start": chunk["offset"] / 10**7,
+                            "duration": chunk["duration"] / 10**7
+                        })
+        except Exception as e:
+            print(f"Error during TTS streaming: {e}")
         
         # Verify capture
         if not word_offsets:
-            print(f"CRITICAL WARNING: No word boundaries were captured for text: '{text[:50]}...'. Karaoke will be disabled.")
-            # Fallback check: is the text extremely short?
-            if len(text.strip()) > 5:
-                print("Capturing failed despite non-empty text. Check edge-tts compatibility.")
+            print(f"CRITICAL WARNING: No word boundaries captured for '{text[:30]}...'")
+            print("This could be due to edge-tts version or voice compatibility.")
         else:
-            print(f"Audio saved to {output_path} with {len(word_offsets)} word offsets. Samples: {word_offsets[:2]}")
+            print(f"Audio saved to {output_path} with {len(word_offsets)} word offsets.")
         
         return output_path, word_offsets
 

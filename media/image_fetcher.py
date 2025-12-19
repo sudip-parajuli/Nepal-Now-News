@@ -2,6 +2,7 @@ import os
 import requests
 from duckduckgo_search import DDGS
 import random
+import time
 
 class ImageFetcher:
     def __init__(self, download_dir="storage/temp_images"):
