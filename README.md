@@ -26,17 +26,17 @@ international_news_automation/
 ## Setup Instructions
 
 ### 1. Prerequisites
-- Python 3.9+
-- [FFmpeg](https://ffmpeg.org/) installed
-- [ImageMagick](https://imagemagick.org/) installed (required by MoviePy)
+- **Python 3.9+**
+- **FFmpeg**: [Download here](https://ffmpeg.org/download.html) and add to PATH.
+- **ImageMagick**: Required for subtitles.
+  - **Windows**: Install [ImageMagick](https://imagemagick.org/script/download.php#windows). During installation, check "Install legacy utilities (e.g. convert)".
+  - **Important**: You may need to tell MoviePy where ImageMagick is. In your Python environment, you can set the `IMAGEMAGICK_BINARY` environment variable to the path of `magick.exe`.
 
 ### 2. API Credentials
-- **Gemini AI**: Get an API key from [Google AI Studio](https://aistudio.google.com/).
+- **Gemini AI**: Add `GEMINI_API_KEY` to your `.env` file. The system is configured to use `gemini-2.0-flash`.
 - **YouTube API**: 
-  - Create a project in [Google Cloud Console](https://console.cloud.google.com/).
-  - Enable YouTube Data API v3.
-  - Download `client_secrets.json` and place it in the root directory.
-  - Run `main_breaking.py` locally once to authenticate and generate `token.pickle`.
+  - Place `client_secrets.json` in the project root.
+  - Run the script once locally. It will open a browser for authentication and create `token.pickle`.
 - **Telegram (Optional)**: Get `API_ID` and `API_HASH` from [my.telegram.org](https://my.telegram.org).
 
 ### 3. Environment Variables
