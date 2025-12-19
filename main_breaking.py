@@ -38,7 +38,7 @@ async def main():
 
     rewriter = ScriptRewriter(os.getenv("GEMINI_API_KEY"))
     vgen = VideoShortsGenerator()
-    uploader = YouTubeUploader() if (os.path.exists("client_secrets.json") or os.path.exists("client_secret.json")) else None
+    uploader = YouTubeUploader() if (os.path.exists("client_secrets.json") or os.path.exists("client_secret.json") or os.getenv("YOUTUBE_TOKEN_BASE64")) else None
 
     for item in breaking_news:
         if item['hash'] not in posted_hashes:
