@@ -3,17 +3,17 @@ import edge_tts
 import os
 
 class TTSEngine:
-    default_voice = "en-US-ChristopherNeural"
+    default_voice = "ne-NP-HemkalaNeural"
 
     @staticmethod
     async def generate_audio(text: str, output_path: str, voice: str = None):
         """
-        Generates high-quality English narration and word-level timestamps.
+        Generates high-quality Nepali narration and word-level timestamps.
         Returns: (audio_path, word_offsets)
         """
         if not voice:
-            # Switch to GuyNeural which often has more robust metadata in cloud envs
-            voice = "en-US-GuyNeural"
+            # HemkalaNeural is the standard high-quality Nepali voice
+            voice = "ne-NP-HemkalaNeural"
             
         communicate = edge_tts.Communicate(text, voice)
         word_offsets = []

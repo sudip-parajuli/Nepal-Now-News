@@ -52,18 +52,18 @@ class ScriptRewriter:
 
     def rewrite_for_shorts(self, headline: str, content: str) -> str:
         prompt = f"""
-        Rewrite this international breaking news into a 25–40 second YouTube Shorts script.
+        Rewrite this breaking news into a 25–40 second YouTube Shorts script in Nepali.
         Headline: {headline}
         Content: {content}
 
-        Language: English
-        Tone: Urgent, neutral, factual
-        - RETURN ONLY THE SPEECH TEXT. 
+        Language: Nepali (Devanagari script)
+        Tone: Urgent, neutral, factual news reporting.
+        - RETURN ONLY THE NEPALI SPEECH TEXT. 
         - DO NOT include narrator instructions like "[Music plays]".
         - DO NOT include speaker labels like "Anchor:".
         - DO NOT include hashtags.
-        Simple global English
-        End with: 'More updates will follow.'
+        - Translate English terms into appropriate Nepali news terminology.
+        End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
         """
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
@@ -83,18 +83,19 @@ class ScriptRewriter:
     def summarize_for_daily(self, news_items: list) -> str:
         news_text = "\n\n".join([f"Headline: {item['headline']}\nContent: {item['content']}" for item in news_items])
         prompt = f"""
-        Summarize today’s major international news into a 6–8 minute YouTube video script.
+        Summarize today's major news into a 6–8 minute YouTube video script in Nepali.
         
         News items:
         {news_text}
 
-        Language: English
+        Language: Nepali (Devanagari)
         Tone: Professional news anchor
         Group related stories
         Use clear transitions between topics
         Avoid repetition or bias
-        - RETURN ONLY THE SPEECH TEXT.
+        - RETURN ONLY THE NEPALI SPEECH TEXT.
         - DO NOT include labels like "Segment 1" or "Visual:".
+        - Translate English news terms into proper Nepali reporting terms.
         """
         script = self._call_with_retry(prompt)
         return self.clean_script(script)

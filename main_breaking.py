@@ -14,11 +14,14 @@ from uploader.youtube_uploader import YouTubeUploader
 load_dotenv()
 
 FEEDS = [
-    "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "https://feeds.aljazeera.com/rss/world",
-    "https://www.reutersagency.com/feed/?best-topics=world-news&post_type=best"
+    "https://www.onlinekhabar.com/feed",
+    "https://ratopati.com/feed",
+    "https://setopati.com/feed",
+    "https://www.setopati.com/politics/feed",
+    "https://www.bbc.com/nepali/index.xml",
+    "http://feeds.bbci.co.uk/news/world/rss.xml" # Keep some international context
 ]
-POSTED_FILE = "storage/posted_breaking.json"
+POSTED_FILE = "storage/posted_breaking_nepali.json"
 
 async def main():
     # Ensure storage exists at the start
@@ -83,8 +86,8 @@ async def main():
                 uploader.upload_video(
                     video_path, 
                     title, 
-                    f"Breaking News Update. {script}\n\n#BreakingNews #WorldNews #Shorts", 
-                    ["BreakingNews", "WorldNews", "Shorts"]
+                    f"आजको ताजा समाचार (Nepali News Update). {script}\n\n#NepaliNews #NewsNepal #BreakingNewsNepal #Shorts", 
+                    ["NepaliNews", "NewsNepal", "BreakingNewsNepal", "Shorts"]
                 )
             
             posted_hashes.append(item['hash'])

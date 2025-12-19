@@ -79,9 +79,9 @@ class VideoShortsGenerator:
                             w_text,
                             fontsize=FONT_SIZE + 20,
                             color='yellow',
-                            font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
+                            font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Nirmala-UI-Bold',
                             stroke_color='black',
-                            stroke_width=6,
+                            stroke_width=4, # Slightly thinner stroke for Devanagari
                             method='label'
                         ).set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
                         
@@ -94,7 +94,15 @@ class VideoShortsGenerator:
                         clips.append(fallback)
         else:
             print("WARNING: Falling back to block captions.")
-            txt = TextClip(self._wrap_text(text, 15), fontsize=80, color='white', bg_color='black', method='caption', size=(self.size[0]-80, None)).set_duration(duration).set_position('center')
+            txt = TextClip(
+                self._wrap_text(text, 25), 
+                fontsize=70, 
+                color='white', 
+                bg_color='black', 
+                font='DejaVu-Sans' if os.name != 'nt' else 'Nirmala-UI',
+                method='caption', 
+                size=(self.size[0]-100, None)
+            ).set_duration(duration).set_position('center')
             clips.append(txt)
 
         # 3. Audio Mixing
