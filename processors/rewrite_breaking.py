@@ -57,12 +57,12 @@ class ScriptRewriter:
         Content: {content}
 
         Language: Nepali (Devanagari script)
-        Tone: Urgent, neutral, factual news reporting.
+        Tone: Professional news anchor, formal, neutral.
+        - Use standard Nepali news reporting grammar (e.g., prefer "फैलिएको छ" over "फैलियो छ").
+        - Ensure natural flow and correct tense usage.
         - RETURN ONLY THE NEPALI SPEECH TEXT. 
-        - DO NOT include narrator instructions like "[Music plays]".
-        - DO NOT include speaker labels like "Anchor:".
-        - DO NOT include hashtags.
-        - Translate English terms into appropriate Nepali news terminology.
+        - DO NOT include narrator instructions or speaker labels.
+        - Translate English news terms into proper Nepali reporting terms.
         End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
         """
         script = self._call_with_retry(prompt)
@@ -89,12 +89,12 @@ class ScriptRewriter:
         {news_text}
 
         Language: Nepali (Devanagari)
-        Tone: Professional news anchor
-        Group related stories
-        Use clear transitions between topics
-        Avoid repetition or bias
+        Tone: Professional news anchor, formal.
+        - Use standard Nepali news reporting grammar and formal vocabulary.
+        - Ensure perfect grammatical structure and natural transitions.
+        - Group related stories logically.
         - RETURN ONLY THE NEPALI SPEECH TEXT.
-        - DO NOT include labels like "Segment 1" or "Visual:".
+        - DO NOT include any labels like "Segment" or "Visual".
         - Translate English news terms into proper Nepali reporting terms.
         """
         script = self._call_with_retry(prompt)
