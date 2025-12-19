@@ -74,6 +74,7 @@ class YouTubeUploader:
         return response['id']
 
 if __name__ == "__main__":
+    pass
     # Test (requires client_secrets.json)
     # uploader = YouTubeUploader()
     # uploader.upload_video("test_video.mp4", "Test Breaking News", "Summary", ["news", "breaking"])
