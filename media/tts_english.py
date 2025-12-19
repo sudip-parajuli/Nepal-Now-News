@@ -15,7 +15,7 @@ class TTSEngine:
             # HemkalaNeural is the standard high-quality Nepali voice
             voice = "ne-NP-HemkalaNeural"
             
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(text, voice, rate="+20%")
         word_offsets = []
         chunk_types = set()
         

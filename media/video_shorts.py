@@ -79,19 +79,30 @@ class VideoShortsGenerator:
                             w_text,
                             fontsize=FONT_SIZE + 20,
                             color='yellow',
-                            font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Nirmala-UI-Bold',
+                            font='Noto-Sans-Devanagari' if os.name != 'nt' else 'Nirmala-UI-Bold',
                             stroke_color='black',
-                            stroke_width=4, # Slightly thinner stroke for Devanagari
+                            stroke_width=4,
                             method='label'
                         ).set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
-                        
-                        # Subtle pop
-                        active_clip = active_clip.resize(lambda t: 1.1 + 0.05*t if t < 0.1 else 1.15)
-                        clips.append(active_clip)
                     except Exception as e:
-                        if i == 0: print(f"Caption engine warning: {e}")
-                        fallback = TextClip(w_text, fontsize=90, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
-                        clips.append(fallback)
+                        if i == 0 and j == 0: 
+                            print(f"Caption engine warning (Primary): {e}")
+                        # Secondary fallback using DejaVu
+                        try:
+                            active_clip = TextClip(
+                                w_text,
+                                fontsize=FONT_SIZE + 20,
+                                color='yellow',
+                                font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
+                                method='label'
+                            ).set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
+                        except Exception as e2:
+                            if i == 0 and j == 0:
+                                print(f"Caption engine warning (Secondary): {e2}")
+                            # Final fallback without explicit font
+                            active_clip = TextClip(w_text, fontsize=90, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
+                        
+                        clips.append(active_clip)
         else:
             print("WARNING: Falling back to block captions.")
             txt = TextClip(
@@ -99,7 +110,7 @@ class VideoShortsGenerator:
                 fontsize=70, 
                 color='white', 
                 bg_color='black', 
-                font='DejaVu-Sans' if os.name != 'nt' else 'Nirmala-UI',
+                font='Noto-Sans-Devanagari' if os.name != 'nt' else 'Nirmala-UI',
                 method='caption', 
                 size=(self.size[0]-100, None)
             ).set_duration(duration).set_position('center')
