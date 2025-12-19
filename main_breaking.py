@@ -46,9 +46,11 @@ async def main():
 
     fetcher = RSSFetcher(FEEDS)
     news_items = fetcher.fetch_all()
+    print(f"Total news items fetched: {len(news_items)}")
 
     classifier = NewsClassifier()
     breaking_news = classifier.filter_breaking(news_items)
+    print(f"Total breaking news items identified: {len(breaking_news)}")
 
     from media.image_fetcher import ImageFetcher
     img_fetcher = ImageFetcher()
