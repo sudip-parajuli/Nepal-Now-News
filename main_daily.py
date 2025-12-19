@@ -49,10 +49,11 @@ async def main():
     for i, line in enumerate(lines):
         text = line.strip()
         if len(text) > 20:
-            # For long videos, we search images for each sentence or paragraph
+            # Generate AI keywords for better image context
+            keywords = rewriter.generate_image_keywords(text)
             img_name = f"summary_img_{i}.jpg"
-            # Use the first 50 chars of text as query
-            img_path = img_fetcher.fetch_image(text[:50], img_name)
+            print(f"Section {i} keywords: {keywords}")
+            img_path = img_fetcher.fetch_image(keywords, img_name)
             sections.append({'text': text, 'image_path': img_path})
             if img_path: temp_images.append(img_path)
     

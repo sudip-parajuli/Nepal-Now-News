@@ -99,6 +99,32 @@ class ScriptRewriter:
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
 
+    def generate_image_keywords(self, sentence: str) -> str:
+        """
+        Generates 3-5 descriptive keywords for an image search based on the sentence.
+        Aims for 'news-worthy' photographic subjects.
+        """
+        prompt = f"""
+        Extract 3-5 highly descriptive keywords for a news photographic image search from this sentence:
+        "{sentence}"
+        
+        Rules:
+        - Focus on real-world objects, people, or locations.
+        - AVOID generic words like "system", "process", "decision", "random".
+        - AVOID abstract concepts or diagrams.
+        - Output ONLY the keywords separated by spaces.
+        - Example: "US government discontinues lottery" -> "US Capitol Building Immigration"
+        """
+        
+        try:
+            keywords = self._call_with_retry(prompt)
+            # Clean up formatting
+            return " ".join(keywords.replace('"', '').replace(',', ' ').split())
+        except:
+            # Fallback to simple extraction
+            words = [w for w in sentence.split() if len(w) > 4]
+            return " ".join(words[:4])
+
 if __name__ == "__main__":
     API_KEY = os.getenv("GEMINI_API_KEY")
     if API_KEY:

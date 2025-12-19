@@ -61,17 +61,29 @@ class ImageFetcher:
                 )
                 
                 if not results:
-                    # Fallback: remove some restrictions
-                    results = ddgs.images(keywords=f"{base_query} news reporter", size="large")
-
-                if not results:
                     return None
 
-                # Shuffle to get variety
-                image_urls = [r['image'] for r in results if r['image'].split('.')[-1].lower() in ['jpg', 'jpeg', 'png']]
-                random.shuffle(image_urls)
+                # Strict Filtering: Exclude anything that looks like a diagram/vector
+                forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo"]
+                
+                filtered_results = []
+                for r in results:
+                    url = r['image'].lower()
+                    title = r.get('title', '').lower()
+                    
+                    if any(f in url for f in forbidden) or any(f in title for f in forbidden):
+                        continue
+                        
+                    if url.split('.')[-1] in ['jpg', 'jpeg', 'png']:
+                        filtered_results.append(r['image'])
 
-                for url in image_urls[:8]:
+                if not filtered_results:
+                    # If everything was filtered, take the first 3 original JPGs as last resort
+                    filtered_results = [r['image'] for r in results if r['image'].split('.')[-1].lower() in ['jpg', 'jpeg', 'png']]
+
+                random.shuffle(filtered_results)
+
+                for url in filtered_results[:10]:
                     try:
                         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
                         response = requests.get(url, timeout=8, headers=headers)
