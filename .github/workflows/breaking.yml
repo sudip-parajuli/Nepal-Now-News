@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
-          pip install feedparser edge-tts "moviepy<2.0.0" requests beautifulsoup4 google-generativeai telethon python-dotenv duckduckgo-search google-api-python-client google-auth-oauthlib groq
+          pip install feedparser edge-tts "moviepy<2.0.0" "Pillow<10.0.0" requests beautifulsoup4 google-generativeai telethon python-dotenv duckduckgo-search google-api-python-client google-auth-oauthlib groq
           
       - name: Configure ImageMagick
         run: |
