@@ -31,8 +31,14 @@ class TTSEngine:
                         "start": chunk["offset"] / 10**7,
                         "duration": chunk["duration"] / 10**7
                     })
+                elif chunk["type"] == "Metadata":
+                    # Just for debugging
+                    pass
         
-        print(f"Audio saved to {output_path} with {len(word_offsets)} word offsets.")
+        if not word_offsets:
+            print("WARNING: No word boundaries were captured!")
+        else:
+            print(f"Audio saved to {output_path} with {len(word_offsets)} word offsets. Sample: {word_offsets[0]}")
         return output_path, word_offsets
 
 if __name__ == "__main__":

@@ -51,11 +51,14 @@ async def main():
             audio_path = f"storage/temp_audio_{item['hash'][:8]}.mp3"
             _, word_offsets = await TTSEngine.generate_audio(script, audio_path)
             
-            # Fetch a relevant image
-            image_path = img_fetcher.fetch_image(item['headline'], f"img_{item['hash'][:8]}.jpg")
+            # Fetch multiple images based on script segments
+            # Split script into ~3-4 parts
+            sentences = [s.strip() for s in script.split('.') if len(s.strip()) > 10]
+            image_queries = sentences[:4] if len(sentences) > 0 else [item['headline']]
+            image_paths = img_fetcher.fetch_multi_images(image_queries, f"img_{item['hash'][:8]}")
             
             video_path = f"storage/breaking_{item['hash'][:8]}.mp4"
-            vgen.create_shorts(script, audio_path, video_path, word_offsets=word_offsets, image_path=image_path)
+            vgen.create_shorts(script, audio_path, video_path, word_offsets=word_offsets, image_paths=image_paths)
             
             if uploader:
                 title = f"BREAKING: {item['headline'][:70]}"
@@ -69,7 +72,8 @@ async def main():
             posted_hashes.append(item['hash'])
             # Clean up
             if os.path.exists(audio_path): os.remove(audio_path)
-            if image_path and os.path.exists(image_path): os.remove(image_path)
+            for p in image_paths: 
+                if os.path.exists(p): os.remove(p)
             break 
 
     with open(POSTED_FILE, 'w') as f:
