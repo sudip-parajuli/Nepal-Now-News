@@ -40,8 +40,12 @@ media/*.mp4
 media/*.mp3
 media/*.jpg
 media/*.png
+
+# Block all audio/video by default but allow music folder
 *.mp3
 *.mp4
+!music/*.mp3
+!music/*.wav
 *.log
 
 # IDEs

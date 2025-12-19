@@ -55,7 +55,7 @@ class VideoShortsGenerator:
             print(f"Rendering {len(word_offsets)} points with Phrase-Sync...")
             
             # UI Config
-            FONT_SIZE = 110 # Slightly reduced as requested
+            FONT_SIZE = 100 # Slightly reduced as requested
             TEXT_Y = 1450 # Focus on bottom third
             
             # Phrase Grouping: Show 4 words at a time for rhythm
