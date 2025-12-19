@@ -50,7 +50,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
-          git add -f storage/posted_breaking.json
+          git add -f storage/posted_breaking_nepali.json
           git commit -m "Update posted news log" || echo "No changes to commit"
           git fetch origin main
           git pull --rebase -X ours --autostash origin main
