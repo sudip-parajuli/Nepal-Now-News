@@ -109,7 +109,7 @@ class VideoShortsGenerator:
                             # Final fallback without explicit font
                             active_clip = TextClip(w_text, fontsize=90, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
                         
-                        clips.append(active_clip)
+                    clips.append(active_clip)
         else:
             print("WARNING: Falling back to block captions.")
             txt = TextClip(

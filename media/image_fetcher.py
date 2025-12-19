@@ -11,14 +11,36 @@ class ImageFetcher:
             os.makedirs(download_dir)
 
     def fetch_multi_images(self, queries: list, base_filename: str) -> list:
-        """ Fetches multiple images based on a list of queries with a small delay. """
+        """ 
+        Fetches multiple images by performing fewer, broader searches.
+        This reduces the risk of hitting DDG rate limits.
+        """
         paths = []
-        for i, q in enumerate(queries):
-            path = self.fetch_image(q, f"{base_filename}_{i}.jpg")
-            if path:
-                paths.append(path)
-            if i < len(queries) - 1:
-                time.sleep(1.5) # Add jitter/delay to avoid ratelimit
+        # Use only a subset of unique/important queries to reduce search count
+        unique_queries = list(dict.fromkeys(queries)) # preserve order
+        
+        images_needed = len(queries)
+        images_per_search = 3 if len(unique_queries) > 1 else images_needed
+        
+        for i, q in enumerate(unique_queries[:3]): # Max 3 searches per news item
+            # Add photographic context to the query if it doesn't have it
+            refined_q = q if "photo" in q.lower() else f"{q} news photo"
+            results = self._search_ddg(refined_q, max_results=10)
+            if results:
+                count = 0
+                for img_url in results:
+                    filename = f"{base_filename}_{len(paths)}.jpg"
+                    path = self._download_image(img_url, filename)
+                    if path:
+                        paths.append(path)
+                        count += 1
+                    if count >= images_per_search or len(paths) >= images_needed:
+                        break
+            
+            if len(paths) >= images_needed:
+                break
+            time.sleep(2) # Cooldown between searches
+            
         return paths
 
     def fetch_image(self, query: str, filename: str) -> str:
