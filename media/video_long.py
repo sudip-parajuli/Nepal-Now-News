@@ -54,15 +54,23 @@ class VideoLongGenerator:
 
         final_video = concatenate_videoclips(clips, method="compose")
         
-        # Audio Mixing
-        bg_music_path = "music/daily_news.mp3"
-        if os.path.exists(bg_music_path):
-            from moviepy.audio.AudioClip import CompositeAudioClip
-            from moviepy.editor import afx
-            bg_music = AudioFileClip(bg_music_path).volumex(0.1).set_duration(total_duration)
-            if bg_music.duration < total_duration:
-                bg_music = bg_music.fx(afx.audio_loop, duration=total_duration)
-            final_audio = CompositeAudioClip([audio.volumex(1.1), bg_music])
+        # Audio Mixing (Randomized from music/ folder)
+        import glob
+        import random
+        music_files = glob.glob("music/*.mp3") + glob.glob("music/*.wav")
+        if music_files:
+            try:
+                bg_music_path = random.choice(music_files)
+                print(f"Using random background music: {bg_music_path}")
+                from moviepy.audio.AudioClip import CompositeAudioClip
+                from moviepy.editor import afx
+                bg_music = AudioFileClip(bg_music_path).volumex(0.1).set_duration(total_duration)
+                if bg_music.duration < total_duration:
+                    bg_music = bg_music.fx(afx.audio_loop, duration=total_duration)
+                final_audio = CompositeAudioClip([audio.volumex(1.1), bg_music])
+            except Exception as e:
+                print(f"Failed to load background music: {e}")
+                final_audio = audio
         else:
             final_audio = audio
 

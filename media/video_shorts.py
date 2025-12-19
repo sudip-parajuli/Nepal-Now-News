@@ -78,16 +78,21 @@ class VideoShortsGenerator:
             txt = TextClip(self._wrap_text(text, 20), fontsize=80, color='white', method='label').set_duration(duration).set_position('center')
             clips.append(txt)
 
-        # 3. Audio Mixing
-        bg_music_path = "music/breaking_news.mp3"
-        if os.path.exists(bg_music_path):
+        # 3. Audio Mixing (Randomized from music/ folder)
+        import glob
+        import random
+        music_files = glob.glob("music/*.mp3") + glob.glob("music/*.wav")
+        if music_files:
             try:
+                bg_music_path = random.choice(music_files)
+                print(f"Using random background music: {bg_music_path}")
                 bg_music = AudioFileClip(bg_music_path).volumex(0.15).set_duration(duration)
                 if bg_music.duration < duration:
                     bg_music = bg_music.fx(afx.audio_loop, duration=duration)
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 final_audio = CompositeAudioClip([audio.volumex(1.2), bg_music])
-            except:
+            except Exception as e:
+                print(f"Failed to load background music: {e}")
                 final_audio = audio
         else:
             final_audio = audio
