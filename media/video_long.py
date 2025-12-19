@@ -27,16 +27,25 @@ class VideoLongGenerator:
             else:
                 bg = ColorClip(size=self.size, color=(20, 20, 60), duration=section_duration)
             
-            txt = TextClip(
-                section['text'], 
-                fontsize=50, 
-                color='white', 
-                font='Arial-Bold', 
-                method='caption', 
-                size=(self.size[0]-400, None),
-                bg_color='black',
-                align='Center'
-            ).set_duration(section_duration).set_position('bottom')
+            try:
+                txt = TextClip(
+                    section['text'], 
+                    fontsize=50, 
+                    color='white', 
+                    font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold', 
+                    method='label', 
+                    bg_color='black',
+                    align='Center'
+                ).set_duration(section_duration).set_position('bottom')
+            except:
+                txt = TextClip(
+                    section['text'], 
+                    fontsize=50, 
+                    color='white', 
+                    method='label', 
+                    bg_color='black',
+                    align='Center'
+                ).set_duration(section_duration).set_position('bottom')
             
             clips.append(CompositeVideoClip([bg, txt]))
 

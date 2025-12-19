@@ -20,18 +20,27 @@ class VideoShortsGenerator:
         text_lines = self._wrap_text(text, 20)
         clips = [bg]
         
-        # Adding text clip with some styling
-        # Note: 'font' needs to be available on the system. 'Arial' is common on Windows.
-        # In Linux/GHA, we might need to specify a path or a different font name.
-        txt_clip = TextClip(
-            text, 
-            fontsize=70, 
-            color='white', 
-            font='Arial-Bold', 
-            method='caption', 
-            size=(self.size[0]-200, None),
-            align='Center'
-        ).set_duration(duration).set_position('center')
+        # Use wrapped text to avoid ImageMagick width/height issues
+        wrapped_text = self._wrap_text(text, 25)
+        
+        # Try a common font, or let MoviePy pick default
+        try:
+            txt_clip = TextClip(
+                wrapped_text, 
+                fontsize=70, 
+                color='white', 
+                font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold', 
+                method='label', 
+                align='Center'
+            ).set_duration(duration).set_position('center')
+        except:
+            txt_clip = TextClip(
+                wrapped_text, 
+                fontsize=70, 
+                color='white', 
+                method='label', 
+                align='Center'
+            ).set_duration(duration).set_position('center')
 
         final_video = CompositeVideoClip([bg, txt_clip])
         final_video = final_video.set_audio(audio)
