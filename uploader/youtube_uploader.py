@@ -72,7 +72,7 @@ class YouTubeUploader:
                 'categoryId': category_id
             },
             'status': {
-                'privacyStatus': privacyStatus,
+                'privacyStatus': privacy_status,
                 'selfDeclaredMadeForKids': False
             }
         }
