@@ -35,7 +35,10 @@ wheels/
 
 # Media and Storage
 storage/
-media/
+media/*.mp4
+media/*.mp3
+media/*.jpg
+media/*.png
 *.mp3
 *.mp4
 *.log

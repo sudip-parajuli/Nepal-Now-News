@@ -1,6 +1,6 @@
 feedparser
 edge-tts
-moviepy
+moviepy<2.0.0
 requests
 beautifulsoup4
 google-generativeai
@@ -9,3 +9,4 @@ python-dotenv
 duckduckgo-search
 google-api-python-client
 google-auth-oauthlib
+groq
