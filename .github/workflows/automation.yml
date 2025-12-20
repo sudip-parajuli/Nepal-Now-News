@@ -62,7 +62,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+          # Map the science-specific secret to the environment variable the code expects
+          YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
         run: python automation/main.py --config automation/config/science.yaml --mode shorts
 
       - name: Commit State Changes

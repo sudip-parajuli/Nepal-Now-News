@@ -47,8 +47,14 @@ if __name__ == "__main__":
 ## 3. Add to GitHub Secrets
 1. Go to your GitHub repository: `sudip-parajuli/Nepal-Now-News`.
 2. Go to **Settings** > **Secrets and variables** > **Actions**.
-3. Create a **New repository secret** named `YOUTUBE_TOKEN_BASE64`.
-4. Paste the long string generated in the previous step.
+3. Create a **New repository secret**.
+
+### For Multiple Channels:
+If you have multiple YouTube channels (e.g., News and Science), name your secrets like this:
+- **News Channel**: Name it `YOUTUBE_TOKEN_BASE64`
+- **Science Channel**: Name it `YOUTUBE_TOKEN_SCIENCE`
+
+This prevents naming conflicts and allows each pipeline to post to the correct channel.
 
 ## 4. Other Secrets
 Ensure you have also added:

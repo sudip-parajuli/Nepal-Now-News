@@ -24,7 +24,7 @@ def main():
         'refresh_token': credentials.refresh_token,
         'token_uri': credentials.token_uri,
         'client_id': credentials.client_id,
-        'client_secrets': credentials.client_secrets,
+        'client_secret': credentials.client_secret,
         'scopes': credentials.scopes
     }
     
