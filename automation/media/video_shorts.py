@@ -69,9 +69,9 @@ class VideoShortsGenerator:
         clips = bg_clips
         if word_offsets:
             print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
-            # ENHANCED CENTER POSITION & SIZE
-            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 95, 130, 18 
-            START_Y = (self.size[1] // 2) - 100 
+            # OPTIMIZED GEOMETRY (75pt prevents clipping)
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 75, 100, 25
+            START_Y = (self.size[1] // 2) - 50
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
             from PIL import Image, ImageDraw, ImageFont
@@ -164,13 +164,14 @@ class VideoShortsGenerator:
                                 end_offset = font.getlength(cumulative_text + w_text)
                                 
                                 word_x = current_x + start_offset
-                                word_w = end_offset - start_offset
+                                # CALIBRATED SYNC: Add a tiny nudge (0.05s) to align with audio onset delay
+                                h_start = w_info['start'] + 0.05
+                                h_dur = w_info['duration']
                                 
                                 highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
                                 if highlight:
                                     # Ensure highlight width matches the measured width exactly if possible
-                                    # (Pillow's padding might make it slightly different, but this is the text start)
-                                    highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((word_x, y_pos))
+                                    highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((word_x, y_pos))
                                     clips.append(highlight)
                                 
                                 # Add word and space for next measurement
