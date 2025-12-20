@@ -77,65 +77,50 @@ class VideoShortsGenerator:
             from PIL import Image, ImageDraw, ImageFont
             import numpy as np
 
+            # Load font once
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+                "C:/Windows/Fonts/arialbd.ttf", 
+                "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/tahoma.ttf"
+            ]
+            font = None
+            for path in font_paths:
+                if os.path.exists(path):
+                    try:
+                        font = ImageFont.truetype(path, FONT_SIZE)
+                        break
+                    except: continue
+            if not font and os.name != 'nt':
+                for root, dirs, files in os.walk("/usr/share/fonts"):
+                    for file in files:
+                        if file.endswith(".ttf"):
+                            try:
+                                font = ImageFont.truetype(os.path.join(root, file), FONT_SIZE)
+                                break
+                            except: continue
+                    if font: break
+            if not font: font = ImageFont.load_default()
+
             def get_pillow_text_clip(txt, fsize, clr, bg=None):
                 try:
-                    # Cross-Platform Font fallback list
-                    font_paths = [
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-                        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-                        "C:/Windows/Fonts/arialbd.ttf", 
-                        "C:/Windows/Fonts/arial.ttf",
-                        "C:/Windows/Fonts/tahoma.ttf"
-                    ]
-                    if not font:
-                        print("WARNING: Standard fonts not found. Searching /usr/share/fonts...")
-                        # Desperate search for ANY ttf on Linux
-                        for root, dirs, files in os.walk("/usr/share/fonts"):
-                            for file in files:
-                                if file.endswith(".ttf"):
-                                    try:
-                                        font = ImageFont.truetype(os.path.join(root, file), fsize)
-                                        print(f"DEBUG: Found alternative font: {file}")
-                                        break
-                                    except: continue
-                            if font: break
-                    
-                    if not font:
-                        print("CRITICAL: No TTF fonts found. Falling back to tiny default.")
-                        font = ImageFont.load_default()
-                    else:
-                        try:
-                            fname = os.path.basename(font.path)
-                            print(f"DEBUG: Successfully loaded font: {fname} at size {fsize}")
-                        except: pass
-
                     # Measure text
-                    # Use a dummy image to get text bbox
                     dummy = Image.new('RGB', (1, 1))
                     draw = ImageDraw.Draw(dummy)
                     bbox = draw.textbbox((0, 0), txt, font=font)
                     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                     
-                    # Create actual image with transparency
-                    # Padding for strokes/descenders
                     pad = 10
                     img = Image.new('RGBA', (tw + pad*2, th + pad*2), (0,0,0,0))
                     d = ImageDraw.Draw(img)
-                    
-                    if bg:
-                        # Draw background box
-                        d.rectangle([0, 0, tw + pad*2, th + pad*2], fill=bg)
-                    
-                    # Draw text (with a small black stroke if white text)
+                    if bg: d.rectangle([0, 0, tw + pad*2, th + pad*2], fill=bg)
                     if clr == 'white' and not bg:
                         for offset in [(-2,-2), (2,-2), (-2,2), (2,2)]:
                             d.text((pad+offset[0], pad+offset[1]), txt, font=font, fill='black')
-                    
                     d.text((pad, pad), txt, font=font, fill=clr)
-                    
-                    # Convert to MoviePy ImageClip
                     img_np = np.array(img)
                     return ImageClip(img_np)
                 except Exception as e:
@@ -163,6 +148,10 @@ class VideoShortsGenerator:
                     if base_txt:
                         base_txt = base_txt.set_start(l_start).set_duration(l_end - l_start).set_position(('center', y_pos))
                         clips.append(base_txt)
+                        
+                        # Calculate starting X for centering the whole line
+                        line_width = base_txt.size[0]
+                        current_x = (self.size[0] - line_width) // 2
                         
                         # PRECISE POSITIONING: Measure offsets for each word within the line
                         cumulative_text = ""
