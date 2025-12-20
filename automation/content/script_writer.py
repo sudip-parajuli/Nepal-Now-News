@@ -141,21 +141,28 @@ class ScriptWriter:
         if start != -1 and end != -1: return text[start:end+1].strip()
         return text.strip()
 
-    def generate_image_keywords(self, sentence: str, extra_context: str = "Nepal") -> str:
-        prompt = f"""
-        Generate a highly specific English image search query (5-8 words) for this content:
-        "{sentence}"
-        
-        Context: {extra_context}
-        
-        Rules:
-        - Must capture the core event/subject.
-        - Always include '{extra_context}' or relevant geography.
-        - Output ONLY the keywords separated by spaces.
+    def generate_image_keywords(self, text: str, extra_context: str = "Nepal") -> List[str]:
         """
-        try:
-            keywords = self._call_with_retry(prompt)
-            return " ".join(keywords.replace('"', '').replace(',', ' ').split())
-        except:
-            words = [w for w in sentence.split() if len(w) > 4]
-            return f"{extra_context} " + " ".join(words[:3])
+        Generates a list of keywords for different segments of the text to provide visual variety.
+        """
+        # Split by sentence or paragraph to get segments
+        segments = [s.strip() for s in re.split(r'[।.\n]', text) if len(s.strip()) > 30]
+        if not segments: segments = [text]
+        
+        all_keywords = []
+        for seg in segments[:5]: # Limit to 5 segments for efficiency
+            prompt = f"""
+            Identify the single most descriptive visual subject for this text segment:
+            "{seg}"
+            Context: {extra_context}
+            Output ONLY the subject (2-4 words).
+            """
+            try:
+                keywords = self._call_with_retry(prompt)
+                all_keywords.append(keywords.replace('"', '').strip())
+            except:
+                continue
+        
+        if not all_keywords:
+            return [f"{extra_context} cinematic"]
+        return all_keywords

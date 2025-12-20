@@ -35,31 +35,39 @@ class SciencePipeline(BasePipeline):
         script = self.script_writer.generate_science_facts(topic)
         print(f"Script generated ({len(script)} chars).")
         
-        # 3. Fetch Background Media (Prioritize Videos)
-        keywords = self.script_writer.generate_image_keywords(topic, extra_context="Scientific Documentary")
-        print(f"Keywords: {keywords}")
+        # 3. Fetch Background Media (Multi-Segment for variety)
+        print("Fetching multi-segment media...")
+        keywords_list = self.script_writer.generate_image_keywords(script, extra_context=topic)
+        media_paths = []
         
-        # Try fetching videos first
-        media_paths = self.video_fetcher.fetch_stock_videos(keywords, count=2)
+        for i, kw in enumerate(keywords_list):
+            print(f"Searching media for scene {i+1}: {kw}")
+            clips = self.video_fetcher.fetch_stock_videos(kw, count=1)
+            media_paths.extend(clips)
         
-        # Fallback to images if not enough videos
         if len(media_paths) < 2:
-            print("Not enough videos found, fetching some high-quality images...")
-            img_paths = self.image_fetcher.fetch_multi_images([keywords] * 3, "science_temp")
+            print("Not enough videos found, fetching high-quality images...")
+            img_kw = self.script_writer.generate_image_keywords(script, extra_context=f"{topic} cinematic")
+            img_paths = self.image_fetcher.fetch_multi_images(img_kw, "science_temp")
             media_paths.extend(img_paths)
-        
+            
         # 4. Generate Audio
+        print("Generating Audio...")
+        # Use a calm male voice
+        self.tts.voice_map['male'] = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
+        
         audio_path = "automation/storage/science_temp.mp3"
         _, word_offsets = await self.tts.generate_audio(script, audio_path)
         
-        # 5. Create Video (Now supports mixed media)
+        # 5. Create Video (Now supports mixed media and branding)
         video_path = "automation/storage/science_final.mp4"
         self.vgen.create_shorts(
             script, 
             audio_path, 
             video_path, 
             word_offsets=word_offsets, 
-            media_paths=media_paths
+            media_paths=media_paths,
+            branding=self.config.get('branding')
         )
         
         # 6. Upload
@@ -68,8 +76,9 @@ class SciencePipeline(BasePipeline):
             youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
             self.uploader = YouTubeUploader(youtube_service)
             
-            title = f"{topic} #Science #Facts #Universe #Shorts"
-            description = f"Did you know about {topic}? Dive into the amazing secrets of our universe. #science #facts #space #shorts"
+            hashtags = self.config.get('hashtags', "#science #facts #universe #shorts")
+            title = f"{topic} #Shorts" # Keep title clean, hashtags in description
+            description = f"Did you know about {topic}? Dive into the amazing secrets of our universe.\n\n{hashtags}"
             tags = ["science", "facts", "universe", "space", "shorts", "educational"]
             
             print(f"Uploading: {title}")
