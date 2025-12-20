@@ -1,0 +1,23 @@
+# Science & Universe Channel
+channel_id: "UC_SCIENCE_CHANNEL_ID_PLACEHOLDER"
+type: "science"
+language: "ne"
+tts_voice: 
+  female: "ne-NP-HemkalaNeural"
+  male: "ne-NP-SagarNeural" # Alternating or specific calm voice
+  style: "calm"
+upload:
+  shorts: true
+  long: false
+schedule:
+  daily_times: ["07:00", "18:30"] # NPT
+topics:
+  - "Space"
+  - "Universe"
+  - "Galaxy"
+  - "Ocean"
+  - "Science facts"
+tone: "Calm, educational"
+storage:
+  posted_science: "automation/storage/posted_science.json"
+  topic_history: "automation/storage/topic_history.json"
