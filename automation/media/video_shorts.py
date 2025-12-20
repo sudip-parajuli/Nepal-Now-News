@@ -79,11 +79,14 @@ class VideoShortsGenerator:
 
             def get_pillow_text_clip(txt, fsize, clr, bg=None):
                 try:
-                    # Windows Font fallback list
+                    # Cross-Platform Font fallback list
                     font_paths = [
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
                         "C:/Windows/Fonts/arialbd.ttf", 
                         "C:/Windows/Fonts/arial.ttf",
-                        "C:/Windows/Fonts/seguiemj.ttf", # Emoji support
                         "C:/Windows/Fonts/tahoma.ttf"
                     ]
                     font = None
@@ -153,21 +156,24 @@ class VideoShortsGenerator:
                         line_width = base_txt.size[0]
                         current_x = (self.size[0] - line_width) // 2
                         
+                        # PRECISE POSITIONING: Measure offsets for each word within the line
+                        cumulative_text = ""
                         for w_info in line:
                             w_text = w_info['word'].upper()
                             try:
-                                # We need width measurement for positioning
-                                temp_w_img = get_pillow_text_clip(w_text + " ", FONT_SIZE, 'white')
-                                if not temp_w_img: continue
-                                w_width = temp_w_img.size[0]
+                                # Start position is the width of everything before this word
+                                start_offset = font.getlength(cumulative_text)
+                                word_x = current_x + start_offset
                                 
                                 highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
                                 if highlight:
-                                    # Center highlight on the base line vertically too
-                                    highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
+                                    highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((word_x, y_pos))
                                     clips.append(highlight)
-                                current_x += w_width
-                            except:
+                                
+                                # Add word and space for next measurement
+                                cumulative_text += w_info['word'].upper() + " "
+                            except Exception as e:
+                                print(f"Word Positioning Error: {e}")
                                 continue
                 except Exception as e:
                     print(f"Caption Rendering Error (Pillow): {e}")
