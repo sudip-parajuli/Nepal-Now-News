@@ -7,6 +7,7 @@ from ..media.image_fetcher import ImageFetcher
 from ..media.video_fetcher import VideoFetcher
 from ..media.tts import TTSEngine
 from ..media.video_shorts import VideoShortsGenerator
+from ..media.nasa_fetcher import NASAFetcher
 from ..youtube.uploader import YouTubeUploader
 from ..youtube.auth import YouTubeAuth
 
@@ -22,6 +23,7 @@ class SciencePipeline(BasePipeline):
         self.video_fetcher = VideoFetcher()
         self.tts = TTSEngine(voice_map=config['tts_voice'], rate="+15%") # Slower for science
         self.vgen = VideoShortsGenerator()
+        self.nasa_fetcher = NASAFetcher()
         self.uploader = None # Initialized in run()
 
     async def run(self, is_test=False):
@@ -42,8 +44,14 @@ class SciencePipeline(BasePipeline):
         
         for i, kw in enumerate(keywords_list):
             print(f"Searching media for scene {i+1}: {kw}")
-            clips = self.video_fetcher.fetch_stock_videos(kw, count=1)
-            media_paths.extend(clips)
+            # Priority 1: NASA Library for space topics
+            nasa_clips = self.nasa_fetcher.fetch_nasa_videos(kw, count=1)
+            if nasa_clips:
+                media_paths.extend(nasa_clips)
+            else:
+                # Priority 2: Generic Stock Videos
+                clips = self.video_fetcher.fetch_stock_videos(kw, count=1)
+                media_paths.extend(clips)
         
         if len(media_paths) < 2:
             print("Not enough videos found, fetching high-quality images...")
