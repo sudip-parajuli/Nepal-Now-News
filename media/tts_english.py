@@ -6,6 +6,57 @@ class TTSEngine:
     default_voice = "ne-NP-HemkalaNeural"
 
     @staticmethod
+    async def generate_multivocal_audio(segments: list, output_path: str):
+        """
+        Generates audio for multiple segments with alternating voices and merges offsets.
+        """
+        all_offsets = []
+        cumulative_duration = 0
+        temp_audio_files = []
+        
+        voice_map = {
+            "female": "ne-NP-HemkalaNeural",
+            "male": "ne-NP-SagarNeural"
+        }
+
+        for i, seg in enumerate(segments):
+            temp_path = f"storage/temp_seg_{i}.mp3"
+            voice = voice_map.get(seg.get("gender"), "female")
+            
+            # For news items, prepend the headline if present
+            text_to_speak = seg.get("text", "")
+            if seg.get("type") == "news" and seg.get("headline"):
+                text_to_speak = f"{seg['headline']}। {text_to_speak}"
+            
+            _, offsets = await TTSEngine.generate_audio(text_to_speak, temp_path, voice)
+            
+            # Adjust offsets based on cumulative duration
+            for off in offsets:
+                off["start"] += cumulative_duration
+                all_offsets.append(off)
+            
+            # Get actual duration of this clip
+            from moviepy.editor import AudioFileClip
+            clip = AudioFileClip(temp_path)
+            cumulative_duration += clip.duration
+            temp_audio_files.append(temp_path)
+            clip.close()
+
+        # Concatenate audio files
+        from moviepy.editor import concatenate_audioclips, AudioFileClip
+        clips = [AudioFileClip(f) for f in temp_audio_files]
+        final_audio = concatenate_audioclips(clips)
+        final_audio.write_audiofile(output_path, fps=44100)
+        
+        # Cleanup
+        for c in clips: c.close()
+        for f in temp_audio_files: 
+            try: os.remove(f)
+            except: pass
+
+        return output_path, all_offsets
+
+    @staticmethod
     async def generate_audio(text: str, output_path: str, voice: str = None):
         """
         Generates high-quality Nepali narration and word-level timestamps.
@@ -85,12 +136,16 @@ class TTSEngine:
         if not word_offsets:
             print(f"CRITICAL: Failed to generate word offsets for synchronization.")
         else:
-            print(f"SUCCESS: {len(word_offsets)} word milestones ready for animation.")
+            # print(f"SUCCESS: {len(word_offsets)} word milestones ready for animation.")
+            pass
         
         return output_path, word_offsets
 
 if __name__ == "__main__":
     # Test generation
-    text = "Breaking news: A major international event is unfolding right now. More updates will follow."
-    output = "test_narration.mp3"
-    asyncio.run(TTSEngine.generate_audio(text, output))
+    segments = [
+        {"type": "intro", "text": "नमस्कार, नेपाल नाउमा हजुरलाइ स्वागत छ", "gender": "female"},
+        {"type": "news", "headline": "मौसम अपडेट", "text": "आज काठमाडौंमा भारी वर्षाको सम्भावना छ।", "gender": "male"}
+    ]
+    output = "test_multivocal.mp3"
+    asyncio.run(TTSEngine.generate_multivocal_audio(segments, output))

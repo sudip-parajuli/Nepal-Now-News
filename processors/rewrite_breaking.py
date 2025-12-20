@@ -86,25 +86,66 @@ class ScriptRewriter:
         text = re.sub(r'#\w+', '', text)
         return text.strip()
 
-    def summarize_for_daily(self, news_items: list) -> str:
+    def summarize_for_daily(self, news_items: list) -> list:
         news_text = "\n\n".join([f"Headline: {item['headline']}\nContent: {item['content']}" for item in news_items])
         prompt = f"""
-        Summarize today's major news into a 6–8 minute YouTube video script in Nepali.
+        Summarize today's major news into a structured YouTube video script in Nepali.
         
         News items:
         {news_text}
 
         Language: Nepali (Devanagari)
-        Tone: Professional news anchor, formal.
-       - Use standard Nepali news reporting grammar and formal vocabulary.
-        - Ensure perfect grammatical structure and natural transitions.
-        - Group related stories logically.
-        - RETURN ONLY THE NEPALI SPEECH TEXT.
-        - DO NOT include any labels like "Segment" or "Visual".
-        - Translate English news terms into proper Nepali reporting terms.
+        Goal: Create a professional news report.
+        
+        Output Format: JSON list of objects.
+        Required structure:
+        [
+          {{"type": "intro", "text": "नमस्कार, नेपाल नाउमा हजुरलाइ स्वागत छ | आजको मुख्य समाचार यसप्रकार छन्", "gender": "female"}},
+          {{"type": "news", "headline": "HEADLINE_HERE", "text": "NEWS_CONTENT_HERE", "gender": "male"}},
+          {{"type": "news", "headline": "HEADLINE_HERE", "text": "NEWS_CONTENT_HERE", "gender": "female"}},
+          ...
+          {{"type": "outro", "text": "थप अपडेटका लागि हामीसँगै रहनुहोला। धन्यवाद।", "gender": "male"}}
+        ]
+
+        Rules:
+        - Alternate gender (male/female) for each news item.
+        - The intro should ALWAYS be "नमस्कार, नेपाल नाउमा हजुरलाइ स्वागत छ | आजको मुख्य समाचार यसप्रकार छन्".
+        - The outro should be a closing statement.
+        - Headlines should be short and catchy.
+        - Text should be professional news reporting style.
+        - RETURN ONLY THE JSON LIST.
         """
-        script = self._call_with_retry(prompt)
-        return self.clean_script(script)
+        response = self._call_with_retry(prompt)
+        try:
+            import json
+            cleaned_json = self.clean_json_response(response)
+            segments = json.loads(cleaned_json)
+            # Ensure intro/outro text is exactly as requested
+            if segments and isinstance(segments, list) and segments[0]['type'] == 'intro':
+                segments[0]['text'] = "नमस्कार, नेपाल नाउमा हजुरलाइ स्वागत छ | आजको मुख्य समाचार यसप्रकार छन्"
+            return segments
+        except Exception as e:
+            print(f"Error parsing daily summary JSON: {e}")
+            # Fallback to a single segment if JSON fails
+            return [{"type": "intro", "text": "नमस्कार, नेपाल नाउमा हजुरलाइ स्वागत छ | आजको मुख्य समाचार यसप्रकार छन्", "gender": "female"}]
+
+    def clean_json_response(self, text: str) -> str:
+        """Removes markdown code blocks and extra text around JSON."""
+        import re
+        # Try to find content between ```json and ```
+        match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        # Try to find content between ``` and ```
+        match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        # Find first [ and last ]
+        start = text.find('[')
+        end = text.rfind(']')
+        if start != -1 and end != -1:
+            return text[start:end+1].strip()
+        return text.strip()
 
     def generate_image_keywords(self, sentence: str) -> str:
         """
