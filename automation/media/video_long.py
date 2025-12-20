@@ -14,10 +14,12 @@ class VideoLongGenerator:
     def _load_best_font(self, fsize=60):
         # Cross-Platform Font fallback list
         font_paths = [
+            "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            "C:/Windows/Fonts/Nirmala.ttf",
+            "C:/Windows/Fonts/NirmalaB.ttf",
             "C:/Windows/Fonts/arialbd.ttf", 
             "C:/Windows/Fonts/arial.ttf",
             "C:/Windows/Fonts/tahoma.ttf"
