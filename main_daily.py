@@ -17,7 +17,10 @@ FEEDS = [
     "https://www.onlinekhabar.com/feed",
     "https://ratopati.com/feed",
     "https://setopati.com/feed",
-    "https://www.bbc.com/nepali/index.xml"
+    "https://www.bbc.com/nepali/index.xml",
+    "https://myrepublica.nagariknetwork.com/feed",
+    "https://thehimalayantimes.com/feed",
+    "https://www.ronbpost.com/category/news/feed/"
 ]
 
 async def main():

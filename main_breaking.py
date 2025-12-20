@@ -19,7 +19,9 @@ FEEDS = [
     "https://setopati.com/feed",
     "https://www.setopati.com/politics/feed",
     "https://www.bbc.com/nepali/index.xml",
-    "http://feeds.bbci.co.uk/news/world/rss.xml" # Keep some international context
+    "https://myrepublica.nagariknetwork.com/feed",
+    "https://thehimalayantimes.com/feed",
+    "https://www.ronbpost.com/category/news/feed/"
 ]
 POSTED_FILE = "storage/posted_breaking_nepali.json"
 

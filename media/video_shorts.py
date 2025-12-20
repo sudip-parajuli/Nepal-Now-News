@@ -57,59 +57,91 @@ class VideoShortsGenerator:
 
         clips = bg_clips
 
-        # 2. Modern Karaoke Logic (Phrase-based grouping)
+        # 2. Modern Karaoke Logic (3-line Page-Sync with Highlight Background)
         if word_offsets:
-            print(f"Rendering {len(word_offsets)} points with Phrase-Sync...")
+            print(f"Rendering {len(word_offsets)} points with 3-line Page-Sync...")
             
             # UI Config
-            FONT_SIZE = 100 # Slightly reduced as requested
-            TEXT_Y = 1450 # Focus on bottom third
+            FONT_SIZE = 80
+            LINE_HEIGHT = 110
+            START_Y = 1350
+            MAX_CHARS_PER_LINE = 22
+            HIGHLIGHT_BG = 'yellow'
+            HIGHLIGHT_TEXT = 'black'
+            NORMAL_TEXT = 'white'
+            FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari'
             
-            # Phrase Grouping: Show 4 words at a time for rhythm
-            phrase_size = 4
-            for i in range(0, len(word_offsets), phrase_size):
-                phrase_chunk = word_offsets[i : i + phrase_size]
-                if not phrase_chunk: continue
+            # Step 1: Group words into lines
+            lines = []
+            curr_line = []
+            curr_len = 0
+            for w in word_offsets:
+                w_text = w['word']
+                if curr_len + len(w_text) > MAX_CHARS_PER_LINE and curr_line:
+                    lines.append(curr_line)
+                    curr_line = []
+                    curr_len = 0
+                curr_line.append(w)
+                curr_len += len(w_text) + 1
+            if curr_line:
+                lines.append(curr_line)
+            
+            # Step 2: Group lines into pages of 3
+            pages = [lines[i:i + 3] for i in range(0, len(lines), 3)]
+            
+            for p_idx, page in enumerate(pages):
+                page_start = page[0][0]['start']
+                page_end = page[-1][-1]['start'] + page[-1][-1]['duration']
                 
-                phrase_start = phrase_chunk[0]['start']
-                phrase_end = phrase_chunk[-1]['start'] + phrase_chunk[-1]['duration']
-                
-                # Render each word in the phrase separately to allow highlighting
-                for j, word_info in enumerate(phrase_chunk):
-                    w_start = word_info['start']
-                    w_end = word_info['start'] + word_info['duration']
-                    w_text = word_info['word'].upper()
+                # Render each line in the page
+                for l_idx, line in enumerate(page):
+                    y_pos = START_Y + (l_idx * LINE_HEIGHT)
+                    line_text = " ".join([w['word'] for w in line]).upper()
                     
-                    # 1. Active Highlighting (Yellow & Large)
                     try:
-                        active_clip = TextClip(
-                            w_text,
-                            fontsize=FONT_SIZE + 20,
-                            color='yellow',
-                            font='Noto-Sans-Devanagari' if os.name != 'nt' else 'Nirmala-UI-Bold',
+                        # 1. Base Line (Dimmed White for Context)
+                        base_txt = TextClip(
+                            line_text,
+                            fontsize=FONT_SIZE,
+                            color=NORMAL_TEXT,
+                            font=FONT,
                             stroke_color='black',
-                            stroke_width=4,
+                            stroke_width=2,
                             method='label'
-                        ).set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
-                    except Exception as e:
-                        if i == 0 and j == 0: 
-                            print(f"Caption engine warning (Primary): {e}")
-                        # Secondary fallback using DejaVu
-                        try:
-                            active_clip = TextClip(
-                                w_text,
-                                fontsize=FONT_SIZE + 20,
-                                color='yellow',
-                                font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
-                                method='label'
-                            ).set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
-                        except Exception as e2:
-                            if i == 0 and j == 0:
-                                print(f"Caption engine warning (Secondary): {e2}")
-                            # Final fallback without explicit font
-                            active_clip = TextClip(w_text, fontsize=90, color='yellow').set_start(w_start).set_duration(w_end - w_start).set_position(('center', TEXT_Y))
+                        ).set_start(page_start).set_duration(page_end - page_start).set_position(('center', y_pos)).set_opacity(0.6)
+                        clips.append(base_txt)
                         
-                    clips.append(active_clip)
+                        # 2. Calculate Word Positions for Highlighting
+                        # We need the alignment to match the centered 'base_txt'
+                        line_width = base_txt.size[0]
+                        current_x = (self.size[0] - line_width) // 2
+                        
+                        for w_info in line:
+                            w_text = w_info['word'].upper()
+                            # Measure word width (including space) to increment current_x
+                            # Note: We use a space suffix for accurate spacing measurement
+                            w_full = w_text + " "
+                            temp_w = TextClip(w_full, fontsize=FONT_SIZE, font=FONT, method='label')
+                            w_width = temp_w.size[0]
+                            temp_w.close()
+                            
+                            # 3. Active Highlight Clip (Background Shape + Color)
+                            highlight = TextClip(
+                                w_text,
+                                fontsize=FONT_SIZE,
+                                color=HIGHLIGHT_TEXT,
+                                bg_color=HIGHLIGHT_BG,
+                                font=FONT,
+                                method='label'
+                            ).set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
+                            
+                            clips.append(highlight)
+                            # Increment for next word in the line
+                            current_x += w_width
+                            
+                    except Exception as e:
+                        if p_idx == 0: print(f"Caption rendering error: {e}")
+                        continue
         else:
             print("WARNING: Falling back to block captions.")
             txt = TextClip(
