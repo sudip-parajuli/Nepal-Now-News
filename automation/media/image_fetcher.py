@@ -12,7 +12,12 @@ class ImageFetcher:
 
     def fetch_multi_images(self, queries: list, base_filename: str) -> list:
         paths = []
-        unique_queries = list(dict.fromkeys(queries))
+        # Flatten and deduplicate queries
+        flat_queries = []
+        for q in queries:
+            if isinstance(q, list): flat_queries.extend(q)
+            else: flat_queries.append(q)
+        unique_queries = list(dict.fromkeys(flat_queries))
         images_needed = len(queries)
         images_per_search = 4 if len(unique_queries) > 1 else images_needed
         
@@ -39,7 +44,8 @@ class ImageFetcher:
         return paths
 
     def _search_ddg(self, query: str, max_results: int = 20) -> list:
-        search_query = f"{query} -diagram -chart -graph -map -vector"
+        # Exclude diagrams, text, bottles, and products for professional look
+        search_query = f"{query} -diagram -chart -graph -map -vector -text -bottle -label -product"
         try:
             with DDGS() as ddgs:
                 results = ddgs.images(

@@ -69,9 +69,9 @@ class VideoShortsGenerator:
         clips = bg_clips
         if word_offsets:
             print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
-            # PERFECT CENTER POSITION
-            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 70, 100, 20 
-            START_Y = (self.size[1] // 2) - 50 
+            # ENHANCED CENTER POSITION & SIZE
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 95, 130, 18 
+            START_Y = (self.size[1] // 2) - 100 
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
             from PIL import Image, ImageDraw, ImageFont
@@ -163,10 +163,10 @@ class VideoShortsGenerator:
                                 
                                 highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
                                 if highlight:
-                                    # Center highight on the base linevertically too
+                                    # Center highlight on the base line vertically too
                                     highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
                                     clips.append(highlight)
-                                    current_x += w_width
+                                current_x += w_width
                             except:
                                 continue
                 except Exception as e:

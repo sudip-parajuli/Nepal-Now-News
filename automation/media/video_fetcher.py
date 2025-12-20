@@ -31,10 +31,14 @@ class VideoFetcher:
 
         # Fallback Strategy: If no results, try broader terms
         if not results:
-            fallbacks = ["space universe cinema", "nebula galaxy 4k", "deep space background"]
+            fallbacks = [
+                "nature landscapes", "abstract technology high-tech", 
+                "cinematic macro space", "microscopic organisms",
+                "clean professional broadcast background"
+            ]
             for f_query in fallbacks:
                 print(f"No results for '{query}'. Trying fallback: {f_query}")
-                search_query = f"(site:pexels.com OR site:pixabay.com OR site:mixkit.co OR site:videvo.net) {f_query} stock video"
+                search_query = f"(site:pexels.com OR site:pixabay.com OR site:mixkit.co OR site:videvo.net) {f_query} stock video -text"
                 try:
                     with DDGS() as ddgs:
                         search_results = ddgs.text(search_query, max_results=10)

@@ -152,8 +152,9 @@ class ScriptWriter:
         all_keywords = []
         for seg in segments[:5]: # Limit to 5 segments for efficiency
             prompt = f"""
-            Identify the single most descriptive visual subject for this text segment:
-            "{seg}"
+            Identify the most descriptive visual subject for this news segment.
+            PRIORITY: If a specific person name (e.g., Ravi Lamichhane, Prachanda) or proper noun is mentioned, use that name.
+            Segment: "{seg}"
             Context: {extra_context}
             Output ONLY the subject (2-4 words).
             """
