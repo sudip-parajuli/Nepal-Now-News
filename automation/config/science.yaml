@@ -1,10 +1,9 @@
-# Science & Universe Channel
-channel_id: "UC_SCIENCE_CHANNEL_ID_PLACEHOLDER"
+channel_id: "UC_DAILY_DEEP_SPACE_ID"
 type: "science"
 language: "en"
 tts_voice: 
   female: "en-US-JennyNeural"
-  male: "en-US-ChristopherNeural"
+  male: "en-US-GuyNeural"
   style: "calm"
 upload:
   shorts: true
@@ -18,7 +17,7 @@ topics:
   - "Ocean"
   - "Science facts"
 tone: "Calm, educational"
-hashtags: "#BeyondEarth #SpaceFacts #ScienceShorts #Universe #Cosmos"
+hashtags: "#DailyDeepSpace #BeyondEarth #SpaceFacts #ScienceShorts #Universe #Cosmos"
 branding:
   accent_color: "#00FFFF" # Soft Cyan
   bg_color: [11, 28, 45] # Dark Blue (#0B1C2D)

@@ -54,10 +54,13 @@ class SciencePipeline(BasePipeline):
         # 4. Generate Audio
         print("Generating Audio...")
         # Use a calm male voice
-        self.tts.voice_map['male'] = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
+        male_voice = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
+        self.tts.voice_map['male'] = male_voice
+        print(f"DEBUG: Using male voice: {male_voice}")
         
         audio_path = "automation/storage/science_temp.mp3"
-        _, word_offsets = await self.tts.generate_audio(script, audio_path)
+        # Explicitly pass the voice to ensure it's not defaulted to female
+        _, word_offsets = await self.tts.generate_audio(script, audio_path, voice=male_voice)
         
         # 5. Create Video (Now supports mixed media and branding)
         video_path = "automation/storage/science_final.mp4"

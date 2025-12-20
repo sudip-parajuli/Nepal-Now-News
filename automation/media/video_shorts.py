@@ -71,16 +71,20 @@ class VideoShortsGenerator:
 
         clips = bg_clips
         if word_offsets:
-            FONT_SIZE, LINE_HEIGHT, START_Y, MAX_CHARS_PER_LINE = 80, 110, 1350, 25 
+            print(f"DEBUG: Generating karaoke captions for {len(word_offsets)} words...")
+            # Move START_Y higher to be safe (1000 is mid-bottom)
+            FONT_SIZE, LINE_HEIGHT, START_Y, MAX_CHARS_PER_LINE = 55, 80, 1000, 25 
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
-            is_nepali = re.search(r'[\u0900-\u097F]', text)
-            if is_nepali:
-                FONT = 'Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari'
-                HIGHLIGHT_FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari-Bold'
-            else:
-                FONT = 'Arial' if os.name == 'nt' else 'DejaVu-Sans'
-                HIGHLIGHT_FONT = 'Arial-Bold' if os.name == 'nt' else 'DejaVu-Sans-Bold'
+            # Resilient Font Selection for Windows
+            def get_text_clip(txt, fsize, clr, bg=None, mt='label'):
+                fonts = ['Arial', 'Tahoma', 'Verdana', 'Courier New', 'Nirmala UI']
+                for f in fonts:
+                    try:
+                        return TextClip(txt, fontsize=fsize, color=clr, bg_color=bg, font=f, method=mt)
+                    except:
+                        continue
+                return None
 
             lines, curr_line, curr_len = [], [], 0
             for w in word_offsets:
@@ -90,42 +94,50 @@ class VideoShortsGenerator:
                 curr_line.append(w)
                 curr_len += len(w['word']) + 1
             if curr_line: lines.append(curr_line)
+            
             pages = [lines[i:i + 3] for i in range(0, len(lines), 3)]
-            for page in pages:
-                page_start, page_end = page[0][0]['start'], page[-1][-1]['start'] + page[-1][-1]['duration']
+            for p_idx, page in enumerate(pages):
+                page_start = page[0][0]['start']
+                page_end = page[-1][-1]['start'] + page[-1][-1]['duration']
+                
                 for l_idx, line in enumerate(page):
                     y_pos = START_Y + (l_idx * LINE_HEIGHT)
                     line_text = " ".join([w['word'] for w in line]).upper()
                     try:
-                        # Render full line base in white using 'caption' for robustness
-                        base_txt = TextClip(line_text, fontsize=60, color=NORMAL_TEXT, font=FONT, stroke_color='black', stroke_width=1, method='caption', align='center', size=(self.size[0]-200, None))\
-                            .set_start(page_start).set_duration(page_end - page_start).set_position(('center', y_pos))
-                        clips.append(base_txt)
-                        
-                        # For word-level highlighting, we'll continue using 'label' but with more safety checks
-                        # If a word fails, we just skip it rather than crashing
-                        line_width = base_txt.size[0]
-                        current_x = (self.size[0] - line_width) // 2
-                        
-                        for w_info in line:
-                            w_text = w_info['word'].upper()
-                            try:
-                                temp_w_clip = TextClip(w_text + " ", fontsize=60, font=FONT, method='label')
-                                w_width = temp_w_clip.size[0]
-                                temp_w_clip.close()
-                                
-                                highlight = TextClip(w_text, fontsize=60, color=HIGHLIGHT_TEXT, bg_color=HIGHLIGHT_BG, font=HIGHLIGHT_FONT, method='label')\
-                                    .set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
-                                clips.append(highlight)
-                                current_x += w_width
-                            except:
-                                continue
+                        # Render full line base in white
+                        base_txt = get_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
+                        if base_txt:
+                            base_txt = base_txt.set_start(page_start).set_duration(page_end - page_start).set_position(('center', y_pos))
+                            clips.append(base_txt)
+                            
+                            line_width = base_txt.size[0]
+                            current_x = (self.size[0] - line_width) // 2
+                            
+                            for w_info in line:
+                                w_text = w_info['word'].upper()
+                                try:
+                                    temp_w = get_text_clip(w_text + " ", FONT_SIZE, 'white')
+                                    if not temp_w: continue
+                                    w_width = temp_w.size[0]
+                                    temp_w.close()
+                                    
+                                    highlight = get_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
+                                    if highlight:
+                                        highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
+                                        clips.append(highlight)
+                                        current_x += w_width
+                                except:
+                                    continue
                     except Exception as e:
-                        print(f"Caption Line Error: {e}")
+                        print(f"Caption Rendering Error (Resilient): {e}")
                         continue
         else:
-            txt = TextClip(self._wrap_text(text, 25), fontsize=70, color='white', bg_color='black', font='Nirmala-UI' if os.name == 'nt' else 'Arial', method='caption', size=(self.size[0]-100, None)).set_duration(duration).set_position('center')
-            clips.append(txt)
+            print("WARNING: No word_offsets found. Using fallback text.")
+            try:
+                txt = TextClip(self._wrap_text(text, 25), fontsize=60, color='white', bg_color='black', font='Arial', method='caption', size=(self.size[0]-100, None)).set_duration(duration).set_position('center')
+                clips.append(txt)
+            except:
+                pass
         
         # Prioritize dedicated music folder if provided, fallback to default music/
         music_files = []
