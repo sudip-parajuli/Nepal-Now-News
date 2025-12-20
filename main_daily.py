@@ -67,13 +67,13 @@ async def main():
     # 2. Generate Multi-vocal Audio
     audio_path = "storage/daily_summary.mp3"
     print("Generating multi-vocal narration...")
-    _, word_offsets = await TTSEngine.generate_multivocal_audio(segments, audio_path)
+    _, word_offsets, durations = await TTSEngine.generate_multivocal_audio(segments, audio_path)
     
     # 3. Create Video
     video_path = "storage/daily_summary_final.mp4"
     vgen = VideoLongGenerator()
     print("Creating final video summary...")
-    vgen.create_daily_summary(segments, audio_path, video_path, word_offsets)
+    vgen.create_daily_summary(segments, audio_path, video_path, word_offsets, durations=durations)
     
     # 4. Upload to YouTube
     youtube_token = os.getenv("YOUTUBE_TOKEN_BASE64")

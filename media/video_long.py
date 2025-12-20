@@ -23,7 +23,7 @@ class VideoLongGenerator:
             lines.append(" ".join(current_line))
         return lines
 
-    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list):
+    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None):
         """
         Creates a structured daily summary video with precise timing and centered captions.
         """
@@ -34,25 +34,14 @@ class VideoLongGenerator:
         bg_clips = []
         cumulative_dur = 0
         
-        # We'll map each segment to its respective word offsets to get duration
+        # Font settings for Windows - 'Nirmala UI' is standard for Devanagari
+        FONT = 'Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari'
+        HEADER_FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari-Bold'
+
         current_word_offset_idx = 0
         for i, seg in enumerate(segments):
-            text_to_match = seg.get("text", "")
-            if seg.get("type") == "news" and seg.get("headline"):
-                text_to_match = f"{seg['headline']}। {text_to_match}"
-            
-            # Simple normalization for matching word counts
-            words_in_seg = re.sub(r'[।.,!?]', ' ', text_to_match).split()
-            num_words = len(words_in_seg)
-            
-            seg_offsets = word_offsets[current_word_offset_idx : current_word_offset_idx + num_words]
-            if seg_offsets:
-                seg_duration = (seg_offsets[-1]['start'] + seg_offsets[-1]['duration']) - seg_offsets[0]['start']
-                # On the first segment, include the leading silence if any
-                if i == 0:
-                    seg_duration += seg_offsets[0]['start']
-            else:
-                seg_duration = 5 # Fallback
+            # Use exact durations if provided, otherwise estimate
+            seg_duration = durations[i] if durations and i < len(durations) else 5
             
             # Ensure the last segment covers everything
             if i == len(segments) - 1:
@@ -77,7 +66,7 @@ class VideoLongGenerator:
                         seg['headline'],
                         fontsize=75,
                         color='yellow',
-                        font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
+                        font=HEADER_FONT,
                         bg_color='rgba(0,0,0,0.7)',
                         size=(self.size[0]-400, None),
                         method='caption'
@@ -87,7 +76,6 @@ class VideoLongGenerator:
 
             bg_clips.append(bg.set_start(cumulative_dur))
             cumulative_dur += seg_duration
-            current_word_offset_idx += num_words
 
         final_bg = CompositeVideoClip(bg_clips, size=self.size)
 
@@ -125,7 +113,7 @@ class VideoLongGenerator:
                     "\n".join(page),
                     fontsize=60,
                     color='white',
-                    font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
+                    font=FONT,
                     method='caption',
                     size=(self.size[0]-400, 300),
                     align='Center'
@@ -135,16 +123,13 @@ class VideoLongGenerator:
                 
                 # Highlight active word
                 for off in page_offsets:
-                    # For simplicity in long video, we'll show a "Active Word" highlight at the very bottom
-                    # or overlay a yellow word. Calculating exact (x,y) for centered multi-line 'caption' 
-                    # is extremely hard without manual layout.
-                    # Instead, we'll do a "Karaoke Line" at the bottom for the active word.
                     w_txt = TextClip(
                         off['word'],
                         fontsize=70,
                         color='yellow',
-                        font='DejaVu-Sans-Bold' if os.name != 'nt' else 'Arial-Bold',
-                        bg_color='black'
+                        font=HEADER_FONT,
+                        bg_color='black',
+                        method='label'
                     ).set_duration(off['duration']).set_start(off['start']).set_position(('center', 850))
                     caption_clips.append(w_txt)
             except: pass
@@ -165,5 +150,5 @@ class VideoLongGenerator:
             final_audio = CompositeAudioClip([audio.volumex(1.15), bg_music])
             final_video = final_video.set_audio(final_audio)
 
-        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4)
+        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, logger=None)
         print(f"Professional daily summary video saved to {output_path}")

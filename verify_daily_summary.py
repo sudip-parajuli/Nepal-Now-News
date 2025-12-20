@@ -49,13 +49,13 @@ async def verify_refined_summary():
     # 4. Generate audio
     print("Generating multi-vocal audio...")
     audio_path = "storage/test/test_daily.mp3"
-    _, offsets = await TTSEngine.generate_multivocal_audio(segments, audio_path)
-    print(f"Audio generated. Word offsets: {len(offsets)}")
+    _, offsets, durations = await TTSEngine.generate_multivocal_audio(segments, audio_path)
+    print(f"Audio generated. Durations: {durations}")
 
     # 5. Create video
     print("Creating video...")
     video_path = "storage/test/test_daily.mp4"
-    vgen.create_daily_summary(segments, audio_path, video_path, offsets)
+    vgen.create_daily_summary(segments, audio_path, video_path, offsets, durations=durations)
     print(f"Video saved to: {video_path}")
 
 if __name__ == "__main__":

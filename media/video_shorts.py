@@ -69,7 +69,8 @@ class VideoShortsGenerator:
             HIGHLIGHT_BG = 'yellow'
             HIGHLIGHT_TEXT = 'black'
             NORMAL_TEXT = 'white'
-            FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari'
+            FONT = 'Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari'
+            HIGHLIGHT_FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari-Bold'
             
             # Step 1: Group words into lines
             lines = []
@@ -131,7 +132,7 @@ class VideoShortsGenerator:
                                 fontsize=FONT_SIZE,
                                 color=HIGHLIGHT_TEXT,
                                 bg_color=HIGHLIGHT_BG,
-                                font=FONT,
+                                font=HIGHLIGHT_FONT,
                                 method='label'
                             ).set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
                             

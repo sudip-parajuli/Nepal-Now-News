@@ -9,8 +9,10 @@ class TTSEngine:
     async def generate_multivocal_audio(segments: list, output_path: str):
         """
         Generates audio for multiple segments with alternating voices and merges offsets.
+        Returns: (output_path, word_offsets, segment_durations)
         """
         all_offsets = []
+        segment_durations = []
         cumulative_duration = 0
         temp_audio_files = []
         
@@ -38,7 +40,9 @@ class TTSEngine:
             # Get actual duration of this clip
             from moviepy.editor import AudioFileClip
             clip = AudioFileClip(temp_path)
-            cumulative_duration += clip.duration
+            dur = clip.duration
+            segment_durations.append(dur)
+            cumulative_duration += dur
             temp_audio_files.append(temp_path)
             clip.close()
 
@@ -46,7 +50,7 @@ class TTSEngine:
         from moviepy.editor import concatenate_audioclips, AudioFileClip
         clips = [AudioFileClip(f) for f in temp_audio_files]
         final_audio = concatenate_audioclips(clips)
-        final_audio.write_audiofile(output_path, fps=44100)
+        final_audio.write_audiofile(output_path, fps=44100, logger=None)
         
         # Cleanup
         for c in clips: c.close()
@@ -54,7 +58,7 @@ class TTSEngine:
             try: os.remove(f)
             except: pass
 
-        return output_path, all_offsets
+        return output_path, all_offsets, segment_durations
 
     @staticmethod
     async def generate_audio(text: str, output_path: str, voice: str = None):
