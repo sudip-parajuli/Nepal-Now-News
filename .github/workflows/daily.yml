@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
-          pip install feedparser edge-tts "moviepy<2.0.0" "Pillow<10.0.0" requests beautifulsoup4 google-generativeai telethon python-dotenv duckduckgo-search google-api-python-client google-auth-oauthlib groq
+          pip install feedparser edge-tts "moviepy<2.0.0" "Pillow<10.0.0" requests beautifulsoup4 google-genai telethon python-dotenv duckduckgo-search google-api-python-client google-auth-oauthlib groq
           
       - name: Configure ImageMagick
         run: |
@@ -40,5 +40,6 @@ jobs:
       - name: Run Daily Summary Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
         run: python main_daily.py

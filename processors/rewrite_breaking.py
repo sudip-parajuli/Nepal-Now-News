@@ -1,16 +1,16 @@
-import google.generativeai as genai
+from google import genai
+from google.genai import errors
 import os
 import time
 import random
 from dotenv import load_dotenv
-import google.api_core.exceptions
 
 load_dotenv()
 
 class ScriptRewriter:
     def __init__(self, api_key: str):
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.client = genai.Client(api_key=api_key)
+        self.model_id = 'gemini-2.0-flash'
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         if self.groq_api_key:
             try:
@@ -25,28 +25,34 @@ class ScriptRewriter:
         """Calls Gemini with exponential backoff, falling back to Groq if available."""
         for attempt in range(max_retries):
             try:
-                response = self.model.generate_content(prompt)
+                response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=prompt
+                )
                 return response.text.strip()
-            except google.api_core.exceptions.ResourceExhausted as e:
-                if self.groq_client:
-                    print(f"Gemini Quota Exceeded. Trying Groq fallback...")
+            except Exception as e:
+                # Handle Quota / Resource Exhausted
+                err_msg = str(e).lower()
+                is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
+                
+                if is_quota_error and self.groq_client:
+                    print(f"Gemini Quota Exceeded. Trying Groq fallback (Attempt {attempt+1})...")
                     try:
                         chat_completion = self.groq_client.chat.completions.create(
                             messages=[{"role": "user", "content": prompt}],
                             model="llama-3.3-70b-versatile",
                         )
-                        return chat_completion.choices[0].message.content.strip()
+                        result = chat_completion.choices[0].message.content.strip()
+                        if result: return result
                     except Exception as groq_err:
                         print(f"Groq fallback failed: {groq_err}")
                 
-                wait_time = (2 ** attempt) + random.uniform(0, 1)
-                print(f"Quota exceeded. Retrying in {wait_time:.2f} seconds... (Attempt {attempt+1}/{max_retries})")
-                time.sleep(wait_time)
-            except Exception as e:
-                print(f"An unexpected error occurred: {e}")
-                if attempt == max_retries - 1:
-                    raise e
-                time.sleep(2)
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) + random.uniform(0, 1)
+                    print(f"LLM Error: {e}. Retrying in {wait_time:.2f} seconds... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"CRITICAL: LLM failed after {max_retries} attempts. Last error: {e}")
         
         return "Error: Maximum retries reached for LLM generation."
 
@@ -90,7 +96,7 @@ class ScriptRewriter:
 
         Language: Nepali (Devanagari)
         Tone: Professional news anchor, formal.
-        - Use standard Nepali news reporting grammar and formal vocabulary.
+       - Use standard Nepali news reporting grammar and formal vocabulary.
         - Ensure perfect grammatical structure and natural transitions.
         - Group related stories logically.
         - RETURN ONLY THE NEPALI SPEECH TEXT.

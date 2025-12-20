@@ -3,7 +3,7 @@ edge-tts
 moviepy<2.0.0
 requests
 beautifulsoup4
-google-generativeai
+google-genai
 telethon
 python-dotenv
 duckduckgo-search
