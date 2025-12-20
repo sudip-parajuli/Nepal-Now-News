@@ -1,10 +1,10 @@
 # Science & Universe Channel
 channel_id: "UC_SCIENCE_CHANNEL_ID_PLACEHOLDER"
 type: "science"
-language: "ne"
+language: "en"
 tts_voice: 
-  female: "ne-NP-HemkalaNeural"
-  male: "ne-NP-SagarNeural" # Alternating or specific calm voice
+  female: "en-US-JennyNeural"
+  male: "en-US-ChristopherNeural"
   style: "calm"
 upload:
   shorts: true
@@ -20,3 +20,4 @@ topics:
 tone: "Calm, educational"
 storage:
   posted_science: "automation/storage/posted_science.json"
+  music_science: "automation/musics/science/"

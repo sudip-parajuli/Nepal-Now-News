@@ -58,22 +58,28 @@ class TTSEngine:
 
     async def generate_audio(self, text: str, output_path: str, voice: str = None):
         text = text.strip()
-        abbreviations = {
-            r'डा\.': 'डाक्टर',
-            r'इ\.': 'इन्जिनियर',
-            r'ई\.': 'इन्जिनियर',
-            r'प्रा\.': 'प्राध्यापक',
-            r'प\.': 'पण्डित',
-            r'वि\.सं\.': 'विक्रम सम्बत',
-            r'नं\.': 'नम्बर',
-            r'कि\.मी\.': 'किलोमिटर',
-            r'मि\.': 'मिटर'
-        }
-        for abbr, full in abbreviations.items():
-            text = re.sub(abbr, full, text)
+        
+        # Detection: If text contains Devanagari, apply Nepali normalization
+        if re.search(r'[\u0900-\u097F]', text):
+            abbreviations = {
+                r'डा\.': 'डाक्टर',
+                r'इ\.': 'इन्जिनियर',
+                r'ई\.': 'इन्जिनियर',
+                r'प्रा\.': 'प्राध्यापक',
+                r'प\.': 'पण्डित',
+                r'वि\.सं\.': 'विक्रम सम्बत',
+                r'नं\.': 'नम्बर',
+                r'कि\.मी\.': 'किलोमिटर',
+                r'मि\.': 'मिटर'
+            }
+            for abbr, full in abbreviations.items():
+                text = re.sub(abbr, full, text)
+            text = re.sub(r'([।.,!?])(?=[^\s])', r'\1 ', text)
+        else:
+            # English specific normalization if needed (e.g., standardizing Dr. etc)
+            text = re.sub(r'([.,!?])(?=[^\s])', r'\1 ', text)
 
         text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'([।.,!?])(?=[^\s])', r'\1 ', text)
         
         if not text:
             return output_path, []

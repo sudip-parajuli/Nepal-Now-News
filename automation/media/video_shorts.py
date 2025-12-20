@@ -1,32 +1,66 @@
-from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, afx
+from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip, afx
 import os
 import glob
 import random
+import re
 
 class VideoShortsGenerator:
     def __init__(self, size=(1080, 1920)):
         self.size = size
 
-    def create_shorts(self, text: str, audio_path: str, output_path: str, word_offsets: list = None, image_paths: list = None):
+    def create_shorts(self, text: str, audio_path: str, output_path: str, word_offsets: list = None, media_paths: list = None):
+        """
+        media_paths can contain both image and video file paths.
+        """
         audio = AudioFileClip(audio_path)
         duration = audio.duration
         bg_clips = []
-        if image_paths and len(image_paths) > 0:
-            transition_time = 4.0
-            for i, img_path in enumerate(image_paths):
-                if os.path.exists(img_path):
+        
+        if media_paths and len(media_paths) > 0:
+            transition_time = duration / len(media_paths) if len(media_paths) > 0 else 4.0
+            transition_time = max(min(transition_time, 6.0), 3.0) # Clamp between 3 and 6 seconds
+            
+            for i, m_path in enumerate(media_paths):
+                if os.path.exists(m_path):
                     try:
-                        img_clip = ImageClip(img_path).set_duration(transition_time).set_start(i * transition_time)
-                        w, h = img_clip.size
+                        is_video = m_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv'))
+                        start_time = i * transition_time
+                        
+                        if is_video:
+                            clip = VideoFileClip(m_path).without_audio()
+                            # Loop video if it's shorter than transition_time
+                            if clip.duration < transition_time:
+                                clip = clip.fx(afx.loop, duration=transition_time)
+                            else:
+                                clip = clip.subclip(0, transition_time)
+                        else:
+                            clip = ImageClip(m_path).set_duration(transition_time)
+
+                        clip = clip.set_start(start_time)
+                        
+                        # Resize and crop to fill vertical screen
+                        w, h = clip.size
                         target_ratio = self.size[0]/self.size[1]
-                        if w/h > target_ratio: img_clip = img_clip.resize(height=self.size[1])
-                        else: img_clip = img_clip.resize(width=self.size[0])
-                        img_clip = img_clip.set_position('center').resize(lambda t: 1.05 + 0.1 * (t / transition_time))
-                        bg_clips.append(img_clip)
-                    except: pass
+                        if w/h > target_ratio: 
+                            clip = clip.resize(height=self.size[1])
+                        else: 
+                            clip = clip.resize(width=self.size[0])
+                        
+                        clip = clip.set_position('center')
+                        
+                        # Subtle Ken Burns for images
+                        if not is_video:
+                            clip = clip.resize(lambda t: 1.05 + 0.05 * (t / transition_time))
+                            
+                        bg_clips.append(clip)
+                    except Exception as e:
+                        print(f"Error processing media {m_path}: {e}")
+            
             if bg_clips:
-                if (len(bg_clips) * transition_time) < duration:
+                actual_bg_dur = sum([c.duration for c in bg_clips])
+                if actual_bg_dur < duration:
                     bg_clips[-1] = bg_clips[-1].set_duration(duration - bg_clips[-1].start)
+        
         if not bg_clips:
             bg_clips.append(ColorClip(size=self.size, color=(15, 15, 35), duration=duration))
         try:
@@ -35,10 +69,18 @@ class VideoShortsGenerator:
         except: pass
         clips = bg_clips
         if word_offsets:
-            FONT_SIZE, LINE_HEIGHT, START_Y, MAX_CHARS_PER_LINE = 80, 110, 1350, 22
+            FONT_SIZE, LINE_HEIGHT, START_Y, MAX_CHARS_PER_LINE = 80, 110, 1350, 25 # Increased chars for English
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'black', 'white'
-            FONT = 'Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari'
-            HIGHLIGHT_FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari-Bold'
+            
+            # Language detection for font
+            is_nepali = re.search(r'[\u0900-\u097F]', text)
+            if is_nepali:
+                FONT = 'Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari'
+                HIGHLIGHT_FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari-Bold'
+            else:
+                FONT = 'Arial' if os.name == 'nt' else 'DejaVu-Sans'
+                HIGHLIGHT_FONT = 'Arial-Bold' if os.name == 'nt' else 'DejaVu-Sans-Bold'
+
             lines, curr_line, curr_len = [], [], 0
             for w in word_offsets:
                 if curr_len + len(w['word']) > MAX_CHARS_PER_LINE and curr_line:
@@ -68,10 +110,17 @@ class VideoShortsGenerator:
                             current_x += w_width
                     except: continue
         else:
-            txt = TextClip(self._wrap_text(text, 25), fontsize=70, color='white', bg_color='black', font='Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari', method='caption', size=(self.size[0]-100, None)).set_duration(duration).set_position('center')
+            txt = TextClip(self._wrap_text(text, 25), fontsize=70, color='white', bg_color='black', font='Nirmala-UI' if os.name == 'nt' else 'Arial', method='caption', size=(self.size[0]-100, None)).set_duration(duration).set_position('center')
             clips.append(txt)
         
-        music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3")
+        # Prioritize dedicated music folder if provided, fallback to default music/
+        music_files = []
+        if os.path.exists("automation/musics/science"):
+            music_files += glob.glob("automation/musics/science/*.mp3")
+        
+        if not music_files:
+            music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3")
+
         if music_files:
             try:
                 bg_music = AudioFileClip(random.choice(music_files)).volumex(0.12).set_duration(duration)
@@ -80,6 +129,7 @@ class VideoShortsGenerator:
                 final_audio = CompositeAudioClip([audio.volumex(1.1), bg_music])
             except: final_audio = audio
         else: final_audio = audio
+        
         final_video = CompositeVideoClip(clips, size=self.size).set_audio(final_audio)
         final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, preset='ultrafast', logger=None)
 

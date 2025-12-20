@@ -75,22 +75,22 @@ class ScriptWriter:
 
     def generate_science_facts(self, topic: str) -> str:
         prompt = f"""
-        Create an original educational YouTube Shorts script about "{topic}".
+        Create an original educational YouTube Shorts script about "{topic}" in English.
         
         Requirements:
-        - Language: Nepali (Devanagari)
+        - Language: English
         - Duration: 35-45 seconds of speech.
         - Tone: Calm, educational, documentary-style.
         - Structure:
             1. Hook: Start with a mind-blowing fact or intriguing question.
-            2. Content: Explain 2-3 key scientific aspects simply but accurately.
-            3. Hook/Call to Action: End with a curiosity hook that makes the audience want to learn more.
+            2. Content: Explain 2-3 key scientific aspects clearly and engagingly.
+            3. Engagement: END with a thought-provoking question for the audience to encourage comments and engagement.
         
         Rules:
-        - Avoid clickbait or exaggeration.
+        - Avoid clicks or exaggeration.
         - Be scientifically accurate.
-        - RETURN ONLY THE NEPALI SPEECH TEXT.
-        - DO NOT include music cues or labels.
+        - RETURN ONLY THE ENGLISH SPEECH TEXT.
+        - DO NOT include music cues or labels like [Narrator].
         """
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
