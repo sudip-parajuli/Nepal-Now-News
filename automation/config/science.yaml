@@ -20,4 +20,3 @@ topics:
 tone: "Calm, educational"
 storage:
   posted_science: "automation/storage/posted_science.json"
-  topic_history: "automation/storage/topic_history.json"
