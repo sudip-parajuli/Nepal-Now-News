@@ -11,6 +11,22 @@ on:
     # 15 1 UTC = 7:00 AM NPT, 45 12 UTC = 6:30 PM NPT
     - cron: '15 1,12 * * *'
   workflow_dispatch:
+    inputs:
+      pipeline:
+        description: 'Select pipeline to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - breaking
+          - daily
+          - science
+      is_test:
+        description: 'Run in test mode (no upload)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -42,29 +58,44 @@ jobs:
       # --- PIPELINE ROUTING ---
 
       - name: Run Breaking News (Every 30m)
-        if: github.event.schedule == '*/30 * * * *' || github.event_name == 'workflow_dispatch'
+        if: |
+          github.event.schedule == '*/30 * * * *' || 
+          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'breaking'))
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
-        run: python automation/main.py --config automation/config/nepali_news.yaml --mode breaking
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
+          python automation/main.py --config automation/config/nepali_news.yaml --mode breaking $FLAGS
 
       - name: Run Daily Summary
-        if: github.event.schedule == '45 1,13 * * *' || github.event_name == 'workflow_dispatch'
+        if: |
+          github.event.schedule == '45 1,13 * * *' || 
+          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'daily'))
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
-        run: python automation/main.py --config automation/config/nepali_news.yaml --mode daily
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
+          python automation/main.py --config automation/config/nepali_news.yaml --mode daily $FLAGS
 
       - name: Run Science Facts
-        if: github.event.schedule == '15 1,12 * * *' || github.event_name == 'workflow_dispatch'
+        if: |
+          github.event.schedule == '15 1,12 * * *' || 
+          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'science'))
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           # Map the science-specific secret to the environment variable the code expects
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
-        run: python automation/main.py --config automation/config/science.yaml --mode shorts
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
+          python automation/main.py --config automation/config/science.yaml --mode shorts $FLAGS
 
       - name: Commit State Changes
         if: always()
