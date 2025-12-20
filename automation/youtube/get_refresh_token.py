@@ -19,17 +19,9 @@ def main():
     flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
     credentials = flow.run_local_server(port=0)
     
-    token_data = {
-        'token': credentials.token,
-        'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
-    }
-    
-    token_json = json.dumps(token_data)
-    token_base64 = base64.b64encode(token_json.encode('utf-8')).decode('utf-8')
+    import pickle
+    creds_data = pickle.dumps(credentials)
+    token_base64 = base64.b64encode(creds_data).decode('utf-8')
     
     print("\n--- NEW YOUTUBE TOKEN ---")
     print("Copy the following string into your environment variable (e.g. YOUTUBE_TOKEN_SCIENCE_BASE64):")

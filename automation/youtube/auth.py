@@ -16,10 +16,20 @@ class YouTubeAuth:
         if token_b64:
             try:
                 creds_data = base64.b64decode(token_b64)
+                # Verify if it's JSON or Pickle
+                if creds_data.startswith(b'{'):
+                    print("YouTube Auth: detected JSON token, attempting JSON load...")
+                    import json
+                    token_data = json.loads(creds_data)
+                    # We can't easily rebuild the creds object from a raw dict here without more code,
+                    # so we should ideally stick to pickle. But let's log clearly.
+                    print("YouTube Auth Error: Token is in JSON format but system expects Pickle. Please re-generate using the updated get_refresh_token.py.")
+                
                 creds = pickle.loads(creds_data)
                 print("YouTube Auth: Loaded from environment.")
             except Exception as e:
                 print(f"YouTube Auth Error: {e}")
+                print("Hint: If you see 'invalid load key', your token format is incorrect. Please re-generate your token.")
         
         # 2. Try local token file
         if not creds and os.path.exists(token_file):
