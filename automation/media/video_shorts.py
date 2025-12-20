@@ -89,16 +89,27 @@ class VideoShortsGenerator:
                         "C:/Windows/Fonts/arial.ttf",
                         "C:/Windows/Fonts/tahoma.ttf"
                     ]
-                    font = None
-                    for path in font_paths:
-                        if os.path.exists(path):
-                            try:
-                                font = ImageFont.truetype(path, fsize)
-                                break
-                            except: continue
+                    if not font:
+                        print("WARNING: Standard fonts not found. Searching /usr/share/fonts...")
+                        # Desperate search for ANY ttf on Linux
+                        for root, dirs, files in os.walk("/usr/share/fonts"):
+                            for file in files:
+                                if file.endswith(".ttf"):
+                                    try:
+                                        font = ImageFont.truetype(os.path.join(root, file), fsize)
+                                        print(f"DEBUG: Found alternative font: {file}")
+                                        break
+                                    except: continue
+                            if font: break
                     
                     if not font:
+                        print("CRITICAL: No TTF fonts found. Falling back to tiny default.")
                         font = ImageFont.load_default()
+                    else:
+                        try:
+                            fname = os.path.basename(font.path)
+                            print(f"DEBUG: Successfully loaded font: {fname} at size {fsize}")
+                        except: pass
 
                     # Measure text
                     # Use a dummy image to get text bbox
@@ -153,20 +164,23 @@ class VideoShortsGenerator:
                         base_txt = base_txt.set_start(l_start).set_duration(l_end - l_start).set_position(('center', y_pos))
                         clips.append(base_txt)
                         
-                        line_width = base_txt.size[0]
-                        current_x = (self.size[0] - line_width) // 2
-                        
                         # PRECISE POSITIONING: Measure offsets for each word within the line
                         cumulative_text = ""
-                        for w_info in line:
+                        for w_idx, w_info in enumerate(line):
                             w_text = w_info['word'].upper()
                             try:
                                 # Start position is the width of everything before this word
                                 start_offset = font.getlength(cumulative_text)
+                                # End position is width including current word
+                                end_offset = font.getlength(cumulative_text + w_text)
+                                
                                 word_x = current_x + start_offset
+                                word_w = end_offset - start_offset
                                 
                                 highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
                                 if highlight:
+                                    # Ensure highlight width matches the measured width exactly if possible
+                                    # (Pillow's padding might make it slightly different, but this is the text start)
                                     highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((word_x, y_pos))
                                     clips.append(highlight)
                                 
@@ -175,6 +189,7 @@ class VideoShortsGenerator:
                             except Exception as e:
                                 print(f"Word Positioning Error: {e}")
                                 continue
+                        print(f"DEBUG: Line sync completed for text: {line_text[:30]}...")
                 except Exception as e:
                     print(f"Caption Rendering Error (Pillow): {e}")
                     continue

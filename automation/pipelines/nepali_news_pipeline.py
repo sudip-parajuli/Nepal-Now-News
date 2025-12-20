@@ -57,7 +57,7 @@ class NepaliNewsPipeline(BasePipeline):
                 image_paths = self.image_fetcher.fetch_multi_images([kw]*5, f"news_{item['hash'][:8]}")
                 
                 video_path = f"automation/storage/news_breaking_{item['hash'][:8]}.mp4"
-                self.vgen_shorts.create_shorts(script, audio_path, video_path, word_offsets=word_offsets, image_paths=image_paths)
+                self.vgen_shorts.create_shorts(script, audio_path, video_path, word_offsets=word_offsets, media_paths=image_paths)
                 
                 if not is_test:
                     yt = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
