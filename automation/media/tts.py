@@ -85,6 +85,7 @@ class TTSEngine:
             return output_path, []
 
         voice = voice or self.voice_map.get("female")
+        print(f"DEBUG: TTSEngine communicating with voice: {voice}")
         communicate = edge_tts.Communicate(text, voice, rate=self.rate)
         word_offsets = []
         

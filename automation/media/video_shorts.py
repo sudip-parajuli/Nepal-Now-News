@@ -71,9 +71,10 @@ class VideoShortsGenerator:
 
         clips = bg_clips
         if word_offsets:
-            print(f"DEBUG: Generating karaoke captions for {len(word_offsets)} words...")
-            # Move START_Y higher to be safe (1000 is mid-bottom)
-            FONT_SIZE, LINE_HEIGHT, START_Y, MAX_CHARS_PER_LINE = 55, 80, 1000, 25 
+            print(f"DEBUG: Generating minimalist karaoke captions for {len(word_offsets)} words...")
+            # PERFECT CENTER POSITION
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 65, 90, 20 
+            START_Y = (self.size[1] // 2) - 50 
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
             # Resilient Font Selection for Windows
@@ -81,6 +82,7 @@ class VideoShortsGenerator:
                 fonts = ['Arial', 'Tahoma', 'Verdana', 'Courier New', 'Nirmala UI']
                 for f in fonts:
                     try:
+                        # Add a small stroke for readability
                         return TextClip(txt, fontsize=fsize, color=clr, bg_color=bg, font=f, method=mt)
                     except:
                         continue
@@ -95,46 +97,46 @@ class VideoShortsGenerator:
                 curr_len += len(w['word']) + 1
             if curr_line: lines.append(curr_line)
             
-            pages = [lines[i:i + 3] for i in range(0, len(lines), 3)]
-            for p_idx, page in enumerate(pages):
-                page_start = page[0][0]['start']
-                page_end = page[-1][-1]['start'] + page[-1][-1]['duration']
+            # Render 1 line at a time for maximum impact
+            for line in lines:
+                l_start = line[0]['start']
+                l_end = line[-1]['start'] + line[-1]['duration']
+                y_pos = START_Y
                 
-                for l_idx, line in enumerate(page):
-                    y_pos = START_Y + (l_idx * LINE_HEIGHT)
-                    line_text = " ".join([w['word'] for w in line]).upper()
-                    try:
-                        # Render full line base in white
-                        base_txt = get_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
-                        if base_txt:
-                            base_txt = base_txt.set_start(page_start).set_duration(page_end - page_start).set_position(('center', y_pos))
-                            clips.append(base_txt)
-                            
-                            line_width = base_txt.size[0]
-                            current_x = (self.size[0] - line_width) // 2
-                            
-                            for w_info in line:
-                                w_text = w_info['word'].upper()
-                                try:
-                                    temp_w = get_text_clip(w_text + " ", FONT_SIZE, 'white')
-                                    if not temp_w: continue
-                                    w_width = temp_w.size[0]
-                                    temp_w.close()
-                                    
-                                    highlight = get_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
-                                    if highlight:
-                                        highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
-                                        clips.append(highlight)
-                                        current_x += w_width
-                                except:
-                                    continue
-                    except Exception as e:
-                        print(f"Caption Rendering Error (Resilient): {e}")
-                        continue
+                line_text = " ".join([w['word'] for w in line]).upper()
+                try:
+                    # Render full line base in white
+                    base_txt = get_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
+                    if base_txt:
+                        base_txt = base_txt.set_start(l_start).set_duration(l_end - l_start).set_position(('center', y_pos))
+                        clips.append(base_txt)
+                        
+                        line_width = base_txt.size[0]
+                        current_x = (self.size[0] - line_width) // 2
+                        
+                        for w_info in line:
+                            w_text = w_info['word'].upper()
+                            try:
+                                temp_w = get_text_clip(w_text + " ", FONT_SIZE, 'white')
+                                if not temp_w: continue
+                                w_width = temp_w.size[0]
+                                temp_w.close()
+                                
+                                # Yellow highlight active word
+                                highlight = get_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
+                                if highlight:
+                                    highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
+                                    clips.append(highlight)
+                                    current_x += w_width
+                            except:
+                                continue
+                except Exception as e:
+                    print(f"Caption Rendering Error (Overhaul): {e}")
+                    continue
         else:
             print("WARNING: No word_offsets found. Using fallback text.")
             try:
-                txt = TextClip(self._wrap_text(text, 25), fontsize=60, color='white', bg_color='black', font='Arial', method='caption', size=(self.size[0]-100, None)).set_duration(duration).set_position('center')
+                txt = TextClip(self._wrap_text(text, 20), fontsize=70, color='white', bg_color='black', font='Arial', method='label').set_duration(duration).set_position('center')
                 clips.append(txt)
             except:
                 pass
