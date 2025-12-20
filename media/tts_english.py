@@ -65,6 +65,24 @@ class TTSEngine:
         # --- Normalization ---
         import re
         text = text.strip()
+
+        # Expand abbreviations (Doctor, Engineer, etc.)
+        abbreviations = {
+            r'डा\.': 'डाक्टर',
+            r'इ\.': 'इन्जिनियर',
+            r'ई\.': 'इन्जिनियर',
+            r'प्रा\.': 'प्राध्यापक',
+            r'प\.': 'पण्डित',
+            r'वि\.सं\.': 'विक्रम सम्बत',
+            r'नं\.': 'नम्बर',
+            r'कि\.मी\.': 'किलोमिटर',
+            r'मि\.': 'मिटर'
+        }
+        for abbr, full in abbreviations.items():
+            # Use negative lookbehind/lookahead to avoid matching inside other words if needed, 
+            # but in Nepali, these abbreviations are very specific with the dot.
+            text = re.sub(abbr, full, text)
+
         # Remove redundant whitespace and newlines
         text = re.sub(r'\s+', ' ', text)
         # Ensure punctuation has a space after it for better TTS breathing

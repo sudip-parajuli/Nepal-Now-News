@@ -1,0 +1,13 @@
+--- Testing Breaking News Classification ---
+Headline: चितवनमा प्रमुख दुर्घटना, ५ जनाको मृत्यु -> Result: BREAKING
+Headline: ताजा अपडेट: चुनावको मिति घोषणा -> Result: BREAKING
+Headline: विशेष समाचार: नयाँ बजेट सार्वजनिक -> Result: BREAKING
+Headline: सामान्य मौसम अपडेट -> Result: BREAKING
+
+--- Testing TTS Abbreviation Expansion ---
+Original: डा. राम भण्डारीले नयाँ अस्पताल खोल्नुभयो।
+Expanded: डाक्टर राम भण्डारीले नयाँ अस्पताल खोल्नुभयो।
+Original: इ. सुदीप पराजुलीले पुलको डिजाइन गर्नुभयो।
+Expanded: इन्जिनियर सुदीप पराजुलीले पुलको डिजाइन गर्नुभयो।
+Original: वि.सं. २०८१ को फागुन महिना।
+Expanded: विक्रम सम्बत २०८१ को फागुन महिना।

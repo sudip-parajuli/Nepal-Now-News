@@ -6,9 +6,10 @@ class NewsClassifier:
     BREAKING_KEYWORDS = [
         "breaking", "live", "alert", "emergency", "update", 
         "explosion", "earthquake", "crash", "attack", "decision", 
-        "deadly", "shooting", "urgent", "tsunami", "nuclear",
+        "deadly", "shooting", "urgent", "tsunami", "nuclear", "flash",
         "ब्रेकिङ", "ताजा", "विशेष", "अपडेट", "घटना", "मृत्यु", 
-        "घाइते", "विस्फोट", "भूकम्प", "आक्रमण", "फैसला", "जरुरी"
+        "घाइते", "विस्फोट", "भूकम्प", "आक्रमण", "फैसला", "जरुरी",
+        "प्रमुख", "खबर", "समाचार", "तत्काल", "खतरा", "अवरुद्ध", "पक्राउ"
     ]
 
     def __init__(self, breaking_window_hours: int = 2):
