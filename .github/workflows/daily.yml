@@ -2,7 +2,8 @@ name: Daily News Summary
 
 on:
   schedule:
-    - cron: '15 14 * * *' # Every night at 14:15 UTC (8 pm NPT)
+    - cron: '45 1 * * *'  # 7:30 AM NPT
+    - cron: '45 13 * * *' # 7:30 PM NPT
   workflow_dispatch:
 
 permissions:

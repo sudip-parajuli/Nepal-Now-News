@@ -149,19 +149,20 @@ class ScriptRewriter:
 
     def generate_image_keywords(self, sentence: str) -> str:
         """
-        Generates 3-5 descriptive keywords for an image search based on the sentence.
-        Aims for 'news-worthy' photographic subjects.
+        Generates specific, context-rich keywords for an image search based on the sentence.
+        Aims for highly accurate, representative news photography.
         """
         prompt = f"""
-        Extract 3-5 highly descriptive keywords for a news photographic image search from this sentence:
+        Generate a highly specific English image search query (5-8 words) for this news:
         "{sentence}"
         
         Rules:
-        - Focus on real-world objects, people, or locations.
-        - AVOID generic words like "system", "process", "decision", "random".
-        - AVOID abstract concepts or diagrams.
-        - Output ONLY the keywords separated by spaces.
-        - Example: "US government discontinues lottery" -> "US Capitol Building Immigration"
+        - Must capture the core event, people, and specific context.
+        - Always include 'Nepal' or 'Nepali' if the news is about Nepal or Nepali people.
+        - Be extremely specific to avoid generic or confusing results (e.g., if a tribute is given, search for the specific community and event).
+        - AVOID generic concepts or single words like 'accident' or 'tribute' alone.
+        - Output ONLY the search query keywords separated by spaces.
+        - Example: "Buddhist community tribute Nepali student car accident" -> "Nepal Buddhist community tribute student car accident funeral"
         """
         
         try:

@@ -108,29 +108,35 @@ class VideoLongGenerator:
             page_dur = page_end - page_start
             
             try:
-                # Dimmed base text
-                base_txt = TextClip(
-                    "\n".join(page),
-                    fontsize=60,
-                    color='white',
-                    font=FONT,
-                    method='caption',
-                    size=(self.size[0]-400, 300),
-                    align='Center'
-                ).set_duration(page_dur).set_opacity(0.4).set_position(('center', 800)).set_start(page_start)
+                # Render each line in the page individually for robust Devanagari support on Windows
+                # We'll stack 3 lines and show the active word highlighted at the bottom
+                LINE_HEIGHT = 80
+                START_Y = 750
                 
-                caption_clips.append(base_txt)
-                
-                # Highlight active word
+                for l_idx, line_text in enumerate(page):
+                    y_pos = START_Y + (l_idx * LINE_HEIGHT)
+                    base_txt = TextClip(
+                        line_text,
+                        fontsize=60,
+                        color='white',
+                        font=FONT,
+                        stroke_color='black',
+                        stroke_width=1,
+                        method='label',
+                        bg_color='rgba(0,0,0,0.3)' # Subtle background for readability
+                    ).set_start(page_start).set_duration(page_dur).set_position(('center', y_pos))
+                    caption_clips.append(base_txt)
+
+                # Highlight active word (center bottom)
                 for off in page_offsets:
                     w_txt = TextClip(
                         off['word'],
-                        fontsize=70,
+                        fontsize=75,
                         color='yellow',
                         font=HEADER_FONT,
                         bg_color='black',
                         method='label'
-                    ).set_duration(off['duration']).set_start(off['start']).set_position(('center', 850))
+                    ).set_duration(off['duration']).set_start(off['start']).set_position(('center', 1000))
                     caption_clips.append(w_txt)
             except: pass
             

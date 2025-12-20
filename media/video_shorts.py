@@ -109,7 +109,7 @@ class VideoShortsGenerator:
                             stroke_color='black',
                             stroke_width=2,
                             method='label'
-                        ).set_start(page_start).set_duration(page_end - page_start).set_position(('center', y_pos)).set_opacity(0.6)
+                        ).set_start(page_start).set_duration(page_end - page_start).set_position(('center', y_pos))
                         clips.append(base_txt)
                         
                         # 2. Calculate Word Positions for Highlighting
