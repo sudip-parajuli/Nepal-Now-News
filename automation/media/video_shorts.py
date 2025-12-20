@@ -64,29 +64,69 @@ class VideoShortsGenerator:
         if not bg_clips:
             bg_clips.append(ColorClip(size=self.size, color=(15, 15, 35), duration=duration))
         
-        try:
-            overlay = ColorClip(size=(self.size[0], 600), color=bg_overlay_color).set_opacity(0.5).set_duration(duration).set_position(('center', 1350))
-            bg_clips.append(overlay)
-        except: pass
-
+        # 67-70: Removed the bottom overlay for cleaner look
+        
         clips = bg_clips
         if word_offsets:
-            print(f"DEBUG: Generating minimalist karaoke captions for {len(word_offsets)} words...")
+            print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
             # PERFECT CENTER POSITION
-            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 65, 90, 20 
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 70, 100, 20 
             START_Y = (self.size[1] // 2) - 50 
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
-            # Resilient Font Selection for Windows
-            def get_text_clip(txt, fsize, clr, bg=None, mt='label'):
-                fonts = ['Arial', 'Tahoma', 'Verdana', 'Courier New', 'Nirmala UI']
-                for f in fonts:
-                    try:
-                        # Add a small stroke for readability
-                        return TextClip(txt, fontsize=fsize, color=clr, bg_color=bg, font=f, method=mt)
-                    except:
-                        continue
-                return None
+            from PIL import Image, ImageDraw, ImageFont
+            import numpy as np
+
+            def get_pillow_text_clip(txt, fsize, clr, bg=None):
+                try:
+                    # Windows Font fallback list
+                    font_paths = [
+                        "C:/Windows/Fonts/arialbd.ttf", 
+                        "C:/Windows/Fonts/arial.ttf",
+                        "C:/Windows/Fonts/seguiemj.ttf", # Emoji support
+                        "C:/Windows/Fonts/tahoma.ttf"
+                    ]
+                    font = None
+                    for path in font_paths:
+                        if os.path.exists(path):
+                            try:
+                                font = ImageFont.truetype(path, fsize)
+                                break
+                            except: continue
+                    
+                    if not font:
+                        font = ImageFont.load_default()
+
+                    # Measure text
+                    # Use a dummy image to get text bbox
+                    dummy = Image.new('RGB', (1, 1))
+                    draw = ImageDraw.Draw(dummy)
+                    bbox = draw.textbbox((0, 0), txt, font=font)
+                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                    
+                    # Create actual image with transparency
+                    # Padding for strokes/descenders
+                    pad = 10
+                    img = Image.new('RGBA', (tw + pad*2, th + pad*2), (0,0,0,0))
+                    d = ImageDraw.Draw(img)
+                    
+                    if bg:
+                        # Draw background box
+                        d.rectangle([0, 0, tw + pad*2, th + pad*2], fill=bg)
+                    
+                    # Draw text (with a small black stroke if white text)
+                    if clr == 'white' and not bg:
+                        for offset in [(-2,-2), (2,-2), (-2,2), (2,2)]:
+                            d.text((pad+offset[0], pad+offset[1]), txt, font=font, fill='black')
+                    
+                    d.text((pad, pad), txt, font=font, fill=clr)
+                    
+                    # Convert to MoviePy ImageClip
+                    img_np = np.array(img)
+                    return ImageClip(img_np)
+                except Exception as e:
+                    print(f"Pillow Render Error: {e}")
+                    return None
 
             lines, curr_line, curr_len = [], [], 0
             for w in word_offsets:
@@ -97,7 +137,6 @@ class VideoShortsGenerator:
                 curr_len += len(w['word']) + 1
             if curr_line: lines.append(curr_line)
             
-            # Render 1 line at a time for maximum impact
             for line in lines:
                 l_start = line[0]['start']
                 l_end = line[-1]['start'] + line[-1]['duration']
@@ -106,7 +145,7 @@ class VideoShortsGenerator:
                 line_text = " ".join([w['word'] for w in line]).upper()
                 try:
                     # Render full line base in white
-                    base_txt = get_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
+                    base_txt = get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
                     if base_txt:
                         base_txt = base_txt.set_start(l_start).set_duration(l_end - l_start).set_position(('center', y_pos))
                         clips.append(base_txt)
@@ -117,27 +156,31 @@ class VideoShortsGenerator:
                         for w_info in line:
                             w_text = w_info['word'].upper()
                             try:
-                                temp_w = get_text_clip(w_text + " ", FONT_SIZE, 'white')
-                                if not temp_w: continue
-                                w_width = temp_w.size[0]
-                                temp_w.close()
+                                # We need width measurement for positioning
+                                temp_w_img = get_pillow_text_clip(w_text + " ", FONT_SIZE, 'white')
+                                if not temp_w_img: continue
+                                w_width = temp_w_img.size[0]
                                 
-                                # Yellow highlight active word
-                                highlight = get_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
+                                highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
                                 if highlight:
+                                    # Center highight on the base linevertically too
                                     highlight = highlight.set_start(w_info['start']).set_duration(w_info['duration']).set_position((current_x, y_pos))
                                     clips.append(highlight)
                                     current_x += w_width
                             except:
                                 continue
                 except Exception as e:
-                    print(f"Caption Rendering Error (Overhaul): {e}")
+                    print(f"Caption Rendering Error (Pillow): {e}")
                     continue
         else:
             print("WARNING: No word_offsets found. Using fallback text.")
             try:
-                txt = TextClip(self._wrap_text(text, 20), fontsize=70, color='white', bg_color='black', font='Arial', method='label').set_duration(duration).set_position('center')
-                clips.append(txt)
+                # Basic static fallback with Pillow
+                msg = self._wrap_text(text, 20).upper()
+                txt = get_pillow_text_clip(msg, 70, 'white', bg='black')
+                if txt:
+                    txt = txt.set_duration(duration).set_position('center')
+                    clips.append(txt)
             except:
                 pass
         

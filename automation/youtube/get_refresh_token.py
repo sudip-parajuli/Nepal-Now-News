@@ -12,11 +12,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 
 def main():
-    if not os.path.exists('client_secret.json'):
-        print("Error: client_secret.json not found in the root directory.")
+    if not os.path.exists('client_secrets.json'):
+        print("Error: client_secrets.json not found in the root directory.")
         return
 
-    flow = InstalledAppFlow.from_client_secrets_file('client_secret.json', SCOPES)
+    flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
     credentials = flow.run_local_server(port=0)
     
     token_data = {
@@ -24,7 +24,7 @@ def main():
         'refresh_token': credentials.refresh_token,
         'token_uri': credentials.token_uri,
         'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
+        'client_secrets': credentials.client_secrets,
         'scopes': credentials.scopes
     }
     
