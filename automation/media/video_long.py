@@ -1,12 +1,78 @@
-from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip
 import os
 import re
 import glob
 import random
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip
 
 class VideoLongGenerator:
     def __init__(self, size=(1920, 1080)):
         self.size = size
+        self.font = self._load_best_font()
+
+    def _load_best_font(self, fsize=60):
+        # Cross-Platform Font fallback list
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            "C:/Windows/Fonts/arialbd.ttf", 
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/tahoma.ttf"
+        ]
+        font = None
+        for path in font_paths:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, fsize)
+                    break
+                except: continue
+        
+        if not font and os.name != 'nt':
+            for root, dirs, files in os.walk("/usr/share/fonts"):
+                for file in files:
+                    if file.endswith(".ttf"):
+                        try:
+                            font = ImageFont.truetype(os.path.join(root, file), fsize)
+                            break
+                        except: continue
+                if font: break
+        
+        if not font: font = ImageFont.load_default()
+        return font
+
+    def get_pillow_text_clip(self, txt, fsize, clr, bg=None, stroke_width=2):
+        try:
+            # Re-load if size differs or just use loaded but this is safer for variety
+            l_font = self.font if fsize == 60 else self._load_best_font(fsize)
+            
+            # Measure text
+            dummy = Image.new('RGB', (1, 1))
+            draw = ImageDraw.Draw(dummy)
+            bbox = draw.textbbox((0, 0), txt, font=l_font)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            
+            pad = 20
+            img = Image.new('RGBA', (tw + pad*2, th + pad*2), (0,0,0,0))
+            d = ImageDraw.Draw(img)
+            
+            if bg:
+                d.rectangle([0, 0, tw + pad*2, th + pad*2], fill=bg)
+            
+            # Draw strong stroke for legibility on long videos
+            if clr == 'white':
+                for offset in [(-stroke_width,-stroke_width), (stroke_width,-stroke_width), 
+                              (-stroke_width,stroke_width), (stroke_width,stroke_width)]:
+                    d.text((pad+offset[0], pad+offset[1]), txt, font=l_font, fill='black')
+            
+            d.text((pad, pad), txt, font=l_font, fill=clr)
+            img_np = np.array(img)
+            return ImageClip(img_np)
+        except Exception as e:
+            print(f"Pillow Render Error (Long): {e}")
+            return None
 
     def wrap_text(self, text, max_chars=40):
         words, lines, curr, curr_len = text.split(), [], [], 0
@@ -41,9 +107,12 @@ class VideoLongGenerator:
             
             if seg.get("type") == "news" and seg.get("headline"):
                 try:
-                    head_txt = TextClip(seg['headline'], fontsize=75, color='yellow', font=HEADER_FONT, bg_color='rgba(0,0,0,0.7)', size=(self.size[0]-400, None), method='caption').set_duration(seg_duration).set_position(('center', 120))
-                    bg = CompositeVideoClip([bg, head_txt], size=self.size)
-                except: pass
+                    head_txt = self.get_pillow_text_clip(seg['headline'][:80], 75, 'yellow', bg=(0,0,0,180))
+                    if head_txt:
+                        head_txt = head_txt.set_duration(seg_duration).set_position(('center', 120))
+                        bg = CompositeVideoClip([bg, head_txt], size=self.size)
+                except Exception as e:
+                    print(f"Header Render Error: {e}")
             bg_clips.append(bg.set_start(cumulative_dur))
             cumulative_dur += seg_duration
 
@@ -67,24 +136,42 @@ class VideoLongGenerator:
             page_start, page_end = page_offsets[0]['start'], page_offsets[-1]['start'] + page_offsets[-1]['duration']
             page_dur = page_end - page_start
             try:
-                L_HEIGHT, START_Y = 80, 750
+                L_HEIGHT, START_Y = 100, 750
                 for l_idx, line_text in enumerate(page):
                     y_pos = START_Y + (l_idx * L_HEIGHT)
-                    base_txt = TextClip(line_text, fontsize=60, color='white', font=FONT, stroke_color='black', stroke_width=1, method='label', bg_color='rgba(0,0,0,0.3)').set_start(page_start).set_duration(page_dur).set_position(('center', y_pos))
-                    caption_clips.append(base_txt)
+                    base_txt = self.get_pillow_text_clip(line_text, 60, 'white', bg=(0,0,0,100))
+                    if base_txt:
+                        base_txt = base_txt.set_start(page_start).set_duration(page_dur).set_position(('center', y_pos))
+                        caption_clips.append(base_txt)
+                
+                # Active Highlight (Centered Bottom for current segment context)
                 for off in page_offsets:
-                    w_txt = TextClip(off['word'], fontsize=75, color='yellow', font=HEADER_FONT, bg_color='black', method='label').set_duration(off['duration']).set_start(off['start']).set_position(('center', 1000))
-                    caption_clips.append(w_txt)
-            except: pass
+                    w_txt = self.get_pillow_text_clip(off['word'].upper(), 85, 'yellow', bg='black')
+                    if w_txt:
+                        w_txt = w_txt.set_duration(off['duration']).set_start(off['start']).set_position(('center', 950))
+                        caption_clips.append(w_txt)
+            except Exception as e:
+                print(f"Daily Sync Error: {e}")
             current_word_idx += len(page_words)
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
-        music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3")
+        music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")
         if music_files:
             try:
-                bg_music = AudioFileClip(random.choice(music_files)).volumex(0.12).set_duration(total_duration)
+                music_path = random.choice(music_files)
+                from moviepy.audio.fx.all import audio_loop
+                bg_music = AudioFileClip(music_path)
+                # Loop the music if it's shorter than the video
+                if bg_music.duration < total_duration:
+                    bg_music = audio_loop(bg_music, duration=total_duration)
+                else:
+                    bg_music = bg_music.set_duration(total_duration)
+                
+                bg_music = bg_music.volumex(0.12)
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 final_audio = CompositeAudioClip([audio.volumex(1.15), bg_music])
                 final_video = final_video.set_audio(final_audio)
-            except: pass
+            except Exception as e:
+                print(f"Music Loop Error: {e}")
+                final_video = final_video.set_audio(audio)
         final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, logger=None)
