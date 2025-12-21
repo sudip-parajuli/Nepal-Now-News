@@ -20,7 +20,7 @@ class VideoShortsGenerator:
         # Branding defaults
         accent = (branding or {}).get('accent_color', 'yellow')
         bg_overlay_color = (branding or {}).get('bg_color', (0,0,0))
-        music_vol = (branding or {}).get('music_volume', 0.12)
+        music_vol = (branding or {}).get('music_volume', 0.5)
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
         channel_name = (branding or {}).get('channel_name', "Nepal Now")
 
