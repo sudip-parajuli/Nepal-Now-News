@@ -5,7 +5,7 @@ tts_voice:
   female: "en-US-JennyNeural"
   male: "en-US-ChristopherNeural"
   style: "calm"
-  rate: "-15%"
+  rate: "-5%"
   pitch: "-12Hz"
 upload:
   shorts: true

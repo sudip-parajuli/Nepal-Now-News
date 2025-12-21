@@ -14,7 +14,7 @@ class VideoFetcher:
         Searches for stock videos.
         """
         # Try a more relaxed query first to ensure we get results for niche terms
-        search_query = f"{query} stock video -person -text"
+        search_query = f"{query} stock video -person -text -interview -talking -speaker -host"
         print(f"Searching stock videos for: {search_query}...")
         results = []
         paths = []
