@@ -112,6 +112,7 @@ class VideoLongGenerator:
         if curr: lines.append(" ".join(curr))
         return lines
 
+    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
         
@@ -243,6 +244,7 @@ class VideoLongGenerator:
                                 w_text = w_text.upper()
                             
                             try:
+                                l_font = self._load_best_font(FONT_SIZE, text=line_text)
                                 start_offset = l_font.getlength(cumulative_text)
                                 word_x = text_start_x + start_offset - 50 # Adjust for h_pad
                                 
