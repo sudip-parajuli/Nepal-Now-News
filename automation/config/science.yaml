@@ -7,7 +7,7 @@ tts_voice:
   style: "calm"
 upload:
   shorts: true
-  long: false
+  long: true
 schedule:
   daily_times: ["07:00", "18:30"] # NPT
 topics:

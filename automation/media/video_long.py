@@ -14,12 +14,15 @@ class VideoLongGenerator:
     def _load_best_font(self, fsize=60):
         # Cross-Platform Font fallback list
         font_paths = [
+            "C:/Windows/Fonts/Nirmala.ttc",
+            "C:/Windows/Fonts/aparaj.ttf",
+            "C:/Windows/Fonts/Nirmala.ttf",
+            "C:/Windows/Fonts/NirmalaB.ttf",
+            "C:/Windows/Fonts/NirmalaUI.ttf",
             "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
             "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "C:/Windows/Fonts/Nirmala.ttf",
-            "C:/Windows/Fonts/NirmalaB.ttf",
             "C:/Windows/Fonts/arialbd.ttf", 
             "C:/Windows/Fonts/arial.ttf",
             "C:/Windows/Fonts/tahoma.ttf"
@@ -86,26 +89,36 @@ class VideoLongGenerator:
         if curr: lines.append(" ".join(curr))
         return lines
 
-    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None):
+    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
         bg_clips, cumulative_dur = [], 0
-        FONT = 'Nirmala-UI' if os.name == 'nt' else 'Noto-Sans-Devanagari'
-        HEADER_FONT = 'Nirmala-UI-Bold' if os.name == 'nt' else 'Noto-Sans-Devanagari-Bold'
+        
+        logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
+        bg_color = (branding or {}).get('bg_color', (15, 25, 45))
 
         for i, seg in enumerate(segments):
             seg_duration = durations[i] if durations and i < len(durations) else 5
             if i == len(segments) - 1: seg_duration = total_duration - cumulative_dur
-            img_path = seg.get('image_path')
-            if img_path and os.path.exists(img_path):
-                bg = ImageClip(img_path).set_duration(seg_duration)
-                w, h = bg.size
-                target_ratio = self.size[0]/self.size[1]
-                if (w/h) > target_ratio: bg = bg.resize(height=self.size[1])
-                else: bg = bg.resize(width=self.size[0])
-                bg = bg.set_position('center').resize(lambda t: 1 + 0.04 * t/seg_duration)
+            
+            if template_mode:
+                bg = ColorClip(size=self.size, color=bg_color, duration=seg_duration)
+                if i == 0 or i % 3 == 0: # Add logo periodically or just keep it there
+                     if os.path.exists(logo_path):
+                        logo = ImageClip(logo_path).set_duration(seg_duration).resize(height=180)
+                        logo = logo.set_position(('center', 80))
+                        bg = CompositeVideoClip([bg, logo], size=self.size)
             else:
-                bg = ColorClip(size=self.size, color=(20, 20, 40), duration=seg_duration)
+                img_path = seg.get('image_path')
+                if img_path and os.path.exists(img_path):
+                    bg = ImageClip(img_path).set_duration(seg_duration)
+                    w, h = bg.size
+                    target_ratio = self.size[0]/self.size[1]
+                    if (w/h) > target_ratio: bg = bg.resize(height=self.size[1])
+                    else: bg = bg.resize(width=self.size[0])
+                    bg = bg.set_position('center').resize(lambda t: 1 + 0.04 * t/seg_duration)
+                else:
+                    bg = ColorClip(size=self.size, color=(20, 20, 40), duration=seg_duration)
             
             if seg.get("type") == "news" and seg.get("headline"):
                 try:

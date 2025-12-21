@@ -8,21 +8,38 @@ class VideoShortsGenerator:
     def __init__(self, size=(1080, 1920)):
         self.size = size
 
-    def create_shorts(self, text: str, audio_path: str, output_path: str, word_offsets: list = None, media_paths: list = None, branding: dict = None):
+    def create_shorts(self, text: str, audio_path: str, output_path: str, word_offsets: list = None, media_paths: list = None, branding: dict = None, template_mode: bool = False):
         """
         media_paths can contain both image and video file paths.
-        branding: dict with keys like 'accent_color', 'bg_color', 'music_volume'
+        branding: dict with keys like 'accent_color', 'bg_color', 'music_volume', 'logo_path', 'channel_name'
         """
         audio = AudioFileClip(audio_path)
         duration = audio.duration
         bg_clips = []
         
-        # Branding defaults (Cosmic/Science style)
+        # Branding defaults
         accent = (branding or {}).get('accent_color', 'yellow')
         bg_overlay_color = (branding or {}).get('bg_color', (0,0,0))
         music_vol = (branding or {}).get('music_volume', 0.12)
+        logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
+        channel_name = (branding or {}).get('channel_name', "Nepal Now")
 
-        if media_paths and len(media_paths) > 0:
+        if template_mode:
+            # Create a clean branded background
+            bg_color = (branding or {}).get('bg_color', (15, 25, 45))
+            bg_clips.append(ColorClip(size=self.size, color=bg_color, duration=duration))
+            
+            # Add Logo and Channel Name at the top
+            if os.path.exists(logo_path):
+                logo = ImageClip(logo_path).set_duration(duration).resize(width=300)
+                logo = logo.set_position(('center', 150))
+                bg_clips.append(logo)
+            
+            # Channel Name Text using Simple Overlay logic if Pillow not ready for header
+            # But we have Pillow below, let's use it for the header too if needed.
+            # For now, let's stick to the center captions requirement.
+        
+        elif media_paths and len(media_paths) > 0:
             transition_time = duration / len(media_paths) if len(media_paths) > 0 else 4.0
             transition_time = max(min(transition_time, 6.0), 3.0) 
             
@@ -69,8 +86,8 @@ class VideoShortsGenerator:
         clips = bg_clips
         if word_offsets:
             print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
-            # OPTIMIZED GEOMETRY (75pt prevents clipping)
-            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 75, 100, 25
+            # OPTIMIZED GEOMETRY (55pt requested, prevents clipping)
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 55, 80, 30
             START_Y = (self.size[1] // 2) - 50
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
@@ -79,12 +96,15 @@ class VideoShortsGenerator:
 
             # Load font once
             font_paths = [
+                "C:/Windows/Fonts/Nirmala.ttc",
+                "C:/Windows/Fonts/aparaj.ttf",
+                "C:/Windows/Fonts/Nirmala.ttf",
+                "C:/Windows/Fonts/NirmalaB.ttf",
+                "C:/Windows/Fonts/NirmalaUI.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                "C:/Windows/Fonts/Nirmala.ttf",
-                "C:/Windows/Fonts/NirmalaB.ttf",
                 "C:/Windows/Fonts/arialbd.ttf", 
                 "C:/Windows/Fonts/arial.ttf",
                 "C:/Windows/Fonts/tahoma.ttf"

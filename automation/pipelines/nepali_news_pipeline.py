@@ -54,10 +54,19 @@ class NepaliNewsPipeline(BasePipeline):
                 _, word_offsets = await self.tts.generate_audio(script, audio_path)
                 
                 kw = self.script_writer.generate_image_keywords(item['headline'])
-                image_paths = self.image_fetcher.fetch_multi_images([kw]*5, f"news_{item['hash'][:8]}")
+                # No images in template mode, so we can skip fetching or just pass empty
+                # But to keep it robust, let's just pass empty media_paths
                 
                 video_path = f"automation/storage/news_breaking_{item['hash'][:8]}.mp4"
-                self.vgen_shorts.create_shorts(script, audio_path, video_path, word_offsets=word_offsets, media_paths=image_paths)
+                self.vgen_shorts.create_shorts(
+                    script, 
+                    audio_path, 
+                    video_path, 
+                    word_offsets=word_offsets, 
+                    media_paths=[], 
+                    template_mode=True,
+                    branding=self.config.get('branding')
+                )
                 
                 if not is_test:
                     yt = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
@@ -74,18 +83,22 @@ class NepaliNewsPipeline(BasePipeline):
         # Limit to last 10 items for summary
         summary_segments = self.script_writer.summarize_for_daily(news_items[:10])
         
-        # Fetch images for segments
-        for seg in summary_segments:
-            if seg.get("type") == "news":
-                kw = self.script_writer.generate_image_keywords(seg['headline'])
-                path = self.image_fetcher.fetch_image(kw, f"daily_{seg['headline'][:10]}.jpg")
-                seg['image_path'] = path
+        # In Template Mode, we don't need to fetch images for segments
+        # 78-82: Removed image fetching loop for template mode
         
         audio_path = "automation/storage/daily_temp.mp3"
         _, word_offsets, durations = await self.tts.generate_multivocal_audio(summary_segments, audio_path)
         
         video_path = "automation/storage/daily_final.mp4"
-        self.vgen_long.create_daily_summary(summary_segments, audio_path, video_path, word_offsets, durations)
+        self.vgen_long.create_daily_summary(
+            summary_segments, 
+            audio_path, 
+            video_path, 
+            word_offsets, 
+            durations,
+            template_mode=True,
+            branding=self.config.get('branding')
+        )
         
         if not is_test:
             yt = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))

@@ -95,6 +95,31 @@ class ScriptWriter:
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
 
+    def expand_science_script(self, topic: str, short_script: str = "") -> str:
+        prompt = f"""
+        Expand the following topic/short script into a detailed, high-quality documentary-style script for a 3-4 minute YouTube video.
+        
+        Topic: {topic}
+        Current Short Script: {short_script}
+
+        Requirements:
+        - Language: English
+        - Tone: Professional, authoritative, engaging (like Kurzgesagt or National Geographic).
+        - Structure:
+            1. Detailed Introduction: Set the stage and explain why this topic matters.
+            2. Scientific Depth: Dive deep into the mechanics, history, and future implications.
+            3. Multiple Perspectives: Mention different theories or recent discoveries.
+            4. Conclusion: Summarize the profound impact of this scientific fact.
+        
+        Rules:
+        - Maintain high scientific accuracy.
+        - Use sophisticated yet accessible vocabulary.
+        - RETURN ONLY THE SPEECH TEXT. No cues or labels.
+        - Aim for approximately 400-600 words.
+        """
+        script = self._call_with_retry(prompt)
+        return self.clean_script(script)
+
     def summarize_for_daily(self, news_items: List[Dict], channel_name: str = "Nepal Now") -> List[Dict]:
         news_text = "\n\n".join([f"Headline: {item['headline']}\nContent: {item['content']}" for item in news_items])
         prompt = f"""

@@ -20,5 +20,11 @@ feeds:
   - "https://www.bbc.com/nepali/index.xml"
   - "https://www.ronbpost.com/category/news/feed/"
 tone: "Neutral, factual"
+branding:
+  accent_color: "#FF0000" # Red for News
+  bg_color: [10, 20, 40]  # Dark Blue
+  music_volume: 0.10
+  logo_path: "automation/media/assets/nepal_now_logo.png"
+  channel_name: "Nepal Now"
 storage:
   posted_news: "automation/storage/posted_news.json"
