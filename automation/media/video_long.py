@@ -182,66 +182,71 @@ class VideoLongGenerator:
         final_bg = CompositeVideoClip(bg_clips, size=self.size)
         caption_clips = []
         
-        # Word-level chunking logic (5 words per chunk)
-        CHUNK_SIZE = 5
-        accent = (branding or {}).get('accent_color', 'yellow')
+        # Word-level chunking logic (port from shorts for consistency)
+        lines, curr_line, curr_len = [], [], 0
+        MAX_CHARS_PER_LINE = 45 # More space in landscape
+        LINE_HEIGHT = 100
+        FONT_SIZE = 80
+        START_Y = 800
+        HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'white'
+
+        for w in word_offsets:
+            if curr_len + len(w['word']) > MAX_CHARS_PER_LINE and curr_line:
+                lines.append(curr_line)
+                curr_line, curr_len = [], 0
+            curr_line.append(w)
+            curr_len += len(w['word']) + 1
+        if curr_line: lines.append(curr_line)
         
-        for i in range(0, len(word_offsets), CHUNK_SIZE):
-            chunk = word_offsets[i : i + CHUNK_SIZE]
-            if not chunk: continue
+        # Show two lines at a time
+        for i in range(0, len(lines), 2):
+            chunk = lines[i : i+2]
+            chunk_start = chunk[0][0]['start']
+            chunk_end = chunk[-1][-1]['start'] + chunk[-1][-1]['duration']
             
-            # Devanagari protection for line text
-            line_text = " ".join([w['word'] for w in chunk])
-            is_nepali = any(ord(c) > 127 for c in line_text)
-            if not is_nepali:
-                line_text = line_text.upper()
-            
-            chunk_start = chunk[0]['start']
-            chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
-            chunk_dur = chunk_end - chunk_start
-            
-            try:
-                # One line at a time, centered at the bottom
-                y_pos = 850
-                # Base line in white
-                base_txt = self.get_pillow_text_clip(line_text, 65, 'white')
-                if base_txt:
-                    line_width = base_txt.size[0]
-                    # Note: get_pillow_text_clip adds h_pad=50 (v_pad=20)
-                    start_x = (self.size[0] - line_width) // 2
-                    
-                    base_txt = base_txt.set_start(chunk_start).set_duration(chunk_dur).set_position((start_x, y_pos))
-                    caption_clips.append(base_txt)
-                    
-                    # Unified Highlighting: port precise positioning from shorts
-                    # The text starts at start_x + 50 (due to h_pad)
-                    text_start_x = start_x + 50
-                    
-                    cumulative_text = ""
-                    for w_idx, w_info in enumerate(chunk):
-                        w_text = w_info['word']
-                        if not is_nepali:
-                            w_text = w_text.upper()
+            for line_idx, line in enumerate(chunk):
+                y_pos = START_Y + (line_idx * LINE_HEIGHT)
+                
+                line_text = " ".join([w['word'] for w in line])
+                is_nepali = any(ord(c) > 127 for c in line_text)
+                if not is_nepali:
+                    line_text = line_text.upper()
+                
+                try:
+                    # Render full line base in white
+                    base_txt = self.get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
+                    if base_txt:
+                        line_width = base_txt.size[0]
+                        # self.get_pillow_text_clip adds h_pad=50
+                        text_start_x = (self.size[0] - line_width) // 2 + 50
                         
-                        try:
-                            start_offset = self.font.getlength(cumulative_text)
-                            # Highlight clip's text should start at text_start_x + start_offset
-                            # Highlight clip itself starts at (text_start_x + start_offset) - 50 
-                            highlight_x = text_start_x + start_offset - 50
+                        base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position(('center', y_pos))
+                        caption_clips.append(base_txt)
+                        
+                        cumulative_text = ""
+                        for w_info in line:
+                            w_text = w_info['word']
+                            if not is_nepali:
+                                w_text = w_text.upper()
                             
-                            h_start = w_info['start']
-                            h_dur = w_info['duration']
-                            
-                            highlight = self.get_pillow_text_clip(w_text, 65, 'black', bg=accent)
-                            if highlight:
-                                highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((highlight_x, y_pos))
-                                caption_clips.append(highlight)
-                            
-                            cumulative_text += w_text + " "
-                        except Exception as e:
-                            print(f"Long Word Sync Error: {e}")
-            except Exception as e:
-                print(f"Caption Chunk Error: {e}")
+                            try:
+                                start_offset = self.font.getlength(cumulative_text)
+                                word_x = text_start_x + start_offset - 50 # Adjust for h_pad
+                                
+                                h_start = w_info['start']
+                                h_dur = w_info['duration']
+                                
+                                # HIGHLIGHT: Yellow text
+                                highlight = self.get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT)
+                                if highlight:
+                                    highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((word_x, y_pos))
+                                    caption_clips.append(highlight)
+                                
+                                cumulative_text += w_text + " "
+                            except Exception as e:
+                                print(f"Long Word Sync Error: {e}")
+                except Exception as e:
+                    print(f"Caption Chunk Error: {e}")
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
         music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")

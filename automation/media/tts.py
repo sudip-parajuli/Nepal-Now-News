@@ -10,7 +10,7 @@ class TTSEngine:
             "female": "ne-NP-HemkalaNeural",
             "male": "ne-NP-SagarNeural"
         }
-        self.rate = rate
+        self.rate = "+30%"
 
     async def generate_multivocal_audio(self, segments: List[Dict], output_path: str):
         """

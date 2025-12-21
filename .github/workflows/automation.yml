@@ -117,4 +117,5 @@ jobs:
           git config --local user.name "GitHub Action"
           git add automation/storage/*.json
           git commit -m "Update automation state (posted news / science topics)" || echo "No changes to commit"
+          git pull --rebase origin main
           git push origin main || echo "Push failed (concurrent run?)"
