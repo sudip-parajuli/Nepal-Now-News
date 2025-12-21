@@ -21,7 +21,7 @@ class SciencePipeline(BasePipeline):
         )
         self.image_fetcher = ImageFetcher()
         self.video_fetcher = VideoFetcher()
-        self.tts = TTSEngine(voice_map=config['tts_voice'], rate="+15%") # Slower for science
+        self.tts = TTSEngine(voice_map=config['tts_voice'], rate="-5%") # Slower for science
         self.vgen = VideoShortsGenerator()
         self.nasa_fetcher = NASAFetcher()
         self.uploader = None # Initialized in run()

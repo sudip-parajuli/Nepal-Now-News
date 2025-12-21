@@ -170,22 +170,22 @@ class ScriptWriter:
         """
         Generates a list of keywords for different segments of the text to provide visual variety.
         """
-        # Split by sentence or paragraph to get segments
-        segments = [s.strip() for s in re.split(r'[।.\n]', text) if len(s.strip()) > 30]
+        # Split by sentence or paragraph to get segments, but keep them simple for visual search
+        segments = [s.strip() for s in re.split(r'[।.\n]', text) if len(s.strip()) > 20]
         if not segments: segments = [text]
         
         all_keywords = []
-        for seg in segments[:5]: # Limit to 5 segments for efficiency
+        for seg in segments[:8]: 
             prompt = f"""
-            Identify the most descriptive visual subject for this news segment.
-            PRIORITY: If a specific person name (e.g., Ravi Lamichhane, Prachanda) or proper noun is mentioned, use that name.
-            Segment: "{seg}"
-            Context: {extra_context}
-            Output ONLY the subject (2-4 words).
+            Extract a single, simple, concrete 1-2 word noun from this text that represents a visual subject.
+            Text: "{seg}"
+            Rules: NO adjectives unless necessary. NO broad concepts. Simple subjects (e.g., 'nebula', 'satellite', 'earth', 'mountains').
+            Output ONLY the subject.
             """
             try:
                 keywords = self._call_with_retry(prompt)
-                all_keywords.append(keywords.replace('"', '').strip())
+                clean_kw = keywords.replace('"', '').strip().split('\n')[0].strip()
+                if clean_kw: all_keywords.append(clean_kw)
             except:
                 continue
         

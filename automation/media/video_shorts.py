@@ -1,4 +1,4 @@
-from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip, afx
+from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip, afx, vfx
 import os
 import glob
 import random
@@ -52,7 +52,7 @@ class VideoShortsGenerator:
                         if is_video:
                             clip = VideoFileClip(m_path).without_audio()
                             if clip.duration < transition_time:
-                                clip = clip.fx(afx.loop, duration=transition_time)
+                                clip = clip.fx(vfx.loop, duration=transition_time)
                             else:
                                 clip = clip.subclip(0, transition_time)
                         else:
@@ -87,7 +87,8 @@ class VideoShortsGenerator:
         if word_offsets:
             print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
             # OPTIMIZED GEOMETRY (55pt requested, prevents clipping)
-            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 55, 80, 30
+            # Reduced MAX_CHARS_PER_LINE to 25 for better left/right margins
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 55, 80, 25
             START_Y = (self.size[1] // 2) - 50
             HIGHLIGHT_BG, HIGHLIGHT_TEXT, NORMAL_TEXT = accent, 'black', 'white'
             
@@ -103,6 +104,8 @@ class VideoShortsGenerator:
                     os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
                     os.path.join(windir, 'Fonts', 'NirmalaB.ttf'),
                     os.path.join(windir, 'Fonts', 'NirmalaUI.ttf'),
+                    os.path.join(windir, 'Fonts', 'mangal.ttf'),
+                    os.path.join(windir, 'Fonts', 'utsaah.ttf'),
                     os.path.join(windir, 'Fonts', 'arialbd.ttf'), 
                 ]
             else:
@@ -116,7 +119,8 @@ class VideoShortsGenerator:
             for path in font_paths:
                 if os.path.exists(path):
                     try:
-                        font = ImageFont.truetype(path, FONT_SIZE)
+                        # Use index=0 for .ttc files to ensure correct face loading
+                        font = ImageFont.truetype(path, FONT_SIZE, index=0)
                         break
                     except: continue
             if not font and os.name != 'nt':
@@ -138,14 +142,15 @@ class VideoShortsGenerator:
                     bbox = draw.textbbox((0, 0), txt, font=font)
                     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                     
-                    pad = 10
-                    img = Image.new('RGBA', (tw + pad*2, th + pad*2), (0,0,0,0))
+                    # Padding: 10 vertical, 40 horizontal for margins
+                    v_pad, h_pad = 10, 40
+                    img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
                     d = ImageDraw.Draw(img)
-                    if bg: d.rectangle([0, 0, tw + pad*2, th + pad*2], fill=bg)
+                    if bg: d.rectangle([0, 0, tw + h_pad*2, th + v_pad*2], fill=bg)
                     if clr == 'white' and not bg:
                         for offset in [(-2,-2), (2,-2), (-2,2), (2,2)]:
-                            d.text((pad+offset[0], pad+offset[1]), txt, font=font, fill='black')
-                    d.text((pad, pad), txt, font=font, fill=clr)
+                            d.text((h_pad+offset[0], v_pad+offset[1]), txt, font=font, fill='black')
+                    d.text((h_pad, v_pad), txt, font=font, fill=clr)
                     img_np = np.array(img)
                     return ImageClip(img_np)
                 except Exception as e:
