@@ -266,10 +266,23 @@ class VideoLongGenerator:
                     print(f"Caption Chunk Error: {e}")
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
-        music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")
+        # Use Science music exclusively if the first segment is Science
+        is_science = segments and segments[0].get("type") == "science"
+        music_files = []
+        
+        if is_science:
+            science_music_dir = "automation/musics/science"
+            if os.path.exists(science_music_dir):
+                music_files = glob.glob(os.path.join(science_music_dir, "*.mp3"))
+            print(f"Science Video detected. Found {len(music_files)} science music files.")
+            
+        if not music_files and not is_science:
+            music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")
+        
         if music_files:
             try:
                 music_path = random.choice(music_files)
+                print(f"Using background music ({'SCIENCE' if is_science else 'NEWS'}): {music_path}")
                 from moviepy.audio.fx.all import audio_loop
                 bg_music = AudioFileClip(music_path)
                 # Loop the music if it's shorter than the video
@@ -278,7 +291,8 @@ class VideoLongGenerator:
                 else:
                     bg_music = bg_music.set_duration(total_duration)
                 
-                bg_music = bg_music.volumex(0.12)
+                # Dimmer volume: 0.07 instead of 0.12
+                bg_music = bg_music.volumex(0.07)
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 final_audio = CompositeAudioClip([audio.volumex(1.15), bg_music])
                 final_video = final_video.set_audio(final_audio)

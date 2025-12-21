@@ -20,7 +20,7 @@ class VideoShortsGenerator:
         # Branding defaults
         accent = (branding or {}).get('accent_color', 'yellow')
         bg_overlay_color = (branding or {}).get('bg_color', (0,0,0))
-        music_vol = (branding or {}).get('music_volume', 0.5)
+        music_vol = (branding or {}).get('music_volume', 0.07)
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
         channel_name = (branding or {}).get('channel_name', "Nepal Now")
 
@@ -257,13 +257,19 @@ class VideoShortsGenerator:
             except:
                 pass
         
-        # Prioritize dedicated music folder if provided, fallback to default music/
+        # Exclusively use Science music if channel_name suggests it
         music_files = []
-        science_music_dir = "automation/musics/science"
-        if os.path.exists(science_music_dir):
-            music_files += glob.glob(os.path.join(science_music_dir, "*.mp3"))
+        is_science = "science" in str(channel_name).lower()
         
-        if not music_files:
+        if is_science:
+            science_music_dir = "automation/musics/science"
+            if os.path.exists(science_music_dir):
+                music_files = glob.glob(os.path.join(science_music_dir, "*.mp3"))
+            print(f"Science Channel detected. Found {len(music_files)} music files in {science_music_dir}")
+        
+        # If not science, or if science music was missing (failsafe), check other folders
+        # CRITICAL: If is_science is True, we DO NOT fall back to News music.
+        if not music_files and not is_science:
             # Check plural 'musics' first
             music_files = glob.glob("music/*.mp3") + glob.glob("automation/musics/*.mp3")
             if not music_files: # Fallback to singular just in case
