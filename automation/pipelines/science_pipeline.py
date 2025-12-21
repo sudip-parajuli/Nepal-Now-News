@@ -112,12 +112,12 @@ class SciencePipeline(BasePipeline):
                 media_paths.extend(nasa_clips)
             else:
                 # Priority 2: Generic Stock
-                clips = self.video_fetcher.fetch_stock_videos(kw, count=count_per_kw)
+                clips = self.video_fetcher.fetch_stock_videos(kw, count=count_per_kw, topic_context=topic)
                 media_paths.extend(clips)
         
         if len(media_paths) < 3:
             img_kw = self.script_writer.generate_image_keywords(script, extra_context=f"{topic} cinematic")
-            img_paths = self.image_fetcher.fetch_multi_images(img_kw, "science_temp")
+            img_paths = self.image_fetcher.fetch_multi_images(img_kw, "science_temp", topic_context=topic)
             media_paths.extend(img_paths)
         return media_paths
 

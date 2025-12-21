@@ -81,8 +81,8 @@ class VideoLongGenerator:
             th = bbox[3] - bbox[1]
             th = max(th, fsize) # Minimum height
 
-            # Padding: 20 vertical, 50 horizontal for margins
-            v_pad, h_pad = 20, 50
+            # Padding: 20 vertical, 90 horizontal for margins
+            v_pad, h_pad = 20, 90
             img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
             d = ImageDraw.Draw(img)
             
@@ -138,9 +138,11 @@ class VideoLongGenerator:
                 
                 if seg.get("type") == "news" and seg.get("headline"):
                     try:
-                        head_txt = self.get_pillow_text_clip(seg['headline'][:80], 75, 'yellow', bg=(0,0,0,180))
+                        # CENTERED HEADLINE: Use a slightly larger size and center middle
+                        head_txt = self.get_pillow_text_clip(seg['headline'][:80], 85, 'yellow', bg=(0,0,0,200), stroke_width=3)
                         if head_txt:
-                            head_txt = head_txt.set_duration(seg_duration).set_position(('center', 120))
+                            # Position in dead center
+                            head_txt = head_txt.set_duration(seg_duration).set_position('center')
                             bg = CompositeVideoClip([bg, head_txt], size=self.size)
                     except Exception as e:
                         print(f"Header Render Error: {e}")
@@ -198,9 +200,9 @@ class VideoLongGenerator:
         
         # Word-level chunking logic (port from shorts for consistency)
         lines, curr_line, curr_len = [], [], 0
-        MAX_CHARS_PER_LINE = 45 # More space in landscape
-        LINE_HEIGHT = 100
-        FONT_SIZE = 80
+        MAX_CHARS_PER_LINE = 40 # Adjusted for margins
+        LINE_HEIGHT = 90
+        FONT_SIZE = 70
         START_Y = 800
         HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'white'
 
@@ -231,8 +233,8 @@ class VideoLongGenerator:
                     base_txt = self.get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
                     if base_txt:
                         line_width = base_txt.size[0]
-                        # self.get_pillow_text_clip adds h_pad=50
-                        text_start_x = (self.size[0] - line_width) // 2 + 50
+                        # self.get_pillow_text_clip adds h_pad=90
+                        text_start_x = (self.size[0] - line_width) // 2 + 90
                         
                         base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position(('center', y_pos))
                         caption_clips.append(base_txt)
@@ -246,7 +248,7 @@ class VideoLongGenerator:
                             try:
                                 l_font = self._load_best_font(FONT_SIZE, text=line_text)
                                 start_offset = l_font.getlength(cumulative_text)
-                                word_x = text_start_x + start_offset - 50 # Adjust for h_pad
+                                word_x = text_start_x + start_offset - 90 # Adjust for h_pad
                                 
                                 h_start = w_info['start']
                                 h_dur = w_info['duration']

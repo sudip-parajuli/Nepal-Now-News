@@ -10,7 +10,7 @@ class ImageFetcher:
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
 
-    def fetch_multi_images(self, queries: list, base_filename: str) -> list:
+    def fetch_multi_images(self, queries: list, base_filename: str, topic_context: str = None) -> list:
         paths = []
         # Flatten and deduplicate queries
         flat_queries = []
@@ -43,9 +43,12 @@ class ImageFetcher:
             
         return paths
 
-    def _search_ddg(self, query: str, max_results: int = 20) -> list:
+    def _search_ddg(self, query: str, max_results: int = 20, topic_context: str = None) -> list:
         # Exclude diagrams, text, bottles, and products for professional look
-        search_query = f"{query} -diagram -chart -graph -map -vector -text -bottle -label -product -person -face -human -interview -talking"
+        if topic_context:
+            search_query = f"{topic_context} {query} -diagram -chart -graph -map -vector -text -bottle -label -product -person -face -human -interview -talking"
+        else:
+            search_query = f"{query} -diagram -chart -graph -map -vector -text -bottle -label -product -person -face -human -interview -talking"
         try:
             with DDGS() as ddgs:
                 results = ddgs.images(

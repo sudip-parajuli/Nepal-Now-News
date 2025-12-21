@@ -86,9 +86,9 @@ class VideoShortsGenerator:
         clips = bg_clips
         if word_offsets:
             print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
-            # OPTIMIZED GEOMETRY (75pt requested, larger for emphasis)
+            # OPTIMIZED GEOMETRY (65pt for margins, smaller but cleaner)
             # Reduced MAX_CHARS_PER_LINE to 25 for better left/right margins
-            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 75, 110, 25
+            FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 65, 100, 25
             START_Y = (self.size[1] // 2) - 100
             HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'white'
             
@@ -164,8 +164,8 @@ class VideoShortsGenerator:
                     # Ensure minimum height for Devanagari descenders/ascenders
                     th = max(th, FONT_SIZE)
                     
-                    # Padding: 10 vertical, 40 horizontal for margins
-                    v_pad, h_pad = 10, 40
+                    # Padding: 10 vertical, 80 horizontal for larger margins
+                    v_pad, h_pad = 10, 80
                     img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
                     d = ImageDraw.Draw(img)
                     if bg: d.rectangle([0, 0, tw + h_pad*2, th + v_pad*2], fill=bg)
@@ -215,8 +215,8 @@ class VideoShortsGenerator:
                             
                             # Calculate starting X for centering the whole line
                             line_width = base_txt.size[0]
-                            # get_pillow_text_clip adds h_pad=40
-                            text_start_x = (self.size[0] - line_width) // 2 + 40
+                            # get_pillow_text_clip adds h_pad=80
+                            text_start_x = (self.size[0] - line_width) // 2 + 80
                             
                             cumulative_text = ""
                             for w_info in line:
@@ -225,8 +225,9 @@ class VideoShortsGenerator:
                                     w_text = w_text.upper()
                                 
                                 try:
-                                    start_offset = font.getlength(cumulative_text)
-                                    word_x = text_start_x + start_offset - 40 # Adjust for h_pad
+                                    l_font = font # Reuse already loaded best font
+                                    start_offset = l_font.getlength(cumulative_text)
+                                    word_x = text_start_x + start_offset - 80 # Adjust for h_pad
                                     
                                     h_start = w_info['start'] + 0.05
                                     h_dur = w_info['duration']
