@@ -179,7 +179,7 @@ class ScriptWriter:
             prompt = f"""
             Extract a single, simple, concrete 1-2 word noun from this text that represents a visual subject.
             Text: "{seg}"
-            Rules: NO adjectives unless necessary. NO broad concepts. Simple subjects (e.g., 'nebula', 'satellite', 'earth', 'mountains').
+            Rules: NO humans, NO faces, NO text. NO adjectives unless necessary. NO broad concepts. Simple subjects (e.g., 'nebula', 'satellite', 'earth', 'mountains').
             Output ONLY the subject.
             """
             try:

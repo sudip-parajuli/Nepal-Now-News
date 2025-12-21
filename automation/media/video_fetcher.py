@@ -13,7 +13,7 @@ class VideoFetcher:
         """
         Searches for stock videos on Pixabay, Pexels, Mixkit, Coverr, Videezy, or Videvo.
         """
-        search_query = f"(site:pexels.com OR site:pixabay.com OR site:mixkit.co OR site:coverr.co OR site:videezy.com OR site:videvo.net) {query} stock video"
+        search_query = f"(site:pexels.com OR site:pixabay.com OR site:mixkit.co OR site:coverr.co OR site:videezy.com OR site:videvo.net) {query} stock video -person -face -text -reporter"
         print(f"Searching stock videos for: {search_query}...")
         results = []
         paths = []

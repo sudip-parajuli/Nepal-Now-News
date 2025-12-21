@@ -45,7 +45,7 @@ class ImageFetcher:
 
     def _search_ddg(self, query: str, max_results: int = 20) -> list:
         # Exclude diagrams, text, bottles, and products for professional look
-        search_query = f"{query} -diagram -chart -graph -map -vector -text -bottle -label -product"
+        search_query = f"{query} -diagram -chart -graph -map -vector -text -bottle -label -product -person -face -human"
         try:
             with DDGS() as ddgs:
                 results = ddgs.images(
@@ -56,7 +56,7 @@ class ImageFetcher:
                     type_image="photo"
                 )
                 if not results: return []
-                forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo"]
+                forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human"]
                 filtered = []
                 for r in results:
                     url = r['image'].lower()
