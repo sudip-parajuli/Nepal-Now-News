@@ -3,8 +3,10 @@ type: "science"
 language: "en"
 tts_voice: 
   female: "en-US-JennyNeural"
-  male: "en-US-GuyNeural"
+  male: "en-US-ChristopherNeural"
   style: "calm"
+  rate: "-25%"
+  pitch: "-12Hz"
 upload:
   shorts: true
   long: true

@@ -11,49 +11,59 @@ class VideoLongGenerator:
         self.size = size
         self.font = self._load_best_font()
 
-    def _load_best_font(self, fsize=60):
+    def _load_best_font(self, fsize=60, text=""):
         # Cross-Platform Font fallback list
-        font_paths = [
-            "automation/media/assets/NotoSansDevanagari-Regular.ttf",
-        ]
+        is_nepali = any(ord(c) > 127 for c in text) if text else True
+        
+        font_paths = []
+        if not is_nepali and text:
+             # Prioritize English-friendly fonts for Science
+            if os.name == 'nt':
+                font_paths += [
+                    os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'arial.ttf'),
+                    os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'segoeui.ttf'),
+                ]
+            else:
+                font_paths += [
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                ]
+
+        font_paths += ["automation/media/assets/NotoSansDevanagari-Regular.ttf"]
+        
         if os.name == 'nt':
             windir = os.environ.get('WINDIR', 'C:\\Windows')
             font_paths += [
                 os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
-                os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                 os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
-                os.path.join(windir, 'Fonts', 'NirmalaB.ttf'),
-                os.path.join(windir, 'Fonts', 'NirmalaUI.ttf'),
+                os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                 os.path.join(windir, 'Fonts', 'mangal.ttf'),
-                os.path.join(windir, 'Fonts', 'utsaah.ttf'),
                 os.path.join(windir, 'Fonts', 'arialbd.ttf'), 
             ]
         else:
             font_paths += [
-                "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
             ]
         
         font = None
         for path in font_paths:
             if os.path.exists(path):
                 try:
-                    # Use index=0 for .ttc files
                     font = ImageFont.truetype(path, fsize, index=0)
                     break
                 except: continue
         
         if not font and os.name != 'nt':
             for root, dirs, files in os.walk("/usr/share/fonts"):
+                if font: break
                 for file in files:
                     if file.endswith(".ttf"):
                         try:
                             font = ImageFont.truetype(os.path.join(root, file), fsize)
                             break
                         except: continue
-                if font: break
         
         if not font: font = ImageFont.load_default()
         return font
@@ -61,7 +71,7 @@ class VideoLongGenerator:
     def get_pillow_text_clip(self, txt, fsize, clr, bg=None, stroke_width=2):
         try:
             # Re-load if size differs or just use loaded but this is safer for variety
-            l_font = self.font if fsize == 60 else self._load_best_font(fsize)
+            l_font = self._load_best_font(fsize, text=txt)
             
             # Measure text
             dummy = Image.new('RGB', (1, 1))
@@ -102,9 +112,12 @@ class VideoLongGenerator:
         if curr: lines.append(" ".join(curr))
         return lines
 
-    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
+        
+        # Load best font for the overall content (check first segment)
+        sample_text = segments[0].get('text', '') if segments else ""
+        self.font = self._load_best_font(fsize=60, text=sample_text)
         bg_clips, cumulative_dur = [], 0
         
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
@@ -230,7 +243,7 @@ class VideoLongGenerator:
                                 w_text = w_text.upper()
                             
                             try:
-                                start_offset = self.font.getlength(cumulative_text)
+                                start_offset = l_font.getlength(cumulative_text)
                                 word_x = text_start_x + start_offset - 50 # Adjust for h_pad
                                 
                                 h_start = w_info['start']

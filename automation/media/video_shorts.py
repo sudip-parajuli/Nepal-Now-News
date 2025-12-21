@@ -96,45 +96,61 @@ class VideoShortsGenerator:
             import numpy as np
 
             # Load font (Cross-Platform)
-            font_paths = [
-                "automation/media/assets/NotoSansDevanagari-Regular.ttf",
-            ]
+            line_text_sample = " ".join([w['word'] for w in word_offsets[:10]])
+            is_nepali_content = any(ord(c) > 127 for c in line_text_sample)
+            
+            font_paths = []
+            if not is_nepali_content:
+                # Prioritize English-friendly fonts for Science
+                if os.name == 'nt':
+                    font_paths += [
+                        os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'arial.ttf'),
+                        os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'segoeui.ttf'),
+                    ]
+                else:
+                    font_paths += [
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                    ]
+
+            # Devanagari fallbacks and regular list
+            font_paths += ["automation/media/assets/NotoSansDevanagari-Regular.ttf"]
+            
             if os.name == 'nt':
                 windir = os.environ.get('WINDIR', 'C:\\Windows')
                 font_paths += [
                     os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
-                    os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                     os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
-                    os.path.join(windir, 'Fonts', 'NirmalaB.ttf'),
-                    os.path.join(windir, 'Fonts', 'NirmalaUI.ttf'),
+                    os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                     os.path.join(windir, 'Fonts', 'mangal.ttf'),
-                    os.path.join(windir, 'Fonts', 'utsaah.ttf'),
                     os.path.join(windir, 'Fonts', 'arialbd.ttf'), 
                 ]
             else:
                 font_paths += [
-                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
                     "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
                 ]
+            
             font = None
             for path in font_paths:
                 if os.path.exists(path):
                     try:
-                        # Use index=0 for .ttc files to ensure correct face loading
                         font = ImageFont.truetype(path, FONT_SIZE, index=0)
                         break
                     except: continue
+            
             if not font and os.name != 'nt':
+                # Emergency search
                 for root, dirs, files in os.walk("/usr/share/fonts"):
+                    if font: break
                     for file in files:
-                        if file.endswith(".ttf"):
+                        if file.endswith(".ttf") or file.endswith(".ttc"):
                             try:
                                 font = ImageFont.truetype(os.path.join(root, file), FONT_SIZE)
                                 break
                             except: continue
-                    if font: break
+            
             if not font: font = ImageFont.load_default()
 
             def get_pillow_text_clip(txt, fsize, clr, bg=None):

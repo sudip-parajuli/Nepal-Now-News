@@ -5,12 +5,13 @@ import re
 from typing import List, Dict
 
 class TTSEngine:
-    def __init__(self, voice_map=None, rate="+20%"):
+    def __init__(self, voice_map=None, rate="+20%", pitch="+0Hz"):
         self.voice_map = voice_map or {
             "female": "ne-NP-HemkalaNeural",
             "male": "ne-NP-SagarNeural"
         }
-        self.rate = "+30%"
+        self.rate = rate
+        self.pitch = pitch
 
     async def generate_multivocal_audio(self, segments: List[Dict], output_path: str):
         """
@@ -56,7 +57,7 @@ class TTSEngine:
 
         return output_path, all_offsets, segment_durations
 
-    async def generate_audio(self, text: str, output_path: str, voice: str = None):
+    async def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None):
         text = text.strip()
         
         # Detection: If text contains Devanagari, apply Nepali normalization
@@ -85,8 +86,8 @@ class TTSEngine:
             return output_path, []
 
         voice = voice or self.voice_map.get("female")
-        print(f"DEBUG: TTSEngine communicating with voice: {voice}")
-        communicate = edge_tts.Communicate(text, voice, rate=self.rate)
+        print(f"DEBUG: TTSEngine communicating with voice: {voice} (Rate: {rate or self.rate}, Pitch: {pitch or self.pitch})")
+        communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch)
         word_offsets = []
         
         try:
