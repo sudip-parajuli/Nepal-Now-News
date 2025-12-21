@@ -86,10 +86,10 @@ class SciencePipeline(BasePipeline):
         segments = [{"type": "science", "text": script, "topic": topic}]
         video_path = "automation/storage/science_long_final.mp4"
         
-        # Use VideoLongGenerator (self.vgen_long if we had it, but let's initialize it)
+        # Use VideoLongGenerator
         from ..media.video_long import VideoLongGenerator
         vgen_long = VideoLongGenerator()
-        vgen_long.create_daily_summary(segments, audio_path, video_path, word_offsets)
+        vgen_long.create_daily_summary(segments, audio_path, video_path, word_offsets, media_paths=media_paths)
         
         # 6. Upload
         if True: # Always call _upload, it handles is_test internally

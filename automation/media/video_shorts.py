@@ -95,20 +95,23 @@ class VideoShortsGenerator:
             import numpy as np
 
             # Load font once
-            font_paths = [
-                "C:/Windows/Fonts/Nirmala.ttc",
-                "C:/Windows/Fonts/aparaj.ttf",
-                "C:/Windows/Fonts/Nirmala.ttf",
-                "C:/Windows/Fonts/NirmalaB.ttf",
-                "C:/Windows/Fonts/NirmalaUI.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                "C:/Windows/Fonts/arialbd.ttf", 
-                "C:/Windows/Fonts/arial.ttf",
-                "C:/Windows/Fonts/tahoma.ttf"
-            ]
+            if os.name == 'nt':
+                windir = os.environ.get('WINDIR', 'C:\\Windows')
+                font_paths = [
+                    os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
+                    os.path.join(windir, 'Fonts', 'aparaj.ttf'),
+                    os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
+                    os.path.join(windir, 'Fonts', 'NirmalaB.ttf'),
+                    os.path.join(windir, 'Fonts', 'NirmalaUI.ttf'),
+                    os.path.join(windir, 'Fonts', 'arialbd.ttf'), 
+                ]
+            else:
+                font_paths = [
+                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+                    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+                ]
             font = None
             for path in font_paths:
                 if os.path.exists(path):
@@ -163,7 +166,13 @@ class VideoShortsGenerator:
                 l_end = line[-1]['start'] + line[-1]['duration']
                 y_pos = START_Y
                 
-                line_text = " ".join([w['word'] for w in line]).upper()
+                # Devanagari doesn't have upper/lower case. Calling .upper() on it is safe but redundant.
+                # However, for hybrid text, we keep it but ensure we don't break Nepali.
+                line_text = " ".join([w['word'] for w in line])
+                if any(ord(c) > 127 for c in line_text): # Heuristic for non-ascii (Nepali)
+                    pass 
+                else:
+                    line_text = line_text.upper()
                 try:
                     # Render full line base in white
                     base_txt = get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
@@ -190,14 +199,21 @@ class VideoShortsGenerator:
                                 h_start = w_info['start'] + 0.05
                                 h_dur = w_info['duration']
                                 
-                                highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
+                                h_dur = w_info['duration']
+                                
+                                # Use original word case for highlight if Nepali
+                                h_word = w_info['word']
+                                if all(ord(c) < 128 for c in h_word):
+                                    h_word = h_word.upper()
+
+                                highlight = get_pillow_text_clip(h_word, FONT_SIZE, HIGHLIGHT_TEXT, bg=HIGHLIGHT_BG)
                                 if highlight:
                                     # Ensure highlight width matches the measured width exactly if possible
                                     highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((word_x, y_pos))
                                     clips.append(highlight)
                                 
                                 # Add word and space for next measurement
-                                cumulative_text += w_info['word'].upper() + " "
+                                cumulative_text += h_word + " "
                             except Exception as e:
                                 print(f"Word Positioning Error: {e}")
                                 continue

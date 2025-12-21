@@ -13,20 +13,23 @@ class VideoLongGenerator:
 
     def _load_best_font(self, fsize=60):
         # Cross-Platform Font fallback list
-        font_paths = [
-            "C:/Windows/Fonts/Nirmala.ttc",
-            "C:/Windows/Fonts/aparaj.ttf",
-            "C:/Windows/Fonts/Nirmala.ttf",
-            "C:/Windows/Fonts/NirmalaB.ttf",
-            "C:/Windows/Fonts/NirmalaUI.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "C:/Windows/Fonts/arialbd.ttf", 
-            "C:/Windows/Fonts/arial.ttf",
-            "C:/Windows/Fonts/tahoma.ttf"
-        ]
+        if os.name == 'nt':
+            windir = os.environ.get('WINDIR', 'C:\\Windows')
+            font_paths = [
+                os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
+                os.path.join(windir, 'Fonts', 'aparaj.ttf'),
+                os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
+                os.path.join(windir, 'Fonts', 'NirmalaB.ttf'),
+                os.path.join(windir, 'Fonts', 'NirmalaUI.ttf'),
+                os.path.join(windir, 'Fonts', 'arialbd.ttf'), 
+            ]
+        else:
+            font_paths = [
+                "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+            ]
         font = None
         for path in font_paths:
             if os.path.exists(path):
@@ -89,7 +92,7 @@ class VideoLongGenerator:
         if curr: lines.append(" ".join(curr))
         return lines
 
-    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None):
+    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
         bg_clips, cumulative_dur = [], 0
@@ -97,77 +100,111 @@ class VideoLongGenerator:
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
         bg_color = (branding or {}).get('bg_color', (15, 25, 45))
 
-        for i, seg in enumerate(segments):
-            seg_duration = durations[i] if durations and i < len(durations) else 5
-            if i == len(segments) - 1: seg_duration = total_duration - cumulative_dur
-            
-            if template_mode:
+        if template_mode:
+            for i, seg in enumerate(segments):
+                seg_duration = durations[i] if durations and i < len(durations) else 5
+                if i == len(segments) - 1: seg_duration = total_duration - cumulative_dur
+                
                 bg = ColorClip(size=self.size, color=bg_color, duration=seg_duration)
-                if i == 0 or i % 3 == 0: # Add logo periodically or just keep it there
+                if i == 0 or i % 3 == 0: 
                      if os.path.exists(logo_path):
                         logo = ImageClip(logo_path).set_duration(seg_duration).resize(height=180)
                         logo = logo.set_position(('center', 80))
                         bg = CompositeVideoClip([bg, logo], size=self.size)
-            else:
-                img_path = seg.get('image_path')
-                if img_path and os.path.exists(img_path):
-                    bg = ImageClip(img_path).set_duration(seg_duration)
-                    w, h = bg.size
-                    target_ratio = self.size[0]/self.size[1]
-                    if (w/h) > target_ratio: bg = bg.resize(height=self.size[1])
-                    else: bg = bg.resize(width=self.size[0])
-                    bg = bg.set_position('center').resize(lambda t: 1 + 0.04 * t/seg_duration)
-                else:
-                    bg = ColorClip(size=self.size, color=(20, 20, 40), duration=seg_duration)
+                
+                if seg.get("type") == "news" and seg.get("headline"):
+                    try:
+                        head_txt = self.get_pillow_text_clip(seg['headline'][:80], 75, 'yellow', bg=(0,0,0,180))
+                        if head_txt:
+                            head_txt = head_txt.set_duration(seg_duration).set_position(('center', 120))
+                            bg = CompositeVideoClip([bg, head_txt], size=self.size)
+                    except Exception as e:
+                        print(f"Header Render Error: {e}")
+                
+                bg_clips.append(bg.set_start(cumulative_dur))
+                cumulative_dur += seg_duration
+        
+        elif media_paths and len(media_paths) > 0:
+            # Multi-media background (e.g. Science long form)
+            transition_time = total_duration / len(media_paths)
+            transition_time = max(min(transition_time, 8.0), 4.0) 
             
-            if seg.get("type") == "news" and seg.get("headline"):
-                try:
-                    head_txt = self.get_pillow_text_clip(seg['headline'][:80], 75, 'yellow', bg=(0,0,0,180))
-                    if head_txt:
-                        head_txt = head_txt.set_duration(seg_duration).set_position(('center', 120))
-                        bg = CompositeVideoClip([bg, head_txt], size=self.size)
-                except Exception as e:
-                    print(f"Header Render Error: {e}")
-            bg_clips.append(bg.set_start(cumulative_dur))
-            cumulative_dur += seg_duration
+            for i, m_path in enumerate(media_paths):
+                if os.path.exists(m_path):
+                    try:
+                        is_video = m_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv'))
+                        start_time = i * transition_time
+                        if start_time >= total_duration: break
+                        
+                        dur = min(transition_time, total_duration - start_time)
+                        
+                        if is_video:
+                            clip = VideoFileClip(m_path).without_audio()
+                            if clip.duration < dur:
+                                from moviepy.video.fx.all import loop
+                                clip = loop(clip, duration=dur)
+                            else:
+                                clip = clip.subclip(0, dur)
+                        else:
+                            clip = ImageClip(m_path).set_duration(dur)
+
+                        clip = clip.set_start(start_time)
+                        w, h = clip.size
+                        target_ratio = self.size[0]/self.size[1]
+                        if w/h > target_ratio: clip = clip.resize(height=self.size[1])
+                        else: clip = clip.resize(width=self.size[0])
+                        clip = clip.set_position('center')
+                        
+                        if not is_video:
+                            clip = clip.resize(lambda t: 1.05 + 0.05 * (t / dur))
+                        bg_clips.append(clip)
+                    except Exception as e:
+                        print(f"Error processing media {m_path}: {e}")
+            
+            if bg_clips:
+                actual_bg_dur = sum([c.duration for c in bg_clips])
+                if actual_bg_dur < total_duration:
+                    bg_clips[-1] = bg_clips[-1].set_duration(total_duration - bg_clips[-1].start)
+        
+        if not bg_clips:
+            bg_clips.append(ColorClip(size=self.size, color=(15, 15, 35), duration=total_duration))
 
         final_bg = CompositeVideoClip(bg_clips, size=self.size)
-        caption_clips, all_words_text = [], []
-        for seg in segments:
-            text = seg.get("text", "")
-            if seg.get("type") == "news" and seg.get("headline"): text = f"{seg['headline']}। {text}"
-            all_words_text.append(text)
+        caption_clips = []
         
-        full_text = " ".join(all_words_text)
-        lines = self.wrap_text(full_text, max_chars=40)
-        pages = [lines[i:i+3] for i in range(0, len(lines), 3)]
-        current_word_idx = 0
-        for page in pages:
-            page_text = " ".join(page)
-            clean_page_text = re.sub(r'[।.,!?]', ' ', page_text)
-            page_words = clean_page_text.split()
-            page_offsets = word_offsets[current_word_idx : current_word_idx + len(page_words)]
-            if not page_offsets: break
-            page_start, page_end = page_offsets[0]['start'], page_offsets[-1]['start'] + page_offsets[-1]['duration']
-            page_dur = page_end - page_start
+        # Word-level chunking logic (5 words per chunk)
+        CHUNK_SIZE = 5
+        for i in range(0, len(word_offsets), CHUNK_SIZE):
+            chunk = word_offsets[i : i + CHUNK_SIZE]
+            if not chunk: continue
+            
+            chunk_text = " ".join([w['word'] for w in chunk])
+            chunk_start = chunk[0]['start']
+            chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
+            chunk_dur = chunk_end - chunk_start
+            
+            # Show the base chunk line (no background paragraph)
             try:
-                L_HEIGHT, START_Y = 100, 750
-                for l_idx, line_text in enumerate(page):
-                    y_pos = START_Y + (l_idx * L_HEIGHT)
-                    base_txt = self.get_pillow_text_clip(line_text, 60, 'white', bg=(0,0,0,100))
-                    if base_txt:
-                        base_txt = base_txt.set_start(page_start).set_duration(page_dur).set_position(('center', y_pos))
-                        caption_clips.append(base_txt)
+                # One line at a time, centered at the bottom
+                y_pos = 850
+                # Base line
+                base_txt = self.get_pillow_text_clip(chunk_text, 65, 'white', bg=(0,0,0,120))
+                if base_txt:
+                    base_txt = base_txt.set_start(chunk_start).set_duration(chunk_dur).set_position(('center', y_pos))
+                    caption_clips.append(base_txt)
                 
-                # Active Highlight (Centered Bottom for current segment context)
-                for off in page_offsets:
-                    w_txt = self.get_pillow_text_clip(off['word'].upper(), 85, 'yellow', bg='black')
+                # Active Highlight within the chunk
+                for off in chunk:
+                    h_word = off['word']
+                    if all(ord(c) < 128 for c in h_word):
+                        h_word = h_word.upper()
+                    
+                    w_txt = self.get_pillow_text_clip(h_word, 75, 'yellow', bg='black')
                     if w_txt:
-                        w_txt = w_txt.set_duration(off['duration']).set_start(off['start']).set_position(('center', 950))
+                        w_txt = w_txt.set_duration(off['duration']).set_start(off['start']).set_position(('center', y_pos + 10))
                         caption_clips.append(w_txt)
             except Exception as e:
-                print(f"Daily Sync Error: {e}")
-            current_word_idx += len(page_words)
+                print(f"Caption Chunk Error: {e}")
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
         music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")
