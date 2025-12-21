@@ -23,7 +23,7 @@ tone: "Neutral, factual"
 branding:
   accent_color: "#FF0000" # Red for News
   bg_color: [10, 20, 40]  # Dark Blue
-  music_volume: 0.10
+  music_volume: 0.5
   logo_path: "automation/media/assets/nepal_now_logo.png"
   channel_name: "Nepal Now"
 storage:
