@@ -116,6 +116,24 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add automation/storage/*.json
-          git commit -m "Update automation state (posted news / science topics)" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push origin main || echo "Push failed (concurrent run?)"
+          git commit -m "Update automation state" || echo "No changes to commit"
+          
+          # Robust merge for state files
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          until [ $RETRY_COUNT -ge $MAX_RETRIES ]
+          do
+            git pull --rebase origin main && break
+            echo "Merge conflict detected, attempting automated JSON merge..."
+            git rebase --abort || true
+            git fetch origin main
+            
+            # Use python for union merge
+            python -c "import json, os, subprocess; [ ( (lambda f: ( (lambda d1, d2: open(f, 'w').write(json.dumps(list(set(d1)|set(d2))))) (json.load(open(f)), json.loads(subprocess.check_output(['git', 'show', 'origin/main:'+f]).decode())) ) (f) ) if os.path.exists(f) else None ) for f in ['automation/storage/posted_news.json', 'automation/storage/posted_science.json', 'automation/storage/news_hashes.json'] ]"
+            
+            git add automation/storage/*.json
+            git commit -m 'Update state (merged)' || echo 'Nothing to commit after merge'
+            RETRY_COUNT=$((RETRY_COUNT+1))
+          done
+          
+          git push origin main || echo "Push failed after retries"

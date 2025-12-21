@@ -11,41 +11,41 @@ class VideoFetcher:
 
     def fetch_stock_videos(self, query: str, count: int = 3) -> list:
         """
-        Searches for stock videos on Pixabay, Pexels, Mixkit, Coverr, Videezy, or Videvo.
+        Searches for stock videos.
         """
-        search_query = f"(site:pexels.com OR site:pixabay.com OR site:mixkit.co OR site:coverr.co OR site:videezy.com OR site:videvo.net) {query} stock video -person -face -text -reporter"
+        # Try a more relaxed query first to ensure we get results for niche terms
+        search_query = f"{query} stock video -person -text"
         print(f"Searching stock videos for: {search_query}...")
         results = []
         paths = []
 
         try:
             with DDGS() as ddgs:
-                search_results = ddgs.text(search_query, max_results=30)
+                search_results = ddgs.text(search_query, max_results=20)
                 for r in search_results:
                     url = r['href']
-                    if any(x in url for x in ['pexels.com/video', 'pixabay.com/videos', 'mixkit.co', 'coverr.co', 'videezy.com', 'videvo.net']):
+                    # Broaden the list of supported sites
+                    if any(x in url for x in ['pexels.com', 'pixabay.com', 'mixkit.co', 'coverr.co', 'videezy.com', 'videvo.net']):
                         results.append(url)
                     if len(results) >= count * 3: break
         except Exception as e:
             print(f"DDG Search error for videos: {e}")
 
-        # Fallback Strategy: If no results, try broader terms
+        # Fallback Strategy: If no results, try broader cinematic terms
         if not results:
             fallbacks = [
-                "nature landscapes", "abstract technology high-tech", 
-                "cinematic macro space", "microscopic organisms",
-                "clean professional broadcast background"
+                f"{query} nature background", "abstract high-tech motion", 
+                "cinematic space", "microscopic science",
+                "professional 4k background"
             ]
             for f_query in fallbacks:
                 print(f"No results for '{query}'. Trying fallback: {f_query}")
-                search_query = f"(site:pexels.com OR site:pixabay.com OR site:mixkit.co OR site:videvo.net) {f_query} stock video -text"
                 try:
                     with DDGS() as ddgs:
-                        search_results = ddgs.text(search_query, max_results=10)
+                        search_results = ddgs.text(f_query + " stock video -person", max_results=10)
                         for r in search_results:
-                            url = r['href']
-                            if any(x in url for x in ['pexels', 'pixabay', 'mixkit', 'videvo']):
-                                results.append(url)
+                            if any(x in r['href'] for x in ['pexels', 'pixabay', 'mixkit']):
+                                results.append(r['href'])
                         if results: break
                 except: continue
 

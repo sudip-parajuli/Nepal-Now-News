@@ -16,8 +16,7 @@ class NASAFetcher:
         Returns a list of local file paths.
         """
         print(f"Searching NASA Library for: {query}...")
-        # Simplify query for better NASA results
-        simplified_query = query.split()[-1] if len(query.split()) > 2 else query
+        simplified_query = " ".join(query.split()[-2:]) if len(query.split()) > 2 else query
         search_url = f"{self.base_url}/search"
         params = {
             "q": simplified_query,
