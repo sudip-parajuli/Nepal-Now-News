@@ -20,7 +20,7 @@ class NepaliNewsPipeline(BasePipeline):
         self.classifier = NewsClassifier()
         self.script_writer = ScriptWriter(os.getenv("GEMINI_API_KEY"))
         self.image_fetcher = ImageFetcher()
-        self.tts = TTSEngine(voice_map=config['tts_voice'], rate="+15%")
+        self.tts = TTSEngine(voice_map=config['tts_voice'], rate="+25%")
         self.vgen_shorts = VideoShortsGenerator()
         self.vgen_long = VideoLongGenerator()
         self.posted_file = config['storage']['posted_news']
