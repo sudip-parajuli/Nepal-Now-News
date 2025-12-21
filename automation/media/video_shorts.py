@@ -229,8 +229,8 @@ class VideoShortsGenerator:
                                     start_offset = l_font.getlength(cumulative_text)
                                     word_x = text_start_x + start_offset - 80 # Adjust for h_pad
                                     
-                                    h_start = w_info['start'] + 0.05
-                                    h_dur = w_info['duration']
+                                    h_start = max(0, w_info['start'] - 0.05)
+                                    h_dur = w_info['duration'] + 0.1
 
                                     # HIGHLIGHT: Yellow color instead of red background
                                     highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT)
