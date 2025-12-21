@@ -57,10 +57,7 @@ async def main():
 
     # Run Pipeline
     if pipeline:
-        if channel_type == "news":
-            await pipeline.run(mode=args.mode, is_test=args.test)
-        else:
-            await pipeline.run(is_test=args.test)
+        await pipeline.run(mode=args.mode, is_test=args.test)
 
 if __name__ == "__main__":
     asyncio.run(main())

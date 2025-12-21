@@ -22,6 +22,7 @@ on:
           - breaking
           - daily
           - science
+          - science_long
       is_test:
         description: 'Run in test mode (no upload)'
         required: false
@@ -83,19 +84,31 @@ jobs:
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
           python automation/main.py --config automation/config/nepali_news.yaml --mode daily $FLAGS
 
-      - name: Run Science Facts
+      - name: Run Science Facts (Shorts)
         if: |
           github.event.schedule == '15 1,12 * * *' || 
           (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'science'))
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          # Map the science-specific secret to the environment variable the code expects
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
           python automation/main.py --config automation/config/science.yaml --mode shorts $FLAGS
+
+      - name: Run Science Detailed (Long Form)
+        if: |
+          github.event.schedule == '15 1,12 * * *' || 
+          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'science_long'))
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
+          python automation/main.py --config automation/config/science.yaml --mode daily $FLAGS
 
       - name: Commit State Changes
         if: always()
