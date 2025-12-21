@@ -99,6 +99,7 @@ class VideoShortsGenerator:
             if os.name == 'nt':
                 windir = os.environ.get('WINDIR', 'C:\\Windows')
                 font_paths = [
+                    "automation/media/assets/NotoSansDevanagari-Regular.ttf",
                     os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
                     os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                     os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
@@ -140,7 +141,10 @@ class VideoShortsGenerator:
                     dummy = Image.new('RGB', (1, 1))
                     draw = ImageDraw.Draw(dummy)
                     bbox = draw.textbbox((0, 0), txt, font=font)
-                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    # Ensure minimum height for Devanagari descenders/ascenders
+                    th = max(th, FONT_SIZE)
                     
                     # Padding: 10 vertical, 40 horizontal for margins
                     v_pad, h_pad = 10, 40
@@ -197,7 +201,7 @@ class VideoShortsGenerator:
                                 # Start position is the width of everything before this word
                                 start_offset = font.getlength(cumulative_text)
                                 # End position is width including current word
-                                end_offset = font.getlength(cumulative_text + w_text)
+                                end_offset = font.getlength(cumulative_text + w_info['word'])
                                 
                                 word_x = current_x + start_offset
                                 # CALIBRATED SYNC: Add a tiny nudge (0.05s) to align with audio onset delay

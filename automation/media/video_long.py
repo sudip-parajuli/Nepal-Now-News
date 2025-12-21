@@ -16,6 +16,7 @@ class VideoLongGenerator:
         if os.name == 'nt':
             windir = os.environ.get('WINDIR', 'C:\\Windows')
             font_paths = [
+                "automation/media/assets/NotoSansDevanagari-Regular.ttf",
                 os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
                 os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                 os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
@@ -59,6 +60,14 @@ class VideoLongGenerator:
             # Re-load if size differs or just use loaded but this is safer for variety
             l_font = self.font if fsize == 60 else self._load_best_font(fsize)
             
+            # Measure text
+            dummy = Image.new('RGB', (1, 1))
+            draw = ImageDraw.Draw(dummy)
+            bbox = draw.textbbox((0, 0), txt, font=l_font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            th = max(th, fsize) # Minimum height
+
             # Padding: 20 vertical, 50 horizontal for margins
             v_pad, h_pad = 20, 50
             img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
