@@ -95,11 +95,13 @@ class VideoShortsGenerator:
             from PIL import Image, ImageDraw, ImageFont
             import numpy as np
 
-            # Load font once
+            # Load font (Cross-Platform)
+            font_paths = [
+                "automation/media/assets/NotoSansDevanagari-Regular.ttf",
+            ]
             if os.name == 'nt':
                 windir = os.environ.get('WINDIR', 'C:\\Windows')
-                font_paths = [
-                    "automation/media/assets/NotoSansDevanagari-Regular.ttf",
+                font_paths += [
                     os.path.join(windir, 'Fonts', 'Nirmala.ttc'),
                     os.path.join(windir, 'Fonts', 'aparaj.ttf'),
                     os.path.join(windir, 'Fonts', 'Nirmala.ttf'),
@@ -110,7 +112,7 @@ class VideoShortsGenerator:
                     os.path.join(windir, 'Fonts', 'arialbd.ttf'), 
                 ]
             else:
-                font_paths = [
+                font_paths += [
                     "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
                     "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
