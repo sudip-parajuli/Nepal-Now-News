@@ -4,9 +4,11 @@ on:
   schedule:
     # Frequently check for breaking news (Every 30 mins)
     - cron: '*/30 * * * *'
+    
     # Daily News Summary (7:30 AM & 7:30 PM NPT)
     # 45 1 UTC = 7:30 AM NPT, 45 13 UTC = 7:30 PM NPT
-    - cron: '45 1,13 * * *'
+    # - cron: '45 1,13 * * *'
+    
     # Science Fact Shorts (7:00 AM & 6:30 PM NPT)
     # 15 1 UTC = 7:00 AM NPT, 45 12 UTC = 6:30 PM NPT
     - cron: '15 1,12 * * *'
@@ -71,18 +73,18 @@ jobs:
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
           python automation/main.py --config automation/config/nepali_news.yaml --mode breaking $FLAGS
 
-      - name: Run Daily Summary
-        if: |
-          github.event.schedule == '45 1,13 * * *' || 
-          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'daily'))
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
-        run: |
-          FLAGS=""
-          if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
-          python automation/main.py --config automation/config/nepali_news.yaml --mode daily $FLAGS
+      # - name: Run Daily Summary
+      #   if: |
+      #     github.event.schedule == '45 1,13 * * *' || 
+      #     (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'daily'))
+      #   env:
+      #     GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      #     GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      #     YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+      #   run: |
+      #     FLAGS=""
+      #     if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
+      #     python automation/main.py --config automation/config/nepali_news.yaml --mode daily $FLAGS
 
       - name: Run Science Facts (Shorts)
         if: |
