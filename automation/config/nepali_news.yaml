@@ -11,7 +11,7 @@ upload:
   long: true
 schedule:
   breaking_interval_minutes: 30
-  daily_summary_times: ["07:30", "19:30"] # NPT
+  storytelling_times: ["19:45"] # NPT, Tue/Thu/Sat
 feeds:
   - "https://ekantipur.com/rss"
   - "https://www.onlinekhabar.com/feed"

@@ -25,7 +25,7 @@ async def list_channels():
 async def main():
     parser = argparse.ArgumentParser(description="Multi-Channel Autonomous Media Platform")
     parser.add_argument("--config", help="Path to channel YAML config")
-    parser.add_argument("--mode", default="breaking", choices=["breaking", "daily", "shorts"], help="Execution mode")
+    parser.add_argument("--mode", default="breaking", choices=["breaking", "daily", "shorts", "storytelling"], help="Execution mode")
     parser.add_argument("--test", action="store_true", help="Run in test mode (skip upload)")
     parser.add_argument("--list", action="store_true", help="List available channels")
     

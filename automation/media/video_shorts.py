@@ -67,7 +67,8 @@ class VideoShortsGenerator:
                         clip = clip.set_position('center')
                         
                         if not is_video:
-                            clip = clip.resize(lambda t: 1.05 + 0.05 * (t / transition_time))
+                            # Stronger zoom-in effect (1.0 to 1.15)
+                            clip = clip.resize(lambda t: 1.0 + 0.15 * (t / transition_time))
                             
                         bg_clips.append(clip)
                     except Exception as e:
@@ -262,14 +263,16 @@ class VideoShortsGenerator:
         is_science = "science" in str(channel_name).lower()
         
         if is_science:
-            science_music_dir = "automation/musics/science"
-            if os.path.exists(science_music_dir):
-                music_files = glob.glob(os.path.join(science_music_dir, "*.mp3"))
-            print(f"Science Channel detected. Found {len(music_files)} music files in {science_music_dir}")
+            # Check both possible science music directories
+            science_music_dirs = ["automation/musics/science", "automation/music/science"]
+            for sdir in science_music_dirs:
+                if os.path.exists(sdir):
+                    music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
+            print(f"Science Channel detected. Found {len(music_files)} music files.")
         
         # If not science, or if science music was missing (failsafe), check other folders
         # CRITICAL: If is_science is True, we DO NOT fall back to News music.
-        if not music_files and not is_science:
+        if not is_science:
             # Check plural 'musics' first
             music_files = glob.glob("music/*.mp3") + glob.glob("automation/musics/*.mp3")
             if not music_files: # Fallback to singular just in case
@@ -279,9 +282,8 @@ class VideoShortsGenerator:
             try:
                 music_path = random.choice(music_files)
                 print(f"Using background music: {music_path}")
-                # Ensure path is absolute for moviepy
-                music_path = os.path.abspath(music_path)
-                bg_music = AudioFileClip(music_path).volumex(music_vol).set_duration(duration)
+                # Use 0.04 volume as requested
+                bg_music = AudioFileClip(music_path).volumex(0.04).set_duration(duration)
                 
                 # Gentle fades (2 seconds)
                 if bg_music.duration > 4:

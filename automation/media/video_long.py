@@ -182,7 +182,8 @@ class VideoLongGenerator:
                         clip = clip.set_position('center')
                         
                         if not is_video:
-                            clip = clip.resize(lambda t: 1.05 + 0.05 * (t / dur))
+                            # Apply a stronger zoom-in effect (1.0 to 1.15)
+                            clip = clip.resize(lambda t: 1.0 + 0.15 * (t / dur))
                         bg_clips.append(clip)
                     except Exception as e:
                         print(f"Error processing media {m_path}: {e}")
@@ -271,12 +272,16 @@ class VideoLongGenerator:
         music_files = []
         
         if is_science:
-            science_music_dir = "automation/musics/science"
-            if os.path.exists(science_music_dir):
-                music_files = glob.glob(os.path.join(science_music_dir, "*.mp3"))
+            # Check both possible science music directories
+            science_music_dirs = ["automation/musics/science", "automation/music/science"]
+            for sdir in science_music_dirs:
+                if os.path.exists(sdir):
+                    music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
+            
             print(f"Science Video detected. Found {len(music_files)} science music files.")
             
-        if not music_files and not is_science:
+        if not is_science:
+            # News logic: Fallback through various folders
             music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")
         
         if music_files:
@@ -291,8 +296,8 @@ class VideoLongGenerator:
                 else:
                     bg_music = bg_music.set_duration(total_duration)
                 
-                # Dimmer volume: 0.07 instead of 0.12
-                bg_music = bg_music.volumex(0.07)
+                # Dimmer volume as requested: 0.04 instead of 0.07/0.12
+                bg_music = bg_music.volumex(0.04)
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 final_audio = CompositeAudioClip([audio.volumex(1.15), bg_music])
                 final_video = final_video.set_audio(final_audio)

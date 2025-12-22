@@ -87,27 +87,43 @@ class TTSEngine:
 
         voice = voice or self.voice_map.get("female")
         print(f"DEBUG: TTSEngine communicating with voice: {voice} (Rate: {rate or self.rate}, Pitch: {pitch or self.pitch})")
-        communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch)
-        word_offsets = []
+        MAX_RETRIES = 3
+        retry_count = 0
         
-        try:
-            audio_data = bytearray()
-            async for chunk in communicate.stream():
-                ctype = chunk.get("type") or chunk.get("Type") or "unknown"
-                if ctype == "audio":
-                    audio_data.extend(chunk["data"])
-                elif ctype == "WordBoundary":
-                    word_offsets.append({
-                        "word": chunk.get("text") or chunk.get("Text"),
-                        "start": (chunk.get("offset") or chunk.get("Offset")) / 10**7,
-                        "duration": (chunk.get("duration") or chunk.get("Duration")) / 10**7
-                    })
+        while retry_count < MAX_RETRIES:
+            try:
+                communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch)
+                audio_data = bytearray()
+                temp_offsets = []
+                
+                async for chunk in communicate.stream():
+                    ctype = chunk.get("type") or chunk.get("Type") or "unknown"
+                    if ctype == "audio":
+                        audio_data.extend(chunk["data"])
+                    elif ctype == "WordBoundary":
+                        temp_offsets.append({
+                            "word": chunk.get("text") or chunk.get("Text"),
+                            "start": (chunk.get("offset") or chunk.get("Offset")) / 10**7,
+                            "duration": (chunk.get("duration") or chunk.get("Duration")) / 10**7
+                        })
 
-            if audio_data:
-                with open(output_path, "wb") as f:
-                    f.write(audio_data)
-        except Exception as e:
-            print(f"Error during TTS streaming: {e}")
+                if audio_data and len(audio_data) > 0:
+                    with open(output_path, "wb") as f:
+                        f.write(audio_data)
+                    word_offsets = temp_offsets
+                    break # Success!
+                else:
+                    print(f"DEBUG: Attempt {retry_count + 1} - No audio data received for: {text[:50]}...")
+            except Exception as e:
+                print(f"Error during TTS streaming (Attempt {retry_count + 1}): {e}")
+            
+            retry_count += 1
+            if retry_count < MAX_RETRIES:
+                await asyncio.sleep(2) # Wait before retry
+        
+        if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            print(f"CRITICAL: Failed to generate audio file at {output_path} after {MAX_RETRIES} attempts.")
+            return output_path, []
         
         if not word_offsets and len(text.strip()) > 0:
             from moviepy.editor import AudioFileClip
@@ -119,11 +135,53 @@ class TTSEngine:
                 total_dur = len(text.split()) * 0.4
             
             words = text.split()
+            # Calculate phonetic weights for better distribution
+            weights = [self._estimate_phonetic_length(w) for w in words]
+            total_weight = sum(weights) or 1.0
+            
             start_time = 0
-            total_chars = sum(len(x) for x in words)
-            for w in words:
-                w_dur = (len(w) / total_chars) * total_dur
+            for i, w in enumerate(words):
+                w_dur = (weights[i] / total_weight) * total_dur
                 word_offsets.append({"word": w, "start": start_time, "duration": w_dur})
                 start_time += w_dur
 
         return output_path, word_offsets
+
+    def _estimate_phonetic_length(self, word: str) -> float:
+        """
+        Estimates the 'spoken length' of a word for better timing fallback.
+        Handles digits and common symbols that take longer to speak.
+        """
+        # Remove common punctuation for length estimation
+        clean_word = re.sub(r'[।.,!?"]', '', word)
+        if not clean_word: return 0.1
+        
+        # Devanagari detection
+        is_nepali = any(ord(c) > 127 for c in clean_word)
+        
+        # Expansion dictionary for digits
+        if not is_nepali:
+            expansion = {
+                '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+                '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine',
+                '-': ' dash ', '.': ' point '
+            }
+        else:
+            # Basic Nepali digit expansion
+            expansion = {
+                '०': 'शुन्य', '१': 'एक', '२': 'दुई', '३': 'तीन', '४': 'चार',
+                '५': 'पाँच', '६': 'छ', '७': 'सात', '८': 'आठ', '९': 'नौ',
+                '-': ' ड्यास ', '.': ' दशमलव '
+            }
+
+        phonetic_repr = ""
+        for char in clean_word:
+            if char in expansion:
+                phonetic_repr += expansion[char] + " "
+            else:
+                phonetic_repr += char
+        
+        # Simple heuristic: chars + extra weight for long expansions
+        # English: average syllable is ~3 chars
+        # Nepali: usually 1 char = 1 syllable (mora)
+        return len(phonetic_repr.strip())

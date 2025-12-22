@@ -15,9 +15,9 @@ class VideoFetcher:
         """
         # Incorporate topic context to ensure relevance (e.g., Space or Ocean)
         if topic_context:
-            search_query = f"{topic_context} {query} stock video -person -text -interview -talking -speaker -host"
+            search_query = f"{topic_context} {query} stock video -person -people -host -interview -talking -speaker -man -woman -face -text -words -caption -subtitles -logo"
         else:
-            search_query = f"{query} stock video -person -text -interview -talking -speaker -host"
+            search_query = f"{query} stock video -person -people -host -interview -talking -speaker -man -woman -face -text -words -caption -subtitles -logo"
             
         print(f"Searching stock videos for: {search_query}...")
         results = []

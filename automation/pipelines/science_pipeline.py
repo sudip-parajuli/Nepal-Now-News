@@ -28,6 +28,8 @@ class SciencePipeline(BasePipeline):
             pitch=t_v.get('pitch', "-12Hz")
         )
         self.vgen = VideoShortsGenerator()
+        # Default science music volume to 0.04 as requested
+        self.music_volume = config.get('branding', {}).get('music_volume', 0.04)
         self.nasa_fetcher = NASAFetcher()
         self.uploader = None # Initialized in run()
 
@@ -94,6 +96,7 @@ class SciencePipeline(BasePipeline):
         # Use VideoLongGenerator
         from ..media.video_long import VideoLongGenerator
         vgen_long = VideoLongGenerator()
+        # Pass lower music volume 0.04
         vgen_long.create_daily_summary(segments, audio_path, video_path, word_offsets, media_paths=media_paths)
         
         # 6. Upload
@@ -106,19 +109,24 @@ class SciencePipeline(BasePipeline):
         media_paths = []
         
         for i, kw in enumerate(keywords_list):
-            # Priority 1: NASA
+            # Priority 1: NASA (Most reliable for "no people")
             nasa_clips = self.nasa_fetcher.fetch_nasa_videos(kw, count=count_per_kw)
             if nasa_clips:
                 media_paths.extend(nasa_clips)
             else:
-                # Priority 2: Generic Stock
+                # Priority 2: Generic Stock (Filtered for no people)
+                # We fetch less videos and more images as requested (it's better than videos with people)
                 clips = self.video_fetcher.fetch_stock_videos(kw, count=count_per_kw, topic_context=topic)
                 media_paths.extend(clips)
         
-        if len(media_paths) < 3:
-            img_kw = self.script_writer.generate_image_keywords(script, extra_context=f"{topic} cinematic")
-            img_paths = self.image_fetcher.fetch_multi_images(img_kw, "science_temp", topic_context=topic)
-            media_paths.extend(img_paths)
+        # User requested: "It is better to use images than to use videos that has people in it."
+        # So we augment with more images.
+        img_kw = self.script_writer.generate_image_keywords(script, extra_context=f"{topic} cinematic space universe nature")
+        img_paths = self.image_fetcher.fetch_multi_images(img_kw, "science_temp", topic_context=topic)
+        media_paths.extend(img_paths)
+        
+        # Shuffle to mix videos and images
+        random.shuffle(media_paths)
         return media_paths
 
     async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True):
