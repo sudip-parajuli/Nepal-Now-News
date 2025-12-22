@@ -2,12 +2,11 @@ from typing import List, Dict
 
 class NewsClassifier:
     BREAKING_KEYWORDS = [
-        "breaking", "live", "alert", "emergency", "update", 
-        "explosion", "earthquake", "crash", "attack", "decision", 
+        "breaking", "live", "alert", "emergency",
+        "explosion", "earthquake", "crash", "attack", 
         "deadly", "shooting", "urgent", "tsunami", "nuclear", "flash",
-        "ब्रेकिङ", "ताजा", "विशेष", "अपडेट", "घटना", "मृत्यु", 
-        "घाइते", "विस्फोट", "भूकम्प", "आक्रमण", "फैसला", "जरुरी",
-        "प्रमुख", "खबर", "समाचार", "तत्काल", "खतरा", "अवरुद्ध", "पक्राउ"
+        "ब्रेकिङ", "अपडेट", "घटना", "मृत्यु", 
+        "घाइते", "विस्फोट", "भूकम्प", "आक्रमण", "फैसला", "जरुरी", "तत्काल", "खतरा", "अवरुद्ध"
     ]
 
     def __init__(self, breaking_window_hours: int = 2):
