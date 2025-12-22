@@ -1,5 +1,6 @@
 import os
 import asyncio
+import random
 from .base_pipeline import BasePipeline
 from ..content.science_topic_generator import ScienceTopicGenerator
 from ..content.script_writer import ScriptWriter
