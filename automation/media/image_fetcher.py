@@ -44,11 +44,16 @@ class ImageFetcher:
         return paths
 
     def _search_ddg(self, query: str, max_results: int = 20, topic_context: str = None) -> list:
-        # Exclude diagrams, text, bottles, and products for professional look
+        # Exclude diagrams, text, and people for professional science look
+        negative_filters = "-person -face -human -man -woman -portrait -interview -talking -host -adult -child -people -diagram -chart -graph -map -vector -text -logo"
+        
         if topic_context:
-            search_query = f"{topic_context} {query} -diagram -chart -graph -map -vector -text -bottle -label -product -person -face -human -interview -talking"
+            is_science = any(tw in topic_context.lower() for tw in ["space", "universe", "galaxy", "ocean", "science", "nature"])
+            quality_boost = "4K cinematic " if is_science else ""
+            search_query = f"{topic_context} {query} {quality_boost}{negative_filters}"
         else:
-            search_query = f"{query} -diagram -chart -graph -map -vector -text -bottle -label -product -person -face -human -interview -talking"
+            search_query = f"{query} {negative_filters}"
+            
         try:
             with DDGS() as ddgs:
                 results = ddgs.images(
@@ -59,7 +64,7 @@ class ImageFetcher:
                     type_image="photo"
                 )
                 if not results: return []
-                forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human", "interview", "talking"]
+                forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human", "man", "woman", "interview", "talking", "portrait"]
                 filtered = []
                 for r in results:
                     url = r['image'].lower()

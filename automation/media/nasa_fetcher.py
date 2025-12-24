@@ -17,6 +17,7 @@ class NASAFetcher:
         """
         print(f"Searching NASA Library for: {query}...")
         simplified_query = " ".join(query.split()[-2:]) if len(query.split()) > 2 else query
+        
         search_url = f"{self.base_url}/search"
         params = {
             "q": simplified_query,
@@ -33,8 +34,23 @@ class NASAFetcher:
             data = response.json()
             items = data.get('collection', {}).get('items', [])
             
-            for item in items[:count * 2]: # Get a few extras to try if some fail
-                nasa_id = item.get('data', [{}])[0].get('nasa_id')
+            forbidden = ["interview", "talking", "host", "speaker", "presentation", "conference", "panel", "portrait", "face", "talking head", "narrator", "explaining", "scientist"]
+            
+            for item in items: 
+                item_data = item.get('data', [{}])[0]
+                nasa_id = item_data.get('nasa_id')
+                title = item_data.get('title', '').lower()
+                description = item_data.get('description', '').lower()
+                keywords = [k.lower() for k in item_data.get('keywords', [])]
+                
+                # Check for forbidden terms in title, description, or keywords
+                if any(f in title for f in forbidden) or any(f in description for f in forbidden) or any(any(f in k for f in forbidden) for k in keywords):
+                    # print(f"Skipping NASA video {nasa_id} due to human-centric content.")
+                    continue
+                
+                # Prioritize mission-based results if they look purely scientific
+                # (e.g., if it has 'Hubble' and not 'person' it's likely a B-roll)
+
                 # The 'href' in the item points to a list of media assets
                 asset_manifest_url = item.get('href')
                 

@@ -166,29 +166,56 @@ class ScriptWriter:
         if start != -1 and end != -1: return text[start:end+1].strip()
         return text.strip()
 
-    def generate_image_keywords(self, text: str, extra_context: str = "Nepal") -> List[str]:
+    def generate_image_keywords(self, text: str, extra_context: str = "Science") -> List[str]:
         """
         Generates a list of keywords for different segments of the text to provide visual variety.
+        Strictly excludes humans and names for the Science channel.
         """
-        # Split by sentence or paragraph to get segments, but keep them simple for visual search
-        segments = [s.strip() for s in re.split(r'[।.\n]', text) if len(s.strip()) > 20]
+        # Split by sentence or paragraph
+        segments = [s.strip() for s in re.split(r'[।.\n]', text) if len(s.strip()) > 30]
         if not segments: segments = [text]
         
+        # Detect theme from extra_context for better keyword injection
+        is_space = any(kw in extra_context.lower() for kw in ["space", "universe", "galaxy", "nasa", "star", "planet"])
+        is_ocean = any(kw in extra_context.lower() for kw in ["ocean", "sea", "underwater", "marine", "reef"])
+        
         all_keywords = []
-        for seg in segments[:8]: 
+        # Limit to 6 segments for variety without excessive API calls
+        for seg in segments[:6]: 
+            theme_hint = ""
+            if is_space:
+                theme_hint = "Priority: JWST deep field, Hubble nebula, SDO solar flare, black hole animation, exoplanet visualization, planetary surface."
+            elif is_ocean:
+                theme_hint = "Priority: Underwater 4k, Vibrant Coral Reefs, Deep-Sea Bioluminescence, Surface Waves, Underwater Light Rays."
+
             prompt = f"""
-            Extract a single, simple, concrete 1-2 word noun from this text that represents a visual subject.
+            Extract a single, concrete, 2-word visual subject from this text for a SCIENCE documentary.
             Text: "{seg}"
-            Rules: NO humans, NO faces, NO text, NO interviews, NO talking heads. NO adjectives unless necessary. NO broad concepts. Simple subjects (e.g., 'nebula', 'satellite', 'earth', 'mountains').
-            Output ONLY the subject.
+            Context: {extra_context}
+            {theme_hint}
+
+            CRITICAL RULES:
+            - NO HUMANS, NO FACES, NO PEOPLE, NO HANDS.
+            - NO NAMES OF PERSONS or CEOs.
+            - NO INTERVIEWS or HOSTS.
+            - If the text mentions a person, EXTRACT THE SCIENTIFIC OBJECT or PHENOMENON.
+            - For Space: Use mission names like 'JWST', 'Hubble', or terms like 'Galaxy animation'.
+            - For Oceans: Use terms like 'Underwater 4k' or 'Coral Reef'.
+            - Output ONLY the 2-word subject.
             """
             try:
                 keywords = self._call_with_retry(prompt)
-                clean_kw = keywords.replace('"', '').strip().split('\n')[0].strip()
-                if clean_kw: all_keywords.append(clean_kw)
+                clean_kw = keywords.replace('"', '').replace('Subject:', '').strip().split('\n')[0].strip()
+                # Final check to strip names if LLM failed
+                if clean_kw: 
+                    all_keywords.append(clean_kw)
             except:
                 continue
         
         if not all_keywords:
-            return [f"{extra_context} cinematic"]
+            default_kw = f"{extra_context} cinematic"
+            if is_space: default_kw = "Deep Space Nebula"
+            elif is_ocean: default_kw = "Underwater Bioluminescence"
+            return [default_kw]
+        
         return all_keywords

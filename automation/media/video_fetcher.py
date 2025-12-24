@@ -13,11 +13,25 @@ class VideoFetcher:
         """
         Searches for stock videos.
         """
+        negative_filters = "-person -people -host -interview -talking -speaker -man -woman -face -portrait -human -audience -crowd -text -words -caption -subtitles -logo"
+        
         # Incorporate topic context to ensure relevance (e.g., Space or Ocean)
         if topic_context:
-            search_query = f"{topic_context} {query} stock video -person -people -host -interview -talking -speaker -man -woman -face -text -words -caption -subtitles -logo"
+            tc_low = topic_context.lower()
+            is_space = any(tw in tc_low for tw in ["space", "universe", "galaxy", "nasa", "star", "planet"])
+            is_ocean = any(tw in tc_low for tw in ["ocean", "sea", "underwater", "marine", "reef"])
+            
+            style_boost = ""
+            if is_space: 
+                style_boost = "animation cinematic "
+            elif is_ocean: 
+                style_boost = "4k underwater cinematic "
+            elif any(tw in tc_low for tw in ["science", "nature"]):
+                style_boost = "4k cinematic "
+                
+            search_query = f"{topic_context} {query} {style_boost}stock video {negative_filters}"
         else:
-            search_query = f"{query} stock video -person -people -host -interview -talking -speaker -man -woman -face -text -words -caption -subtitles -logo"
+            search_query = f"{query} stock video {negative_filters}"
             
         print(f"Searching stock videos for: {search_query}...")
         results = []
