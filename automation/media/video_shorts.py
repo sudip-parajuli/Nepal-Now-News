@@ -25,23 +25,44 @@ class VideoShortsGenerator:
         channel_name = (branding or {}).get('channel_name', "Nepal Now")
 
         if template_mode:
-            # Create a clean branded background
+            # 1. Base Layer (Background Color)
             bg_color = (branding or {}).get('bg_color', (15, 25, 45))
             bg_clips.append(ColorClip(size=self.size, color=bg_color, duration=duration))
             
-            # CENTERED BRANDING: Top-Middle Logo and Channel Name
+            # 2. Anchor Layer (Full Screen)
+            anchor_video_path = (branding or {}).get('anchor_video_path')
+            anchor_added = False
+            if anchor_video_path and os.path.exists(anchor_video_path):
+                print(f"Adding AI Anchor video: {anchor_video_path}")
+                anchor_clip = VideoFileClip(anchor_video_path)
+                anchor_clip = anchor_clip.resize(height=1920)
+                anchor_clip = anchor_clip.set_position('center')
+                if anchor_clip.duration < duration:
+                    anchor_clip = anchor_clip.fx(vfx.loop, duration=duration)
+                else:
+                    anchor_clip = anchor_clip.subclip(0, duration)
+                bg_clips.append(anchor_clip)
+                anchor_added = True
+            elif os.path.exists("automation/media/assets/anchor_nepali.png") and not "science" in str(channel_name).lower():
+                print("Using static AI Anchor fallback (Full Screen).")
+                anchor_img = ImageClip("automation/media/assets/anchor_nepali.png").set_duration(duration)
+                anchor_img = anchor_img.resize(height=1920)
+                anchor_img = anchor_img.set_position('center')
+                bg_clips.append(anchor_img)
+                anchor_added = True
+
+            # 3. Branding Layer (TOP LEFT) - Must be added AFTER anchor to be visible
             if os.path.exists(logo_path):
                 logo = ImageClip(logo_path).set_duration(duration)
-                logo = logo.resize(height=120) 
-                logo = logo.set_position(('center', 150))
+                logo = logo.resize(height=100) # Slightly smaller for corner
+                logo = logo.set_position((40, 40)) # Top-Left
                 bg_clips.append(logo)
                 
                 if channel_name:
                     from PIL import Image, ImageDraw, ImageFont
                     import numpy as np
                     
-                    font_size = 70
-                    # Try to find a bold font for the header
+                    font_size = 55 # Proportionate to 100px logo
                     header_font = None
                     possible_fonts = [
                         "automation/media/assets/NotoSansDevanagari-Regular.ttf",
@@ -62,28 +83,10 @@ class VideoShortsGenerator:
                     ImageDraw.Draw(name_img).text((10, 10), channel_name, font=header_font, fill='white', stroke_width=2, stroke_fill='black')
                     
                     name_clip = ImageClip(np.array(name_img)).set_duration(duration)
-                    name_clip = name_clip.set_position(('center', 150 + 130))
+                    # Position next to logo (logo height is 100, x is 40 + width + padding)
+                    logo_w = logo.size[0]
+                    name_clip = name_clip.set_position((40 + logo_w + 20, 55))
                     bg_clips.append(name_clip)
-
-            # Support for AI News Anchor Overlay (FULL SCREEN)
-            anchor_video_path = (branding or {}).get('anchor_video_path')
-            if anchor_video_path and os.path.exists(anchor_video_path):
-                print(f"Adding AI Anchor video: {anchor_video_path}")
-                anchor_clip = VideoFileClip(anchor_video_path)
-                # Resize and crop to fill 1080x1920
-                anchor_clip = anchor_clip.resize(height=1920)
-                anchor_clip = anchor_clip.set_position('center')
-                if anchor_clip.duration < duration:
-                    anchor_clip = anchor_clip.fx(vfx.loop, duration=duration)
-                else:
-                    anchor_clip = anchor_clip.subclip(0, duration)
-                bg_clips.append(anchor_clip)
-            elif os.path.exists("automation/media/assets/anchor_nepali.png") and not "science" in str(channel_name).lower():
-                print("Using static AI Anchor fallback (Full Screen).")
-                anchor_img = ImageClip("automation/media/assets/anchor_nepali.png").set_duration(duration)
-                anchor_img = anchor_img.resize(height=1920)
-                anchor_img = anchor_img.set_position('center')
-                bg_clips.append(anchor_img)
         
         elif media_paths and len(media_paths) > 0:
             transition_time = duration / len(media_paths) if len(media_paths) > 0 else 4.0
