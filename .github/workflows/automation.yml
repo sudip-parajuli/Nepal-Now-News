@@ -60,12 +60,14 @@ jobs:
       - name: Create Storage Dirs
         run: mkdir -p automation/storage automation/logs Wav2Lip/checkpoints
 
-      - name: Cache Wav2Lip Model
-        id: cache-wav2lip
+      - name: Cache AI Models
+        id: cache-ai-models
         uses: actions/cache@v3
         with:
-          path: Wav2Lip/checkpoints/wav2lip_gan.pth
-          key: wav2lip-v1
+          path: |
+            Wav2Lip/checkpoints/
+            Wav2Lip/face_detection/detection/sfd/
+          key: ai-models-v2
 
       # --- PIPELINE ROUTING ---
 

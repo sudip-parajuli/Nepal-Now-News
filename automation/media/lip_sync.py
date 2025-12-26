@@ -9,9 +9,15 @@ class LipSyncEngine:
         self.wav2lip_dir = wav2lip_dir or os.getenv("WAV2LIP_DIR", "Wav2Lip")
         self.checkpoint_path = checkpoint_path or os.getenv("WAV2LIP_CHECKPOINT", os.path.join(self.wav2lip_dir, "checkpoints/wav2lip_gan.pth"))
         self.repo_url = "https://github.com/Rudrabha/Wav2Lip.git"
+        
         # Reliable GAN checkpoint from HuggingFace
         self.model_url = "https://huggingface.co/KalidX/Wav2Lip/resolve/main/wav2lip_gan.pth"
-        self.python_exe = "python"
+        
+        # Face Detector Model (Crucial for Wav2Lip)
+        self.detector_url = "https://huggingface.co/KalidX/Wav2Lip/resolve/main/s3fd.pth"
+        self.detector_path = os.path.join(self.wav2lip_dir, "face_detection/detection/sfd/s3fd.pth")
+        
+        self.python_exe = "python3" # safer for Linux/GitHub Actions
 
     async def sync(self, face_path: str, audio_path: str, output_path: str) -> str:
         """
@@ -57,6 +63,7 @@ class LipSyncEngine:
                 return output_path
             else:
                 print(f"Wav2Lip Error (Code {process.returncode}): {process.stderr}")
+                print(f"STDOUT: {process.stdout}")
         except subprocess.TimeoutExpired:
             print("Wav2Lip inference timed out (15 min limit).")
         except Exception as e:
@@ -70,30 +77,35 @@ class LipSyncEngine:
         if not os.path.exists(self.wav2lip_dir):
             print(f"Cloning Wav2Lip repository from {self.repo_url}...")
             subprocess.run(["git", "clone", self.repo_url, self.wav2lip_dir], check=True)
-            
-            # Patch for some common Wav2Lip attribute errors in newer python/libs if needed
-            # (Usually not needed for basic inference)
         
         # 2. Download Model Weights
         os.makedirs(os.path.dirname(self.checkpoint_path), exist_ok=True)
-        if not os.path.exists(self.checkpoint_path) or os.path.getsize(self.checkpoint_path) < 100000000: # < 100MB check
-            print(f"Downloading Wav2Lip GAN model weights (This might take a minute)...")
-            r = requests.get(self.model_url, stream=True, timeout=60)
+        self._download_if_missing(self.model_url, self.checkpoint_path, "Wav2Lip GAN")
+        
+        # 3. Download Face Detector (S3FD)
+        os.makedirs(os.path.dirname(self.detector_path), exist_ok=True)
+        self._download_if_missing(self.detector_url, self.detector_path, "Face Detector (S3FD)")
+
+    def _download_if_missing(self, url: str, path: str, name: str):
+        if not os.path.exists(path) or os.path.getsize(path) < 1000000: # < 1MB check
+            print(f"Downloading {name} model weights...")
+            r = requests.get(url, stream=True, timeout=120)
             if r.status_code == 200:
-                with open(self.checkpoint_path, 'wb') as f:
+                with open(path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
-                print("Model weights downloaded successfully.")
+                print(f"{name} weights downloaded successfully.")
             else:
-                raise Exception(f"Failed to download model weights. Status: {r.status_code}")
+                raise Exception(f"Failed to download {name}. Status: {r.status_code}")
 
     def _create_static_fallback(self, face_path: str, audio_path: str, output_path: str) -> str:
         from moviepy.editor import ImageClip, AudioFileClip
-        print("Falling back to static AI Anchor video...")
+        print("Falling back to static AI Anchor video (Full Screen requested)...")
         try:
             audio = AudioFileClip(audio_path)
             clip = ImageClip(face_path).set_duration(audio.duration).set_audio(audio)
-            clip = clip.resize(height=1080) 
+            # Match the requested full-screen height (1920 for shorts)
+            clip = clip.resize(height=1920) 
             clip.write_videofile(output_path, fps=12, codec="libx264", audio_codec="aac", logger=None, preset='ultrafast')
             return output_path
         except Exception as e:

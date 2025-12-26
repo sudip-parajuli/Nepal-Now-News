@@ -29,18 +29,18 @@ class VideoShortsGenerator:
             bg_color = (branding or {}).get('bg_color', (15, 25, 45))
             bg_clips.append(ColorClip(size=self.size, color=bg_color, duration=duration))
             
-            # UPGRADED BRANDING: Top-Left Logo and Channel Name
+            # CENTERED BRANDING: Top-Middle Logo and Channel Name
             if os.path.exists(logo_path):
                 logo = ImageClip(logo_path).set_duration(duration)
-                logo = logo.resize(height=80) 
-                logo = logo.set_position((50, 50))
+                logo = logo.resize(height=120) 
+                logo = logo.set_position(('center', 150))
                 bg_clips.append(logo)
                 
                 if channel_name:
                     from PIL import Image, ImageDraw, ImageFont
                     import numpy as np
                     
-                    font_size = 60
+                    font_size = 70
                     # Try to find a bold font for the header
                     header_font = None
                     possible_fonts = [
@@ -59,29 +59,30 @@ class VideoShortsGenerator:
                     bbox = ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), channel_name, font=header_font)
                     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                     name_img = Image.new('RGBA', (tw + 20, th + 20), (0,0,0,0))
-                    ImageDraw.Draw(name_img).text((10, 10), channel_name, font=header_font, fill='white', stroke_width=1, stroke_fill='black')
+                    ImageDraw.Draw(name_img).text((10, 10), channel_name, font=header_font, fill='white', stroke_width=2, stroke_fill='black')
                     
                     name_clip = ImageClip(np.array(name_img)).set_duration(duration)
-                    logo_w = logo.size[0]
-                    name_clip = name_clip.set_position((50 + logo_w + 30, 50 + (logo.size[1] - name_clip.size[1])//2))
+                    name_clip = name_clip.set_position(('center', 150 + 130))
                     bg_clips.append(name_clip)
 
-            # Support for AI News Anchor Overlay
+            # Support for AI News Anchor Overlay (FULL SCREEN)
             anchor_video_path = (branding or {}).get('anchor_video_path')
             if anchor_video_path and os.path.exists(anchor_video_path):
                 print(f"Adding AI Anchor video: {anchor_video_path}")
-                anchor_clip = VideoFileClip(anchor_video_path).resize(height=1000)
-                anchor_clip = anchor_clip.set_position(('right', 'bottom'))
+                anchor_clip = VideoFileClip(anchor_video_path)
+                # Resize and crop to fill 1080x1920
+                anchor_clip = anchor_clip.resize(height=1920)
+                anchor_clip = anchor_clip.set_position('center')
                 if anchor_clip.duration < duration:
                     anchor_clip = anchor_clip.fx(vfx.loop, duration=duration)
                 else:
                     anchor_clip = anchor_clip.subclip(0, duration)
                 bg_clips.append(anchor_clip)
             elif os.path.exists("automation/media/assets/anchor_nepali.png") and not "science" in str(channel_name).lower():
-                print("Using static AI Anchor fallback.")
+                print("Using static AI Anchor fallback (Full Screen).")
                 anchor_img = ImageClip("automation/media/assets/anchor_nepali.png").set_duration(duration)
-                anchor_img = anchor_img.resize(height=1000)
-                anchor_img = anchor_img.set_position(('right', 'bottom'))
+                anchor_img = anchor_img.resize(height=1920)
+                anchor_img = anchor_img.set_position('center')
                 bg_clips.append(anchor_img)
         
         elif media_paths and len(media_paths) > 0:
