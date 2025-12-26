@@ -10,14 +10,15 @@ class LipSyncEngine:
         self.checkpoint_path = checkpoint_path or os.getenv("WAV2LIP_CHECKPOINT", os.path.join(self.wav2lip_dir, "checkpoints/wav2lip_gan.pth"))
         self.repo_url = "https://github.com/Rudrabha/Wav2Lip.git"
         
-        # Reliable GAN checkpoint from HuggingFace
-        self.model_url = "https://huggingface.co/KalidX/Wav2Lip/resolve/main/wav2lip_gan.pth"
+        # Reliable GAN checkpoint from HuggingFace (Alternative public source)
+        self.model_url = "https://huggingface.co/Nekochu/Wav2Lip/resolve/main/wav2lip_gan.pth"
         
-        # Face Detector Model (Crucial for Wav2Lip)
-        self.detector_url = "https://huggingface.co/KalidX/Wav2Lip/resolve/main/s3fd.pth"
+        # Face Detector Model
+        self.detector_url = "https://huggingface.co/rippertnt/wav2lip/resolve/main/s3fd.pth"
         self.detector_path = os.path.join(self.wav2lip_dir, "face_detection/detection/sfd/s3fd.pth")
         
-        self.python_exe = "python3" # safer for Linux/GitHub Actions
+        import sys
+        self.python_exe = sys.executable or "python"
 
     async def sync(self, face_path: str, audio_path: str, output_path: str) -> str:
         """
@@ -89,7 +90,8 @@ class LipSyncEngine:
     def _download_if_missing(self, url: str, path: str, name: str):
         if not os.path.exists(path) or os.path.getsize(path) < 1000000: # < 1MB check
             print(f"Downloading {name} model weights...")
-            r = requests.get(url, stream=True, timeout=120)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+            r = requests.get(url, stream=True, timeout=120, headers=headers, allow_redirects=True)
             if r.status_code == 200:
                 with open(path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=8192):
