@@ -48,15 +48,24 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get install -y ffmpeg imagemagick libsm6 libxext6
           pip install feedparser edge-tts "moviepy<2.0.0" requests beautifulsoup4 google-genai telethon python-dotenv duckduckgo-search google-api-python-client google-auth-oauthlib groq "Pillow<10.0.0" PyYAML
+          # Wav2Lip dependencies
+          pip install torch torchvision librosa opencv-python numba tqdm requests
           
       - name: Configure ImageMagick
         run: |
           sudo sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@*"/g' /etc/ImageMagick-6/policy.xml
 
       - name: Create Storage Dirs
-        run: mkdir -p automation/storage automation/logs
+        run: mkdir -p automation/storage automation/logs Wav2Lip/checkpoints
+
+      - name: Cache Wav2Lip Model
+        id: cache-wav2lip
+        uses: actions/cache@v3
+        with:
+          path: Wav2Lip/checkpoints/wav2lip_gan.pth
+          key: wav2lip-v1
 
       # --- PIPELINE ROUTING ---
 

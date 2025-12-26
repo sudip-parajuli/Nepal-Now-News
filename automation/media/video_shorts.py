@@ -29,15 +29,60 @@ class VideoShortsGenerator:
             bg_color = (branding or {}).get('bg_color', (15, 25, 45))
             bg_clips.append(ColorClip(size=self.size, color=bg_color, duration=duration))
             
-            # Add Logo and Channel Name at the top
+            # UPGRADED BRANDING: Top-Left Logo and Channel Name
             if os.path.exists(logo_path):
-                logo = ImageClip(logo_path).set_duration(duration).resize(width=300)
-                logo = logo.set_position(('center', 150))
+                logo = ImageClip(logo_path).set_duration(duration)
+                logo = logo.resize(height=80) 
+                logo = logo.set_position((50, 50))
                 bg_clips.append(logo)
-            
-            # Channel Name Text using Simple Overlay logic if Pillow not ready for header
-            # But we have Pillow below, let's use it for the header too if needed.
-            # For now, let's stick to the center captions requirement.
+                
+                if channel_name:
+                    from PIL import Image, ImageDraw, ImageFont
+                    import numpy as np
+                    
+                    font_size = 60
+                    # Try to find a bold font for the header
+                    header_font = None
+                    possible_fonts = [
+                        "automation/media/assets/NotoSansDevanagari-Regular.ttf",
+                        "C:\\Windows\\Fonts\\arialbd.ttf"
+                    ]
+                    for pf in possible_fonts:
+                        if os.path.exists(pf):
+                            try:
+                                header_font = ImageFont.truetype(pf, font_size)
+                                break
+                            except: continue
+                    
+                    if not header_font: header_font = ImageFont.load_default()
+                    
+                    bbox = ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), channel_name, font=header_font)
+                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                    name_img = Image.new('RGBA', (tw + 20, th + 20), (0,0,0,0))
+                    ImageDraw.Draw(name_img).text((10, 10), channel_name, font=header_font, fill='white', stroke_width=1, stroke_fill='black')
+                    
+                    name_clip = ImageClip(np.array(name_img)).set_duration(duration)
+                    logo_w = logo.size[0]
+                    name_clip = name_clip.set_position((50 + logo_w + 30, 50 + (logo.size[1] - name_clip.size[1])//2))
+                    bg_clips.append(name_clip)
+
+            # Support for AI News Anchor Overlay
+            anchor_video_path = (branding or {}).get('anchor_video_path')
+            if anchor_video_path and os.path.exists(anchor_video_path):
+                print(f"Adding AI Anchor video: {anchor_video_path}")
+                anchor_clip = VideoFileClip(anchor_video_path).resize(height=1000)
+                anchor_clip = anchor_clip.set_position(('right', 'bottom'))
+                if anchor_clip.duration < duration:
+                    anchor_clip = anchor_clip.fx(vfx.loop, duration=duration)
+                else:
+                    anchor_clip = anchor_clip.subclip(0, duration)
+                bg_clips.append(anchor_clip)
+            elif os.path.exists("automation/media/assets/anchor_nepali.png") and not "science" in str(channel_name).lower():
+                print("Using static AI Anchor fallback.")
+                anchor_img = ImageClip("automation/media/assets/anchor_nepali.png").set_duration(duration)
+                anchor_img = anchor_img.resize(height=1000)
+                anchor_img = anchor_img.set_position(('right', 'bottom'))
+                bg_clips.append(anchor_img)
         
         elif media_paths and len(media_paths) > 0:
             transition_time = duration / len(media_paths) if len(media_paths) > 0 else 4.0
@@ -88,9 +133,11 @@ class VideoShortsGenerator:
         if word_offsets:
             print(f"DEBUG: Generating minimalist PILLOW-based karaoke captions for {len(word_offsets)} words...")
             # OPTIMIZED GEOMETRY (65pt for margins, smaller but cleaner)
-            # Reduced MAX_CHARS_PER_LINE to 25 for better left/right margins
+            # MOVED TO BOTTOM (roughly 1450 for standard 1920 height)
             FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 65, 100, 25
-            START_Y = (self.size[1] // 2) - 100
+            # Layout: If template_mode (News), move to BOTTOM. Otherwise (Science), stay in CENTER.
+            default_y = (self.size[1] - 470) if template_mode else ((self.size[1] // 2) - 100)
+            START_Y = (branding or {}).get('caption_y', default_y)
             HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'white'
             
             from PIL import Image, ImageDraw, ImageFont

@@ -10,6 +10,7 @@ from ..media.image_fetcher import ImageFetcher
 from ..media.tts import TTSEngine
 from ..media.video_shorts import VideoShortsGenerator
 from ..media.video_long import VideoLongGenerator
+from ..media.lip_sync import LipSyncEngine
 from ..youtube.uploader import YouTubeUploader
 from ..youtube.auth import YouTubeAuth
 
@@ -29,6 +30,7 @@ class NepaliNewsPipeline(BasePipeline):
         self.tts = TTSEngine(voice_map=config['tts_voice'], rate="+15%")
         self.vgen_shorts = VideoShortsGenerator()
         self.vgen_long = VideoLongGenerator() # Keep for other uses if needed
+        self.lip_sync = LipSyncEngine()
         self.posted_file = config['storage']['posted_news']
         
         # Storytelling Components
@@ -79,6 +81,18 @@ class NepaliNewsPipeline(BasePipeline):
                     print(f"Skipping breaking news due to TTS failure: {item['headline']}")
                     continue
 
+                # AI News Anchor Integration
+                anchor_image = "automation/media/assets/anchor_nepali.png"
+                anchor_video_path = f"automation/storage/anchor_{item['hash'][:8]}.mp4"
+                
+                # Generate Lip-Synced Anchor Video
+                print(f"Generating AI Anchor for: {item['headline']}")
+                await self.lip_sync.sync(anchor_image, audio_path, anchor_video_path)
+                
+                # Update branding with anchor video
+                branding = self.config.get('branding', {}).copy()
+                branding['anchor_video_path'] = anchor_video_path
+
                 video_path = f"automation/storage/news_breaking_{item['hash'][:8]}.mp4"
                 self.vgen_shorts.create_shorts(
                     script, 
@@ -87,7 +101,7 @@ class NepaliNewsPipeline(BasePipeline):
                     word_offsets=word_offsets, 
                     media_paths=[], 
                     template_mode=True,
-                    branding=self.config.get('branding')
+                    branding=branding
                 )
                 
                 if not is_test:
