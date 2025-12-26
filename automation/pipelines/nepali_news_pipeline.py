@@ -67,11 +67,16 @@ class NepaliNewsPipeline(BasePipeline):
                 seen_headlines_this_run.add(h_hash)
 
         count = 0
-        for item in unique_breaking:
-            # Check both content hash and headline hash for maximum safety
+        for i, item in enumerate(unique_breaking):
+            # In test mode, we allow processing already posted news to verify the pipeline
+            # We limit to 1 item in test mode to save time/resources
+            if is_test and i >= 1: break
+            
             h_hash = item.get('headline_hash', item['hash'])
-            if item['hash'] not in posted_hashes and h_hash not in posted_hashes:
-                print(f"New Breaking: {item['headline']}")
+            is_new = item['hash'] not in posted_hashes and h_hash not in posted_hashes
+            
+            if is_test or is_new:
+                print(f"{'[TEST] ' if is_test else ''}Processing Breaking: {item['headline']}")
                 script = self.script_writer.rewrite_for_shorts(item['headline'], item['content'])
                 
                 audio_path = f"automation/storage/news_breaking_{item['hash'][:8]}.mp3"
