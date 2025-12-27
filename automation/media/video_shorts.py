@@ -333,15 +333,17 @@ class VideoShortsGenerator:
             try:
                 music_path = random.choice(music_files)
                 print(f"Using background music: {music_path}")
-                # Use 0.04 volume as requested
-                bg_music = AudioFileClip(music_path).volumex(0.04).set_duration(duration)
+                bg_music = AudioFileClip(music_path).volumex(0.04)
+                
+                # Loop if too short
+                if bg_music.duration < duration:
+                    bg_music = bg_music.fx(afx.audio_loop, duration=duration)
+                else:
+                    bg_music = bg_music.subclip(0, duration)
                 
                 # Gentle fades (2 seconds)
                 if bg_music.duration > 4:
                     bg_music = bg_music.audio_fadein(2).audio_fadeout(2)
-                
-                if bg_music.duration < duration: 
-                    bg_music = bg_music.fx(afx.audio_loop, duration=duration)
                 
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 # Boost voice slightly for crystal clarity

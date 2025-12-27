@@ -13,6 +13,14 @@ class YouTubeUploader:
             print("YouTube service not initialized.")
             return None
 
+        # Sanitize description
+        if description:
+            # YouTube API errors on < and > in descriptions
+            description = description.replace("<", "").replace(">", "")
+            # Truncate if too long (5000 is limit, keep safety margin)
+            if len(description) > 4900:
+                description = description[:4900] + "..."
+
         body = {
             'snippet': {
                 'title': title,

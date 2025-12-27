@@ -75,7 +75,17 @@ class LipSyncEngine:
     def _ensure_setup(self):
         """Checks for repo and model, downloads if necessary."""
         # 1. Clone Repo
-        if not os.path.exists(self.wav2lip_dir):
+        inference_script = os.path.join(self.wav2lip_dir, "inference.py")
+        if not os.path.exists(inference_script):
+            if os.path.exists(self.wav2lip_dir):
+                # If directory exists but script is missing, it might be a partial clone or cache
+                print(f"Wav2Lip directory exists but inference.py is missing. Re-cloning...")
+                import shutil
+                try:
+                    shutil.rmtree(self.wav2lip_dir)
+                except Exception as e:
+                    print(f"Warning: Could not remove existing Wav2Lip dir: {e}")
+            
             print(f"Cloning Wav2Lip repository from {self.repo_url}...")
             subprocess.run(["git", "clone", self.repo_url, self.wav2lip_dir], check=True)
         
