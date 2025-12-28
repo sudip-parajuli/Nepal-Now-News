@@ -180,8 +180,8 @@ class ScriptWriter:
         is_ocean = any(kw in extra_context.lower() for kw in ["ocean", "sea", "underwater", "marine", "reef"])
         
         all_keywords = []
-        # Limit to 6 segments for variety without excessive API calls
-        for seg in segments[:6]: 
+        # Limit to 15 segments for variety without excessive API calls
+        for seg in segments[:15]: 
             theme_hint = ""
             if is_space:
                 theme_hint = "Priority: JWST deep field, Hubble nebula, SDO solar flare, black hole animation, exoplanet visualization, planetary surface."

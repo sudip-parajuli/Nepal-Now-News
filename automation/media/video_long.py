@@ -153,7 +153,7 @@ class VideoLongGenerator:
         elif media_paths and len(media_paths) > 0:
             # Multi-media background (e.g. Science long form)
             transition_time = total_duration / len(media_paths)
-            transition_time = max(min(transition_time, 8.0), 4.0) 
+            transition_time = max(min(transition_time, 6.0), 3.0) 
             
             for i, m_path in enumerate(media_paths):
                 if os.path.exists(m_path):
@@ -163,6 +163,10 @@ class VideoLongGenerator:
                         if start_time >= total_duration: break
                         
                         dur = min(transition_time, total_duration - start_time)
+                        # Add a small overlap for crossfade if not the last clip
+                        overlap = 0.5
+                        if i < len(media_paths) - 1:
+                            dur += overlap
                         
                         if is_video:
                             clip = VideoFileClip(m_path).without_audio()
@@ -184,12 +188,17 @@ class VideoLongGenerator:
                         if not is_video:
                             # Apply a stronger zoom-in effect (1.0 to 1.15)
                             clip = clip.resize(lambda t: 1.0 + 0.15 * (t / dur))
+                        
+                        # Apply crossfade if not the first clip
+                        if i > 0:
+                            clip = clip.crossfadein(overlap)
+                        
                         bg_clips.append(clip)
                     except Exception as e:
                         print(f"Error processing media {m_path}: {e}")
             
             if bg_clips:
-                actual_bg_dur = sum([c.duration for c in bg_clips])
+                actual_bg_dur = sum([c.duration - overlap if i < len(bg_clips)-1 else c.duration for i, c in enumerate(bg_clips)])
                 if actual_bg_dur < total_duration:
                     bg_clips[-1] = bg_clips[-1].set_duration(total_duration - bg_clips[-1].start)
         

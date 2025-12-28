@@ -82,7 +82,7 @@ class SciencePipeline(BasePipeline):
         print(f"Expanded Script generated (~{len(script.split())} words).")
         
         # 3. Fetch Media (More for long form)
-        media_paths = await self._fetch_media(topic, script, count_per_kw=2)
+        media_paths = await self._fetch_media(topic, script, count_per_kw=3)
             
         # 4. Generate Audio
         male_voice = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
@@ -126,8 +126,7 @@ class SciencePipeline(BasePipeline):
         img_paths = self.image_fetcher.fetch_multi_images(img_kw, "science_temp", topic_context=topic)
         media_paths.extend(img_paths)
         
-        # Shuffle to mix videos and images
-        random.shuffle(media_paths)
+        
         return media_paths
 
     async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True):
