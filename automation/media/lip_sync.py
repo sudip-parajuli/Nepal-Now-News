@@ -30,6 +30,8 @@ class LipSyncEngine:
 
         try:
             self._ensure_setup()
+            # Ensure Wav2Lip 'temp' directory exists (critical for intermediate FFmpeg files)
+            os.makedirs("temp", exist_ok=True)
         except Exception as e:
             print(f"Setup failed: {e}. Falling back to static.")
             return self._create_static_fallback(face_path, audio_path, output_path)
