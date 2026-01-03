@@ -354,7 +354,7 @@ class VideoShortsGenerator:
         else:
             final_audio = audio
         
-        final_video = CompositeVideoClip(clips, size=self.size).set_audio(final_audio)
+        final_video = CompositeVideoClip(clips, size=self.size).set_audio(final_audio).set_duration(duration)
         final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, preset='ultrafast', logger=None)
 
     def _wrap_text(self, text, width):

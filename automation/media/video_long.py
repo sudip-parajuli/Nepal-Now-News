@@ -208,168 +208,113 @@ class VideoLongGenerator:
         final_bg = CompositeVideoClip(bg_clips, size=self.size)
         caption_clips = []
         
-        # Word-level chunking logic (port from shorts for consistency)
-        # Sentence-level chunking logic
-        # 1. Reconstruct full text from offsets
-        full_text = " ".join([w['word'] for w in word_offsets])
+        # Line-level chunking logic (One line at a time, max ~30 chars)
+        lines = []
+        current_line = []
+        current_line_len = 0
+        MAX_CHARS_PER_LINE = 35 # Adjust for readability (approx 5-7 words)
         
-        # 2. Split into sentences (simple heuristic)
-        import re
-        # Split on .!?| but keep the delimiter attached to the previous sentence if possible, 
-        # or just split and reconstruct. 
-        # Regex split with capture group to keep delimiters
-        sentences_raw = re.split(r'([.!?।|])', full_text)
-        
-        sentences = []
-        current_sent = ""
-        for part in sentences_raw:
-            current_sent += part
-            if re.match(r'[.!?।|]', part):
-                sentences.append(current_sent.strip())
-                current_sent = ""
-        if current_sent: sentences.append(current_sent.strip())
-        
-        # 3. Map word offsets to sentences
-        current_word_idx = 0
-        sentence_chunks = []
-        
-        for sent_text in sentences:
-            sent_words = sent_text.split()
-            chunk_words = []
-            matched_count = 0
+        for w in word_offsets:
+            w_len = len(w['word'])
+            if current_line and (current_line_len + w_len + 1 > MAX_CHARS_PER_LINE):
+                lines.append(current_line)
+                current_line = []
+                current_line_len = 0
             
-            # Greedy match words from offsets
-            while current_word_idx < len(word_offsets) and matched_count < len(sent_words):
-                # We assume TTS words match loosely with script words
-                # Just take the next N words corresponding to sentence length
-                chunk_words.append(word_offsets[current_word_idx])
-                current_word_idx += 1
-                matched_count += 1
-            
-            if chunk_words:
-                sentence_chunks.append(chunk_words)
+            current_line.append(w)
+            current_line_len += w_len + 1
+        if current_line: lines.append(current_line)
+
+        # Render Captions
+        FONT_SIZE = 75 # Larger for single line clarity
+        BOTTOM_MARGIN = 150 # Position from bottom
         
-        # 4. Render Sentence Captions
-        FONT_SIZE = 55 # Slightly smaller for full sentences
-        BOTTOM_MARGIN = 100
-        
-        for chunk in sentence_chunks:
+        for chunk in lines:
             if not chunk: continue
             
             chunk_start = chunk[0]['start']
             chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
             
-            # Ensure minimum duration visibility (e.g. 1.5s)
-            if chunk_end - chunk_start < 1.0:
-                 chunk_end = chunk_start + 1.5
+            # Ensure minimum visibility
+            if chunk_end - chunk_start < 0.5:
+                 chunk_end = chunk_start + 1.0
 
             chunk_text = " ".join([w['word'] for w in chunk])
             is_nepali = any(ord(c) > 127 for c in chunk_text)
             
             try:
-                # Render full sentence base (White) at bottom center
-                # Wrap text if too long
-                wrapped_lines = self.wrap_text(chunk_text, max_chars=60)
-                full_sent_text = "\n".join(wrapped_lines)
-                
-                base_txt = self.get_pillow_text_clip(full_sent_text, FONT_SIZE, 'white', bg=(0,0,0,180), stroke_width=2)
+                # 1. Render LINE BASE (White)
+                # We render the whole line centered.
+                base_txt = self.get_pillow_text_clip(chunk_text, FONT_SIZE, 'white', bg=(0,0,0,180), stroke_width=2)
                 
                 if base_txt:
                     base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start)
-                    # Position at bottom
                     txt_w, txt_h = base_txt.size
                     pos_y = self.size[1] - txt_h - BOTTOM_MARGIN
                     base_txt = base_txt.set_position(('center', pos_y))
                     caption_clips.append(base_txt)
                     
-                    # Karaoke Highlight (Yellow)
-                    # We need to calculate position of each word relative to the base clip
-                    # This is complex with Pillow wrapping. 
-                    # SIMPLIFIED APPROACH: Just highlight the current word individually ON TOP of the base text?
-                    # No, that might misalign.
-                    # BETTER APPROACH: Re-render the specific word in Yellow at the *approximate* correct position?
-                    # OR: Just show active word in a separate "Active" area? 
-                    # User asked for: "word spoken sometimes fall behind the kareoke caption. We can show 1 sentence caption at a time... and once whole sentence read, go to next."
-                    # The user implies the *sentence* should stay. The "karaoke" part (highlighting) was problematic.
-                    # Let's sticking to showing the full sentence.
-                    # To fix "word specific highlighting", we can try a mask or reuse the layout logic.
-                    # Given complexity, let's implement the "Show 1 sentence at a time" first as a solid base.
-                    # If we want highlighting, we can try to overlay the highlighted word.
+                    # 2. Render HIGHLIGHTS (Yellow) - Overlay exactly
+                    # To overlap perfectly, we must calculate the X offset of each word *within* the rendered base line.
+                    # Base clip has padding: h_pad=90, v_pad=20 (from provided layout logic).
+                    # Text starts at (90, 20) inside the clip.
+                    # Clip is centered on screen: Screen_X = (1920 - Clip_W) / 2
                     
-                    # Let's try to overlay the "current word" in Yellow. 
-                    # We need exact (x,y) of the word in the wrapped text.
-                    # Since wrap_text does simple logic, we can simulate layout.
+                    base_screen_x = (self.size[0] - txt_w) // 2
+                    base_screen_y = pos_y
                     
-                    curr_x, curr_y = 90, 20 # Initial padding from get_pillow_text_clip
-                    line_idx = 0
+                    text_start_x = base_screen_x + 90 # Where text actually starts drawing
+                    text_start_y = base_screen_y + 20
                     
-                    # Re-flow to find positions
-                    words_in_sent = chunk_text.split()
-                    
-                    # We need a font object to measure
+                    # Load font to measure offsets
+                    # We reuse logic from get_pillow_text_clip to ensure matching metrics
                     l_font = self._load_best_font(FONT_SIZE, text=chunk_text)
                     
-                    current_line_width = 0
-                    current_line_words = []
+                    cursor_x_offset = 0
                     
-                    # Re-calculate wrapping to get lines exactly
-                    wrapped_lines_words = [] 
-                    temp_line = []
-                    temp_len = 0
-                    for w in words_in_sent:
-                        if temp_len + len(w) + 1 <= 60:
-                            temp_line.append(w)
-                            temp_len += len(w) + 1
-                        else:
-                            wrapped_lines_words.append(temp_line)
-                            temp_line = [w]
-                            temp_len = len(w)
-                    if temp_line: wrapped_lines_words.append(temp_line)
-                    
-                    # Now match offsets to wrapped lines
-                    w_global_idx = 0
-                    for l_idx, line_words in enumerate(wrapped_lines_words):
-                        # Measure line width for centering correction if needed? 
-                        # get_pillow_text_clip centers the text block itself on screen, but text inside is left-aligned usually?
-                        # Wait, get_pillow_text_clip draws text at (h_pad, v_pad). It doesn't center align lines *internal* to the clip unless we do it.
-                        # Assuming left/standard align inside the box.
+                    for i, w_info in enumerate(chunk):
+                        word = w_info['word']
                         
-                        line_str = " ".join(line_words)
-                        curr_x = 90 # Reset X for new line
-                        curr_y = 20 + (l_idx * max(FONT_SIZE, l_font.getbbox("A")[3] - l_font.getbbox("A")[1] + 10)) # Simple line height
+                        # Measure this word
+                        word_len = l_font.getlength(word)
+                        space_len = l_font.getlength(" ") if i < len(chunk) - 1 else 0
                         
-                        for w_word in line_words:
-                            if w_global_idx >= len(chunk): break
-                            
-                            w_info = chunk[w_global_idx]
-                            w_global_idx += 1
-                            
-                            w_len = l_font.getlength(w_word)
-                            
-                            # Render Highlight Word
-                            # We need absolute position on screen.
-                            # Base clip pos: ('center', pos_y) -> X = (1920 - txt_w)/2, Y = pos_y
-                            base_x = (self.size[0] - txt_w) // 2
-                            
-                            abs_x = base_x + curr_x
-                            abs_y = pos_y + curr_y
-                            
+                        # Highlight Word Text Clip
+                        # We render JUST the word in Yellow.
+                        # Important: get_pillow_text_clip adds its own padding (90, 20)!
+                        # If we use get_pillow_text_clip for the Highlight, we must position it such that 
+                        # its text aligns with the base text.
+                        # Easier strategy: Render word with transparent background?
+                        # Or adjust position by subtracting padding.
+                        
+                        h_clip = self.get_pillow_text_clip(word, FONT_SIZE, 'yellow', bg=None, stroke_width=2)
+                        
+                        if h_clip:
                             h_start = max(chunk_start, w_info['start'])
                             h_dur = w_info['duration']
+                            if h_dur <= 0: h_dur = 0.2
                             
-                            if h_dur > 0:
-                                h_clip = self.get_pillow_text_clip(w_word, FONT_SIZE, 'yellow', bg=None, stroke_width=2)
-                                # We need to crop/trim the padding from get_pillow_text_clip to overlay exactly?
-                                # Actually get_pillow_text_clip returns a clip with padding (90, 20). 
-                                # If we overlay it at (abs_x - 90, abs_y - 20), it should align perfectly IF fonts/rendering match exactly.
-                                if h_clip:
-                                    h_clip = h_clip.set_start(h_start).set_duration(h_dur).set_position((abs_x - 90, abs_y - 20))
-                                    caption_clips.append(h_clip)
+                            # Position Calculation
+                            # Target Screen X for this word = text_start_x + cursor_x_offset
+                            # h_clip draws text at (90, 20)
+                            # So Top-Left of h_clip should be at:
+                            # X = (Target Screen X) - 90
+                            # Y = (text_start_y) - 20 = base_screen_y
                             
-                            curr_x += w_len + l_font.getlength(" ") # Advance X
+                            target_x = text_start_x + cursor_x_offset - 90
+                            target_y = base_screen_y
+                            
+                            h_clip = h_clip.set_start(h_start).set_duration(h_dur).set_position((target_x, target_y))
+                            caption_clips.append(h_clip)
+                        
+                        cursor_x_offset += word_len + space_len
 
             except Exception as e:
-                print(f"Sentence Caption Error: {e}") 
+                print(f"Karaoke Render Error: {e}") 
+        
+        # Cleanup
+        chunk = None
+ 
         
         # Remove old loop variables locally to avoid confusion
         chunk = None
