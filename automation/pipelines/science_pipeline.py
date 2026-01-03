@@ -46,6 +46,8 @@ class SciencePipeline(BasePipeline):
         elif mode == "daily":
             await self._run_daily(topic, is_test)
         
+        # Cleanup temporary files
+        self.cleanup_storage()
         print(f"--- Science Pipeline [{mode}] Completed ---")
 
     async def _run_shorts(self, topic: str, is_test: bool):

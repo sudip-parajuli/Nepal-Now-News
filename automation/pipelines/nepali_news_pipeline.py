@@ -51,6 +51,8 @@ class NepaliNewsPipeline(BasePipeline):
         elif mode == "daily" or mode == "storytelling":
             await self._run_storytelling(is_test)
         
+        # Cleanup temporary files
+        self.cleanup_storage()
         print(f"--- News Pipeline [{mode}] Completed ---")
 
     async def _run_breaking(self, news_items: List[Dict], is_test: bool):
