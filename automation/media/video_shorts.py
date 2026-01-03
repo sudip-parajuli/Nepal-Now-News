@@ -315,7 +315,7 @@ class VideoShortsGenerator:
         
         if is_science:
             # Check both possible science music directories
-            science_music_dirs = ["automation/musics/science", "automation/music/science"]
+            science_music_dirs = ["automation/music/science"]
             for sdir in science_music_dirs:
                 if os.path.exists(sdir):
                     music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
@@ -324,8 +324,8 @@ class VideoShortsGenerator:
         # If not science, or if science music was missing (failsafe), check other folders
         # CRITICAL: If is_science is True, we DO NOT fall back to News music.
         if not is_science:
-            # Check plural 'musics' first
-            music_files = glob.glob("music/*.mp3") + glob.glob("automation/musics/*.mp3")
+            # Check new 'news' directory
+            music_files = glob.glob("automation/music/news/*.mp3") + glob.glob("automation/music/*.mp3")
             if not music_files: # Fallback to singular just in case
                 music_files = glob.glob("automation/music/*.mp3")
 

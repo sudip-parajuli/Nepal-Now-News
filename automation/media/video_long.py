@@ -380,8 +380,8 @@ class VideoLongGenerator:
         music_files = []
         
         if is_science:
-            # Check both possible science music directories
-            science_music_dirs = ["automation/musics/science", "automation/music/science"]
+            # Check both possible science music directories (legacy support + new)
+            science_music_dirs = ["automation/music/science"]
             for sdir in science_music_dirs:
                 if os.path.exists(sdir):
                     music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
@@ -390,7 +390,7 @@ class VideoLongGenerator:
             
         if not is_science:
             # News logic: Fallback through various folders
-            music_files = glob.glob("music/*.mp3") + glob.glob("automation/music/*.mp3") + glob.glob("automation/musics/news/*.mp3")
+            music_files = glob.glob("automation/music/news/*.mp3") + glob.glob("automation/music/*.mp3")
         
         if music_files:
             try:
