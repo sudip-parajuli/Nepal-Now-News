@@ -60,6 +60,13 @@ class TTSEngine:
     async def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None):
         text = text.strip()
         
+        if not text:
+            return output_path, []
+
+        # 1. Normalize Decimals (e.g. "4.5" -> "4 point 5") BEFORE generic punctuation handling
+        # This prevents "4." being treated as a sentence end.
+        text = re.sub(r'(\d+)\.(\d+)', r'\1 point \2', text)
+
         # Detection: If text contains Devanagari, apply Nepali normalization
         if re.search(r'[\u0900-\u097F]', text):
             abbreviations = {
@@ -77,13 +84,10 @@ class TTSEngine:
                 text = re.sub(abbr, full, text)
             text = re.sub(r'([।.,!?])(?=[^\s])', r'\1 ', text)
         else:
-            # English specific normalization if needed (e.g., standardizing Dr. etc)
+            # English specific normalization
             text = re.sub(r'([.,!?])(?=[^\s])', r'\1 ', text)
 
         text = re.sub(r'\s+', ' ', text)
-        
-        if not text:
-            return output_path, []
 
         voice = voice or self.voice_map.get("female")
         print(f"DEBUG: TTSEngine communicating with voice: {voice} (Rate: {rate or self.rate}, Pitch: {pitch or self.pitch})")

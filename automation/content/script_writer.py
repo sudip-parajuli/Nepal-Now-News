@@ -168,54 +168,32 @@ class ScriptWriter:
 
     def generate_image_keywords(self, text: str, extra_context: str = "Science") -> List[str]:
         """
-        Generates a list of keywords for different segments of the text to provide visual variety.
-        Strictly excludes humans and names for the Science channel.
+        Generates a list of specific visual search terms for the script.
+        Uses the LLM to analyze the entire text and produce timed visual cues.
         """
-        # Split by sentence or paragraph
-        segments = [s.strip() for s in re.split(r'[।.\n]', text) if len(s.strip()) > 30]
-        if not segments: segments = [text]
+        prompt = f"""
+        Analyze this science script and generate 10-15 SPECIFIC, VIVID, and CONCRETE visual search terms for Pexels/Storyblocks.
         
-        # Detect theme from extra_context for better keyword injection
-        is_space = any(kw in extra_context.lower() for kw in ["space", "universe", "galaxy", "nasa", "star", "planet"])
-        is_ocean = any(kw in extra_context.lower() for kw in ["ocean", "sea", "underwater", "marine", "reef"])
-        
-        all_keywords = []
-        # Limit to 15 segments for variety without excessive API calls
-        for seg in segments[:15]: 
-            theme_hint = ""
-            if is_space:
-                theme_hint = "Priority: JWST deep field, Hubble nebula, SDO solar flare, black hole animation, exoplanet visualization, planetary surface."
-            elif is_ocean:
-                theme_hint = "Priority: Underwater 4k, Vibrant Coral Reefs, Deep-Sea Bioluminescence, Surface Waves, Underwater Light Rays."
+        Script: "{text[:2000]}..." 
+        Context: {extra_context}
 
-            prompt = f"""
-            Extract a single, concrete, 2-word visual subject from this text for a SCIENCE documentary.
-            Text: "{seg}"
-            Context: {extra_context}
-            {theme_hint}
-
-            CRITICAL RULES:
-            - NO HUMANS, NO FACES, NO PEOPLE, NO HANDS.
-            - NO NAMES OF PERSONS or CEOs.
-            - NO INTERVIEWS or HOSTS.
-            - If the text mentions a person, EXTRACT THE SCIENTIFIC OBJECT or PHENOMENON.
-            - For Space: Use mission names like 'JWST', 'Hubble', or terms like 'Galaxy animation'.
-            - For Oceans: Use terms like 'Underwater 4k' or 'Coral Reef'.
-            - Output ONLY the 2-word subject.
-            """
-            try:
-                keywords = self._call_with_retry(prompt)
-                clean_kw = keywords.replace('"', '').replace('Subject:', '').strip().split('\n')[0].strip()
-                # Final check to strip names if LLM failed
-                if clean_kw: 
-                    all_keywords.append(clean_kw)
-            except:
-                continue
+        Requirements:
+        1. Terms must be ready-to-search queries (e.g. "glowing bioluminescent jellyfish 4k", "Hubble telescope nebula deep space", "time lapse plant growth").
+        2. NO HUMANS, NO FACES, NO PEOPLE, NO TEXT.
+        3. Prioritize cinematic, 4k, macro, or animation styles.
+        4. Focus on the distinct segments of the script (Intro, Body, Conclusion).
+        5. Return ONLY the search terms, one per line.
+        """
         
-        if not all_keywords:
-            default_kw = f"{extra_context} cinematic"
-            if is_space: default_kw = "Deep Space Nebula"
-            elif is_ocean: default_kw = "Underwater Bioluminescence"
-            return [default_kw]
-        
-        return all_keywords
+        try:
+            response = self._call_with_retry(prompt)
+            keywords = [line.strip().replace('"', '').replace('- ', '') for line in response.split('\n') if line.strip() and not line.lower().startswith("here")]
+            
+            # Fallback if LLM fails
+            if not keywords:
+                keywords = [f"{extra_context} cinematic 4k"] * 5
+                
+            return keywords[:15] # Limit to 15 items
+        except Exception as e:
+            print(f"Keyword Gen Error: {e}")
+            return [f"{extra_context} science background"] * 5
