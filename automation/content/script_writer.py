@@ -71,7 +71,33 @@ class ScriptWriter:
         End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
         """
         script = self._call_with_retry(prompt)
+        script = self._call_with_retry(prompt)
         return self.clean_script(script)
+
+    def analyze_sentiment(self, headline: str, content: str) -> str:
+        """
+        Analyzes the sentiment of the news to determine if it is GOOD/HAPPY or NEUTRAL/BAD.
+        Returns: 'HAPPY' or 'NEUTRAL'
+        """
+        prompt = f"""
+        Analyze the sentiment of this news for an AI news anchor expression.
+        
+        Headline: {headline}
+        Content: {content}
+        
+        Classify as:
+        - "HAPPY": If the news is positive, uplifting, about achievements, festivals, winning, or good progress.
+        - "NEUTRAL": If the news is serious, sad, about politics, crime, accidents, death, or general information.
+        
+        RETURN ONLY THE WORD "HAPPY" OR "NEUTRAL".
+        """
+        try:
+            result = self._call_with_retry(prompt).strip().upper()
+            if "HAPPY" in result: return "HAPPY"
+            return "NEUTRAL"
+        except Exception as e:
+            print(f"Sentiment Analysis Failed: {e}")
+            return "NEUTRAL" # Default to neutral on error
 
     def generate_science_facts(self, topic: str) -> str:
         prompt = f"""

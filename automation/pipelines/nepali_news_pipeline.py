@@ -89,7 +89,20 @@ class NepaliNewsPipeline(BasePipeline):
                     continue
 
                 # AI News Anchor Integration
-                anchor_image = "automation/media/assets/anchor_nepali.png"
+                # 1. Analyze Sentiment
+                sentiment = self.script_writer.analyze_sentiment(item['headline'], item['content'])
+                print(f"DEBUG: Sentiment classified as: {sentiment}")
+
+                # 2. Select Image
+                anchor_image = "automation/media/assets/anchor_neutral.png"
+                if sentiment == "HAPPY":
+                     anchor_image = "automation/media/assets/anchor_nepali.png"
+                
+                # 3. Fallback if neutral image is missing
+                if not os.path.exists(anchor_image):
+                    print(f"WARNING: Preferred anchor image {anchor_image} not found. Falling back to default.")
+                    anchor_image = "automation/media/assets/anchor_nepali.png"
+
                 anchor_video_path = f"automation/storage/anchor_{item['hash'][:8]}.mp4"
                 
                 # Generate Lip-Synced Anchor Video
