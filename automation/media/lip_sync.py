@@ -99,6 +99,24 @@ class LipSyncEngine:
         os.makedirs(os.path.dirname(self.detector_path), exist_ok=True)
         self._download_if_missing(self.detector_url, self.detector_path, "Face Detector (S3FD)")
 
+        # 4. Patch audio.py for librosa > 0.10 compatibility
+        audio_py_path = os.path.join(self.wav2lip_dir, "audio.py")
+        if os.path.exists(audio_py_path):
+            with open(audio_py_path, 'r') as f:
+                content = f.read()
+            
+            # The specific offending line in Wav2Lip/audio.py is:
+            # return librosa.filters.mel(hp.sample_rate, hp.n_fft, n_mels=hp.num_mels,
+            # We replace it with keyword arguments to satisfy librosa 0.10+
+            old_code = "return librosa.filters.mel(hp.sample_rate, hp.n_fft, n_mels=hp.num_mels,"
+            new_code = "return librosa.filters.mel(sr=hp.sample_rate, n_fft=hp.n_fft, n_mels=hp.num_mels,"
+            
+            if old_code in content:
+                print("Patching Wav2Lip audio.py for librosa compatibility...")
+                content = content.replace(old_code, new_code)
+                with open(audio_py_path, 'w') as f:
+                    f.write(content)
+
     def _download_if_missing(self, url: str, path: str, name: str):
         if not os.path.exists(path) or os.path.getsize(path) < 1000000: # < 1MB check
             print(f"Downloading {name} model weights...")

@@ -51,42 +51,42 @@ class VideoShortsGenerator:
                 bg_clips.append(anchor_img)
                 anchor_added = True
 
-            # 3. Branding Layer (TOP LEFT) - Must be added AFTER anchor to be visible
-            if os.path.exists(logo_path):
-                logo = ImageClip(logo_path).set_duration(duration)
-                logo = logo.resize(height=100) # Slightly smaller for corner
-                logo = logo.set_position((40, 40)) # Top-Left
-                bg_clips.append(logo)
-                
-                if channel_name:
-                    from PIL import Image, ImageDraw, ImageFont
-                    import numpy as np
-                    
-                    font_size = 55 # Proportionate to 100px logo
-                    header_font = None
-                    possible_fonts = [
-                        "automation/media/assets/NotoSansDevanagari-Regular.ttf",
-                        "C:\\Windows\\Fonts\\arialbd.ttf"
-                    ]
-                    for pf in possible_fonts:
-                        if os.path.exists(pf):
-                            try:
-                                header_font = ImageFont.truetype(pf, font_size)
-                                break
-                            except: continue
-                    
-                    if not header_font: header_font = ImageFont.load_default()
-                    
-                    bbox = ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), channel_name, font=header_font)
-                    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                    name_img = Image.new('RGBA', (tw + 20, th + 20), (0,0,0,0))
-                    ImageDraw.Draw(name_img).text((10, 10), channel_name, font=header_font, fill='white', stroke_width=2, stroke_fill='black')
-                    
-                    name_clip = ImageClip(np.array(name_img)).set_duration(duration)
-                    # Position next to logo (logo height is 100, x is 40 + width + padding)
-                    logo_w = logo.size[0]
-                    name_clip = name_clip.set_position((40 + logo_w + 20, 55))
-                    bg_clips.append(name_clip)
+            # 3. Branding Layer (TOP LEFT) - REMOVED as per user request (logo is in anchor image)
+            # if os.path.exists(logo_path):
+            #     logo = ImageClip(logo_path).set_duration(duration)
+            #     logo = logo.resize(height=100) # Slightly smaller for corner
+            #     logo = logo.set_position((40, 40)) # Top-Left
+            #     bg_clips.append(logo)
+            #     
+            #     if channel_name:
+            #         from PIL import Image, ImageDraw, ImageFont
+            #         import numpy as np
+            #         
+            #         font_size = 55 # Proportionate to 100px logo
+            #         header_font = None
+            #         possible_fonts = [
+            #             "automation/media/assets/NotoSansDevanagari-Regular.ttf",
+            #             "C:\\Windows\\Fonts\\arialbd.ttf"
+            #         ]
+            #         for pf in possible_fonts:
+            #             if os.path.exists(pf):
+            #                 try:
+            #                     header_font = ImageFont.truetype(pf, font_size)
+            #                     break
+            #                 except: continue
+            #         
+            #         if not header_font: header_font = ImageFont.load_default()
+            #         
+            #         bbox = ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), channel_name, font=header_font)
+            #         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            #         name_img = Image.new('RGBA', (tw + 20, th + 20), (0,0,0,0))
+            #         ImageDraw.Draw(name_img).text((10, 10), channel_name, font=header_font, fill='white', stroke_width=2, stroke_fill='black')
+            #         
+            #         name_clip = ImageClip(np.array(name_img)).set_duration(duration)
+            #         # Position next to logo (logo height is 100, x is 40 + width + padding)
+            #         logo_w = logo.size[0]
+            #         name_clip = name_clip.set_position((40 + logo_w + 20, 55))
+            #         bg_clips.append(name_clip)
         
         elif media_paths and len(media_paths) > 0:
             transition_time = duration / len(media_paths) if len(media_paths) > 0 else 4.0
