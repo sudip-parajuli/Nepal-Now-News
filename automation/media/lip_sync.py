@@ -54,10 +54,9 @@ class LipSyncEngine:
                 else:
                     video_clip = video_clip.subclip(0, audio_dur + 0.5)
                 
-                # Resize to lower resolution (480p) to prevent Wav2Lip timeout
-                # Wav2Lip downscales to 96x96 for the face anyway, so 480p is plenty
-                if video_clip.h > 480:
-                    video_clip = video_clip.resize(height=480)
+                # Resize to lower resolution (720p) to prevent Wav2Lip timeout but keep decent quality
+                if video_clip.h > 720:
+                    video_clip = video_clip.resize(height=720)
 
                 temp_face = os.path.join("temp", "temp_face_looped.mp4")
                 video_clip.write_videofile(temp_face, codec="libx264", audio=False, logger=None)
@@ -160,14 +159,23 @@ class LipSyncEngine:
                 raise Exception(f"Failed to download {name}. Status: {r.status_code}")
 
     def _create_static_fallback(self, face_path: str, audio_path: str, output_path: str) -> str:
-        from moviepy.editor import ImageClip, AudioFileClip
+        from moviepy.editor import ImageClip, AudioFileClip, VideoFileClip
         print("Falling back to static AI Anchor video (Full Screen requested)...")
         try:
-            audio = AudioFileClip(audio_path)
-            clip = ImageClip(face_path).set_duration(audio.duration).set_audio(audio)
+            audio_clip = AudioFileClip(audio_path)
+            
+            # If input is a video (e.g. mp4), extract 1st frame as image
+            if face_path.lower().endswith(('.mp4', '.mov', '.avi')):
+                print("Extracting first frame from video for static fallback...")
+                with VideoFileClip(face_path) as v:
+                    v.save_frame("temp/fallback_frame.png", t=0)
+                face_path = "temp/fallback_frame.png"
+
+            image_clip = ImageClip(face_path).set_duration(audio_clip.duration)
+            image_clip = image_clip.set_audio(audio_clip)
             # Match the requested full-screen height (1920 for shorts)
-            clip = clip.resize(height=1920) 
-            clip.write_videofile(output_path, fps=12, codec="libx264", audio_codec="aac", logger=None, preset='ultrafast')
+            image_clip = image_clip.resize(height=1920) 
+            image_clip.write_videofile(output_path, fps=12, codec="libx264", audio_codec="aac", logger=None, preset='ultrafast')
             return output_path
         except Exception as e:
             print(f"Fallback generation failed: {e}")
