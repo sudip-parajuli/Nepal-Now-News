@@ -54,8 +54,10 @@ class LipSyncEngine:
                 else:
                     video_clip = video_clip.subclip(0, audio_dur + 0.5)
                 
-                # Resize to standard news format if needed (optional)
-                # video_clip = video_clip.resize(height=1920)
+                # Resize to lower resolution (480p) to prevent Wav2Lip timeout
+                # Wav2Lip downscales to 96x96 for the face anyway, so 480p is plenty
+                if video_clip.h > 480:
+                    video_clip = video_clip.resize(height=480)
 
                 temp_face = os.path.join("temp", "temp_face_looped.mp4")
                 video_clip.write_videofile(temp_face, codec="libx264", audio=False, logger=None)

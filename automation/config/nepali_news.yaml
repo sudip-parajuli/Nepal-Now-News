@@ -6,8 +6,9 @@ tts_voice:
   male: "ne-NP-SagarNeural"
   female: "ne-NP-HemkalaNeural"
   style: "news"
-  rate: "+0%"   # Normal speed for clarity
-  pitch: "+0Hz" # Natural pitch
+  rate: "+15%"  # Urgent Speed (User Selection)
+  pitch: "-2Hz" # Deep/Loud Pitch
+  volume: "+50%" # High Volume
 upload:
   shorts: true
   long: true

@@ -33,7 +33,8 @@ class NepaliNewsPipeline(BasePipeline):
         self.tts = TTSEngine(
             voice_map=tts_cfg, 
             rate=tts_cfg.get('rate', '+0%'), 
-            pitch=tts_cfg.get('pitch', '+0Hz')
+            pitch=tts_cfg.get('pitch', '+0Hz'),
+            volume=tts_cfg.get('volume', '+0%')
         )
         self.vgen_shorts = VideoShortsGenerator()
         self.vgen_long = VideoLongGenerator() # Keep for other uses if needed
