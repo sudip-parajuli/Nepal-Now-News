@@ -49,6 +49,8 @@ media/*.png
 !automation/musics/**/*.mp3
 !automation/musics/**/*.wav
 !automation/music/**/*.mp3
+!automation/media/assets/*.mp4
+!automation/media/assets/*.png
 *.log
 
 # IDEs
