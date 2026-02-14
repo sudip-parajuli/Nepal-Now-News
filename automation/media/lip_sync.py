@@ -54,9 +54,10 @@ class LipSyncEngine:
                 else:
                     video_clip = video_clip.subclip(0, audio_dur + 0.5)
                 
-                # Resize to lower resolution (720p) to prevent Wav2Lip timeout but keep decent quality
-                if video_clip.h > 720:
-                    video_clip = video_clip.resize(height=720)
+                # Resize to lower resolution (480p) to prevent Wav2Lip timeout
+                # 720p caused timeouts (36s video > 15min), so 480p is the safe limit for GitHub Actions
+                if video_clip.h > 480:
+                    video_clip = video_clip.resize(height=480)
 
                 temp_face = os.path.join("temp", "temp_face_looped.mp4")
                 video_clip.write_videofile(temp_face, codec="libx264", audio=False, logger=None)
