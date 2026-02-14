@@ -5,13 +5,14 @@ import re
 from typing import List, Dict
 
 class TTSEngine:
-    def __init__(self, voice_map=None, rate="+20%", pitch="+0Hz"):
+    def __init__(self, voice_map=None, rate="+20%", pitch="+0Hz", volume="+0%"):
         self.voice_map = voice_map or {
             "female": "ne-NP-HemkalaNeural",
             "male": "ne-NP-SagarNeural"
         }
         self.rate = rate
         self.pitch = pitch
+        self.volume = volume
 
     async def generate_multivocal_audio(self, segments: List[Dict], output_path: str):
         """
@@ -57,7 +58,7 @@ class TTSEngine:
 
         return output_path, all_offsets, segment_durations
 
-    async def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None):
+    async def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None, volume: str = None):
         text = text.strip()
         
         if not text:
@@ -96,7 +97,7 @@ class TTSEngine:
         
         while retry_count < MAX_RETRIES:
             try:
-                communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch)
+                communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch, volume=volume or self.volume)
                 audio_data = bytearray()
                 temp_offsets = []
                 
