@@ -27,7 +27,14 @@ class NepaliNewsPipeline(BasePipeline):
         self.classifier = NewsClassifier()
         self.script_writer = ScriptWriter(os.getenv("GEMINI_API_KEY"))
         self.image_fetcher = ImageFetcher()
-        self.tts = TTSEngine(voice_map=config['tts_voice'], rate="+15%")
+        self.image_fetcher = ImageFetcher()
+        # TTS Config: Use values from yaml or defaults
+        tts_cfg = config.get('tts_voice', {})
+        self.tts = TTSEngine(
+            voice_map=tts_cfg, 
+            rate=tts_cfg.get('rate', '+5%'), 
+            pitch=tts_cfg.get('pitch', '-5Hz')
+        )
         self.vgen_shorts = VideoShortsGenerator()
         self.vgen_long = VideoLongGenerator() # Keep for other uses if needed
         self.lip_sync = LipSyncEngine()
@@ -93,21 +100,47 @@ class NepaliNewsPipeline(BasePipeline):
                 sentiment = self.script_writer.analyze_sentiment(item['headline'], item['content'])
                 print(f"DEBUG: Sentiment classified as: {sentiment}")
 
-                # 2. Select Image
-                anchor_image = "automation/media/assets/anchor_neutral.png"
-                if sentiment == "HAPPY":
-                     anchor_image = "automation/media/assets/anchor_nepali.png"
+                # 2. Select Image/Video (Prioritize MP4 for full body animation)
+                assets_dir = "automation/media/assets"
                 
-                # 3. Fallback if neutral image is missing
-                if not os.path.exists(anchor_image):
-                    print(f"WARNING: Preferred anchor image {anchor_image} not found. Falling back to default.")
-                    anchor_image = "automation/media/assets/anchor_nepali.png"
+                # Check for specific emotion video
+                video_filename = "anchor_nepali.mp4" if sentiment == "HAPPY" else "anchor_neutral.mp4"
+                video_path = os.path.join(assets_dir, video_filename)
+                
+                # Check for specific emotion image
+                image_filename = "anchor_nepali.png" if sentiment == "HAPPY" else "anchor_neutral.png"
+                image_path = os.path.join(assets_dir, image_filename)
+                
+                anchor_source = None
+
+                # Logic: Specific Video > Any Video > Specific Image > Any Image
+                if os.path.exists(video_path):
+                    anchor_source = video_path
+                else:
+                    # Fallback: Check for ANY mp4
+                    mp4_files = [f for f in os.listdir(assets_dir) if f.endswith('.mp4') and 'anchor' in f]
+                    if mp4_files:
+                        print(f"WARNING: Preferred video {video_filename} not found. Using available video: {mp4_files[0]}")
+                        anchor_source = os.path.join(assets_dir, mp4_files[0])
+                    elif os.path.exists(image_path):
+                        anchor_source = image_path
+                    else:
+                        # Fallback: Check for ANY png
+                        png_files = [f for f in os.listdir(assets_dir) if f.endswith('.png') and 'anchor' in f]
+                        if png_files:
+                             anchor_source = os.path.join(assets_dir, png_files[0])
+                             print(f"WARNING: Preferred image {image_filename} not found. Using available image: {png_files[0]}")
+                        else:
+                             print("CRITICAL: No anchor assets found!")
+                             continue
+
+                print(f"Selected Anchor Source: {anchor_source}")
 
                 anchor_video_path = f"automation/storage/anchor_{item['hash'][:8]}.mp4"
                 
                 # Generate Lip-Synced Anchor Video
                 print(f"Generating AI Anchor for: {item['headline']}")
-                await self.lip_sync.sync(anchor_image, audio_path, anchor_video_path)
+                await self.lip_sync.sync(anchor_source, audio_path, anchor_video_path)
                 
                 # Update branding with anchor video
                 branding = self.config.get('branding', {}).copy()

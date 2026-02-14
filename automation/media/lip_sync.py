@@ -39,11 +39,38 @@ class LipSyncEngine:
         # Inference logic
         inference_script = os.path.join(self.wav2lip_dir, "inference.py")
         
+        # Helper: If face_path is a video, loop it to match audio duration
+        actual_face_path = face_path
+        if face_path.lower().endswith(('.mp4', '.mov', '.avi')):
+            try:
+                from moviepy.editor import VideoFileClip, AudioFileClip, vfx
+                audio_clip = AudioFileClip(audio_path)
+                audio_dur = audio_clip.duration
+                
+                video_clip = VideoFileClip(face_path)
+                # Loop video if shorter than audio
+                if video_clip.duration < audio_dur:
+                    video_clip = video_clip.fx(vfx.loop, duration=audio_dur + 0.5) # +0.5s buffer
+                else:
+                    video_clip = video_clip.subclip(0, audio_dur + 0.5)
+                
+                # Resize to standard news format if needed (optional)
+                # video_clip = video_clip.resize(height=1920)
+
+                temp_face = os.path.join("temp", "temp_face_looped.mp4")
+                video_clip.write_videofile(temp_face, codec="libx264", audio=False, logger=None)
+                actual_face_path = temp_face
+                video_clip.close()
+                audio_clip.close()
+                print(f"Video input detected. Looped to {audio_dur}s.")
+            except Exception as e:
+                print(f"Error looping video input: {e}. Falling back to original file.")
+
         # CPU-optimized command (mostly default, but ensure it uses CPU if no GPU)
         cmd = [
             self.python_exe, inference_script,
             "--checkpoint_path", self.checkpoint_path,
-            "--face", face_path,
+            "--face", actual_face_path,
             "--audio", audio_path,
             "--outfile", output_path,
             "--nosmooth" # Faster on CPU
