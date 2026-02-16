@@ -435,6 +435,7 @@ class VideoShortsGenerator:
                 final_audio = audio
         else:
             final_audio = audio
+        print(f"DEBUG: Audio components: {len(audio_components) if 'audio_components' in locals() else 'N/A'}")
         
         final_video = CompositeVideoClip(clips, size=self.size).set_audio(final_audio).set_duration(duration)
         print(f"DEBUG: Writing video to {output_path} with duration {duration:.2f}s and {len(clips)} clips.")

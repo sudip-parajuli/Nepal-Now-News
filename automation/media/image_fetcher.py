@@ -126,10 +126,20 @@ class ImageFetcher:
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) UserAgent'}
             response = requests.get(url, timeout=15, headers=headers)
-            if response.status_code == 200 and len(response.content) > 5000:
+            if response.status_code == 200 and len(response.content) > 1000: # Lowered min size slightly
                 with open(save_path, 'wb') as f:
                     f.write(response.content)
-                return save_path
+                
+                # VALIDATE IMAGE
+                try:
+                    from PIL import Image
+                    with Image.open(save_path) as img:
+                        img.verify() # Check for corruption
+                    return save_path
+                except Exception as e:
+                    print(f"Invalid image downloaded ({url}): {e}")
+                    os.remove(save_path)
+                    return None
         except Exception as e:
             print(f"Download Error ({url}): {e}")
         return None
