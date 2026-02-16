@@ -34,7 +34,8 @@ class NepaliNewsPipeline(BasePipeline):
             voice_map=tts_cfg, 
             rate=tts_cfg.get('rate', '+0%'), 
             pitch=tts_cfg.get('pitch', '+0Hz'),
-            volume=tts_cfg.get('volume', '+0%')
+            volume=tts_cfg.get('volume', '+0%'),
+            allow_elevenlabs=True
         )
         self.vgen_shorts = VideoShortsGenerator()
         self.vgen_long = VideoLongGenerator() # Keep for other uses if needed
@@ -105,16 +106,12 @@ class NepaliNewsPipeline(BasePipeline):
                 assets_dir = "automation/media/assets"
                 
                 # Check for specific emotion video
-                video_filename = "anchor_nepali.mp4" if sentiment == "HAPPY" else "anchor_neutral.mp4"
+                video_filename = "anchor_neutral.mp4" # Default to neutral as it's the only one available
                 video_path = os.path.join(assets_dir, video_filename)
-                
-                # Check for specific emotion image
-                image_filename = "anchor_nepali.png" if sentiment == "HAPPY" else "anchor_neutral.png"
-                image_path = os.path.join(assets_dir, image_filename)
                 
                 anchor_source = None
 
-                # Logic: Specific Video > Any Video > Specific Image > Any Image
+                # Logic: Specific Video > Any Video > Any Image
                 if os.path.exists(video_path):
                     anchor_source = video_path
                 else:
@@ -123,17 +120,9 @@ class NepaliNewsPipeline(BasePipeline):
                     if mp4_files:
                         print(f"WARNING: Preferred video {video_filename} not found. Using available video: {mp4_files[0]}")
                         anchor_source = os.path.join(assets_dir, mp4_files[0])
-                    elif os.path.exists(image_path):
-                        anchor_source = image_path
                     else:
-                        # Fallback: Check for ANY png
-                        png_files = [f for f in os.listdir(assets_dir) if f.endswith('.png') and 'anchor' in f]
-                        if png_files:
-                             anchor_source = os.path.join(assets_dir, png_files[0])
-                             print(f"WARNING: Preferred image {image_filename} not found. Using available image: {png_files[0]}")
-                        else:
-                             print("CRITICAL: No anchor assets found!")
-                             continue
+                         print("CRITICAL: No anchor assets found! Please check automation/media/assets/")
+                         continue
 
                 print(f"Selected Anchor Source: {anchor_source}")
 

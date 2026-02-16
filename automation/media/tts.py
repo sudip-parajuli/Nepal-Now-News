@@ -5,7 +5,7 @@ import re
 from typing import List, Dict
 
 class TTSEngine:
-    def __init__(self, voice_map=None, rate="+20%", pitch="+0Hz", volume="+0%"):
+    def __init__(self, voice_map=None, rate="+20%", pitch="+0Hz", volume="+0%", allow_elevenlabs=False):
         self.voice_map = voice_map or {
             "female": "ne-NP-HemkalaNeural",
             "male": "ne-NP-SagarNeural"
@@ -13,6 +13,7 @@ class TTSEngine:
         self.rate = rate
         self.pitch = pitch
         self.volume = volume
+        self.allow_elevenlabs = allow_elevenlabs
 
     async def generate_multivocal_audio(self, segments: List[Dict], output_path: str):
         """
@@ -90,47 +91,74 @@ class TTSEngine:
 
         text = re.sub(r'\s+', ' ', text)
 
-        voice = voice or self.voice_map.get("female")
-        print(f"DEBUG: TTSEngine communicating with voice: {voice} (Rate: {rate or self.rate}, Pitch: {pitch or self.pitch})")
-        MAX_RETRIES = 3
-        retry_count = 0
-        
-        while retry_count < MAX_RETRIES:
-            try:
-                communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch, volume=volume or self.volume)
-                audio_data = bytearray()
-                temp_offsets = []
-                
-                async for chunk in communicate.stream():
-                    ctype = chunk.get("type") or chunk.get("Type") or "unknown"
-                    if ctype == "audio":
-                        audio_data.extend(chunk["data"])
-                    elif ctype == "WordBoundary":
-                        temp_offsets.append({
-                            "word": chunk.get("text") or chunk.get("Text"),
-                            "start": (chunk.get("offset") or chunk.get("Offset")) / 10**7,
-                            "duration": (chunk.get("duration") or chunk.get("Duration")) / 10**7
-                        })
+        # --- ELEVENLABS INTEGRATION ---
+        use_elevenlabs = self.allow_elevenlabs and (os.getenv("ELEVENLABS_API_KEY") is not None)
+        eleven_audio_generated = False
+        word_offsets = []
 
-                if audio_data and len(audio_data) > 0:
-                    with open(output_path, "wb") as f:
-                        f.write(audio_data)
-                    word_offsets = temp_offsets
-                    break # Success!
+        if use_elevenlabs:
+            try:
+                from automation.media.elevenlabs_tts import ElevenLabsTTS
+                el_tts = ElevenLabsTTS()
+                print(f"DEBUG: Attempting ElevenLabs generation for text: {text[:30]}...")
+                result_path = el_tts.generate_audio(text, output_path)
+                if result_path and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    eleven_audio_generated = True
+                    print("DEBUG: ElevenLabs generation successful.")
                 else:
-                    print(f"DEBUG: Attempt {retry_count + 1} - No audio data received for: {text[:50]}...")
+                    print("DEBUG: ElevenLabs generation returned no file or empty file.")
             except Exception as e:
-                print(f"Error during TTS streaming (Attempt {retry_count + 1}): {e}")
+                print(f"DEBUG: ElevenLabs integration failed: {e}. Falling back to Edge TTS.")
+
+        if eleven_audio_generated:
+            # ElevenLabs does not strictly return word offsets in the basic API (without extra complexity)
+            # We will use the fallback estimator for offsets since we have the audio file and text.
+            pass 
+        else:
+            # --- FALLBACK: EDGE TTS ---
+            voice = voice or self.voice_map.get("female")
+            print(f"DEBUG: TTSEngine communicating with voice: {voice} (Rate: {rate or self.rate}, Pitch: {pitch or self.pitch})")
+            MAX_RETRIES = 3
+            retry_count = 0
             
-            retry_count += 1
-            if retry_count < MAX_RETRIES:
-                await asyncio.sleep(2) # Wait before retry
+            while retry_count < MAX_RETRIES:
+                try:
+                    communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch, volume=volume or self.volume)
+                    audio_data = bytearray()
+                    temp_offsets = []
+                    
+                    async for chunk in communicate.stream():
+                        ctype = chunk.get("type") or chunk.get("Type") or "unknown"
+                        if ctype == "audio":
+                            audio_data.extend(chunk["data"])
+                        elif ctype == "WordBoundary":
+                            temp_offsets.append({
+                                "word": chunk.get("text") or chunk.get("Text"),
+                                "start": (chunk.get("offset") or chunk.get("Offset")) / 10**7,
+                                "duration": (chunk.get("duration") or chunk.get("Duration")) / 10**7
+                            })
+
+                    if audio_data and len(audio_data) > 0:
+                        with open(output_path, "wb") as f:
+                            f.write(audio_data)
+                        word_offsets = temp_offsets
+                        break # Success!
+                    else:
+                        print(f"DEBUG: Attempt {retry_count + 1} - No audio data received for: {text[:50]}...")
+                except Exception as e:
+                    print(f"Error during TTS streaming (Attempt {retry_count + 1}): {e}")
+                
+                retry_count += 1
+                if retry_count < MAX_RETRIES:
+                    await asyncio.sleep(2) # Wait before retry
         
         if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
-            print(f"CRITICAL: Failed to generate audio file at {output_path} after {MAX_RETRIES} attempts.")
+            print(f"CRITICAL: Failed to generate audio file at {output_path} after attempts.")
             return output_path, []
         
+        # Word Offset Fallback (for ElevenLabs or failed EdgeTTS offsets)
         if not word_offsets and len(text.strip()) > 0:
+            print("DEBUG: Calculating estimated word offsets...")
             from moviepy.editor import AudioFileClip
             try:
                 temp_audio = AudioFileClip(output_path)

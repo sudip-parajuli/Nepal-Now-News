@@ -71,8 +71,32 @@ class ScriptWriter:
         End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
         """
         script = self._call_with_retry(prompt)
-        script = self._call_with_retry(prompt)
+        
+        # --- PROOFREADING STEP ---
+        print("DEBUG: Proofreading script for spelling errors...")
+        script = self.proofread_script(script)
+        
         return self.clean_script(script)
+
+    def proofread_script(self, text: str) -> str:
+        """
+        Checks the Nepali script for spelling mistakes and corrects them using the LLM.
+        """
+        prompt = f"""
+        Proofread and correct the spelling/grammar of the following Nepali script.
+        
+        Script:
+        {text}
+        
+        Rules:
+        - Fix ONLY spelling and grammatical errors (e.g., 'सुरु' vs 'शुरु', 'खुसी' vs 'खुश').
+        - Retain the exact meaning and tone.
+        - DO NOT change the structure or length significantly.
+        - RETURN ONLY THE CORRECTED NEPALI TEXT.
+        """
+        corrected = self._call_with_retry(prompt)
+        # If the corrected text is empty or fails, return original
+        return corrected if corrected and "Error" not in corrected else text
 
     def analyze_sentiment(self, headline: str, content: str) -> str:
         """
