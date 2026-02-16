@@ -64,42 +64,83 @@ class ImageFetcher:
                         size="large",
                         type_image="photo"
                     )
-                    if not results: return []
-                    forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human", "man", "woman", "interview", "talking", "portrait"]
-                    filtered = []
-                    for r in results:
-                        url = r['image'].lower()
-                        title = r.get('title', '').lower()
-                        if any(f in url for f in forbidden) or any(f in title for f in forbidden):
-                            continue
-                        if url.split('.')[-1] in ['jpg', 'jpeg', 'png', 'webp']:
-                            filtered.append(r['image'])
-                    random.shuffle(filtered)
-                    return filtered[:max_results]
+                    if results:
+                        forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human", "man", "woman", "interview", "talking", "portrait"]
+                        filtered = []
+                        for r in results:
+                            url = r['image'].lower()
+                            title = r.get('title', '').lower()
+                            if any(f in url for f in forbidden) or any(f in title for f in forbidden):
+                                continue
+                            if url.split('.')[-1] in ['jpg', 'jpeg', 'png', 'webp']:
+                                filtered.append(r['image'])
+                        random.shuffle(filtered)
+                        return filtered[:max_results]
             except Exception as e:
                 print(f"DDG Search error for '{query}' (Attempt {attempt+1}/3): {e}")
-                if "Ratelimit" in str(e):
-                    time.sleep(5 * (attempt + 1)) # Wait 5, 10, 15 seconds
+                err_str = str(e).lower()
+                if "ratelimit" in err_str or "forbidden" in err_str or "403" in err_str:
+                    time.sleep(5 * (attempt + 1)) 
                 else:
-                    return []
-        return []
+                    break
+        
+        # Fallback to Wikimedia
+        print(f"DDG failed for '{query}'. Trying Wikimedia Fallback...")
+        return self._search_wikimedia(query, max_results)
+
+    def _search_wikimedia(self, query: str, max_results: int = 20) -> list:
+        try:
+            url = "https://commons.wikimedia.org/w/api.php"
+            params = {
+                "action": "query",
+                "format": "json",
+                "generator": "search",
+                "gsrnamespace": 6, # File namespace
+                "gsrsearch": f"filetype:bitmap|drawing -person -portrait {query}",
+                "gsrlimit": max_results * 2,
+                "prop": "imageinfo",
+                "iiprop": "url|extmetadata",
+            }
+            headers = {'User-Agent': 'NepalNowBot/1.0 (contact@example.com)'}
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            data = response.json()
+            
+            image_urls = []
+            pages = data.get("query", {}).get("pages", {})
+            for page_id, page in pages.items():
+                if "imageinfo" in page:
+                    img_url = page["imageinfo"][0]["url"]
+                    if img_url.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                        image_urls.append(img_url)
+            
+            random.shuffle(image_urls)
+            print(f"Wikimedia found {len(image_urls)} images for '{query}'.")
+            return image_urls[:max_results]
+        except Exception as e:
+            print(f"Wikimedia Search Error: {e}")
+            return []
 
     def _download_image(self, url: str, filename: str) -> str:
         filename = "".join([c if c.isalnum() or c in "._-" else "_" for c in filename])
         save_path = os.path.join(self.download_dir, filename)
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) UserAgent'}
-            response = requests.get(url, timeout=10, headers=headers)
+            response = requests.get(url, timeout=15, headers=headers)
             if response.status_code == 200 and len(response.content) > 5000:
                 with open(save_path, 'wb') as f:
                     f.write(response.content)
                 return save_path
-        except:
-            pass
+        except Exception as e:
+            print(f"Download Error ({url}): {e}")
         return None
 
     def fetch_image(self, query: str, filename: str) -> str:
+        # Hybrid search
         results = self._search_ddg(query)
+        # If DDG fails (and returns empty despite fallback logic above, which shouldn't happen but safe to keep)
+        if not results:
+             results = self._search_wikimedia(query)
+
         for url in results:
             path = self._download_image(url, filename)
             if path: return path
