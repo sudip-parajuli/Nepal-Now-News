@@ -437,7 +437,14 @@ class VideoShortsGenerator:
             final_audio = audio
         
         final_video = CompositeVideoClip(clips, size=self.size).set_audio(final_audio).set_duration(duration)
-        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, preset='ultrafast', logger=None)
+        print(f"DEBUG: Writing video to {output_path} with duration {duration:.2f}s and {len(clips)} clips.")
+        try:
+            final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, preset='ultrafast', logger='bar')
+        except Exception as e:
+            print(f"CRITICAL ERROR writing video: {e}")
+            import traceback
+            traceback.print_exc()
+            raise e
 
     def _wrap_text(self, text, width):
         words, lines, curr = text.split(), [], []

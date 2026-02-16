@@ -54,30 +54,35 @@ class ImageFetcher:
         else:
             search_query = f"{query} {negative_filters}"
             
-        try:
-            with DDGS() as ddgs:
-                results = ddgs.images(
-                    keywords=search_query,
-                    region="wt-wt",
-                    safesearch="on",
-                    size="large",
-                    type_image="photo"
-                )
-                if not results: return []
-                forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human", "man", "woman", "interview", "talking", "portrait"]
-                filtered = []
-                for r in results:
-                    url = r['image'].lower()
-                    title = r.get('title', '').lower()
-                    if any(f in url for f in forbidden) or any(f in title for f in forbidden):
-                        continue
-                    if url.split('.')[-1] in ['jpg', 'jpeg', 'png', 'webp']:
-                        filtered.append(r['image'])
-                random.shuffle(filtered)
-                return filtered[:max_results]
-        except Exception as e:
-            print(f"DDG Search error for '{query}': {e}")
-            return []
+        for attempt in range(3):
+            try:
+                with DDGS() as ddgs:
+                    results = ddgs.images(
+                        keywords=search_query,
+                        region="wt-wt",
+                        safesearch="on",
+                        size="large",
+                        type_image="photo"
+                    )
+                    if not results: return []
+                    forbidden = ["diagram", "chart", "graph", "vector", "drawing", "illustration", "map", "infographic", "logo", "person", "face", "human", "man", "woman", "interview", "talking", "portrait"]
+                    filtered = []
+                    for r in results:
+                        url = r['image'].lower()
+                        title = r.get('title', '').lower()
+                        if any(f in url for f in forbidden) or any(f in title for f in forbidden):
+                            continue
+                        if url.split('.')[-1] in ['jpg', 'jpeg', 'png', 'webp']:
+                            filtered.append(r['image'])
+                    random.shuffle(filtered)
+                    return filtered[:max_results]
+            except Exception as e:
+                print(f"DDG Search error for '{query}' (Attempt {attempt+1}/3): {e}")
+                if "Ratelimit" in str(e):
+                    time.sleep(5 * (attempt + 1)) # Wait 5, 10, 15 seconds
+                else:
+                    return []
+        return []
 
     def _download_image(self, url: str, filename: str) -> str:
         filename = "".join([c if c.isalnum() or c in "._-" else "_" for c in filename])
