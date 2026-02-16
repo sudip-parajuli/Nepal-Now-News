@@ -92,21 +92,28 @@ class TTSEngine:
         text = re.sub(r'\s+', ' ', text)
 
         # --- ELEVENLABS INTEGRATION ---
-        use_elevenlabs = self.allow_elevenlabs and (os.getenv("ELEVENLABS_API_KEY") is not None)
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+        use_elevenlabs = self.allow_elevenlabs and (api_key is not None)
         eleven_audio_generated = False
         word_offsets = []
 
+        if self.allow_elevenlabs and not api_key:
+             print("DEBUG: ElevenLabs allowed but API KEY missing.")
+        
         if use_elevenlabs:
             try:
                 from automation.media.elevenlabs_tts import ElevenLabsTTS
-                el_tts = ElevenLabsTTS()
+                el_voice_id = self.voice_map.get("elevenlabs_voice_id")
+                el_tts = ElevenLabsTTS(voice_id=el_voice_id)
                 print(f"DEBUG: Attempting ElevenLabs generation for text: {text[:30]}...")
                 result_path = el_tts.generate_audio(text, output_path)
                 if result_path and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                     eleven_audio_generated = True
                     print("DEBUG: ElevenLabs generation successful.")
                 else:
-                    print("DEBUG: ElevenLabs generation returned no file or empty file.")
+                    print(f"DEBUG: ElevenLabs generation returned no file or empty file. Path: {output_path}")
+            except ImportError:
+                 print("DEBUG: ElevenLabs library not installed or `elevenlabs_tts.py` missing.")
             except Exception as e:
                 print(f"DEBUG: ElevenLabs integration failed: {e}. Falling back to Edge TTS.")
 

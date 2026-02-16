@@ -13,7 +13,13 @@ class ElevenLabsTTS:
         # User didn't specify a voice ID, so we might need to list them or use a default 'Rachel' or similar, 
         # but 'eleven_multilingual_v2' model is key for Nepali.
         # "Chris" is often good for news.
-        self.voice_id = "Chris" # Placeholder, can be changed.
+    def __init__(self, voice_id=None):
+        self.api_key = os.getenv("ELEVENLABS_API_KEY")
+        if not self.api_key:
+            print("WARNING: ELEVENLABS_API_KEY not found in environment variables.")
+        self.client = ElevenLabs(api_key=self.api_key)
+        # Use passed voice_id, or env var, or default "Rachel"
+        self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
         self.model = "eleven_multilingual_v2" 
 
     def generate_audio(self, text: str, output_path: str):

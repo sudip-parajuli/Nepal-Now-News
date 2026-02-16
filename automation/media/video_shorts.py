@@ -1,5 +1,6 @@
 from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip, afx, vfx
 import os
+import sys
 import glob
 import random
 import re
@@ -9,6 +10,9 @@ class VideoShortsGenerator:
         self.size = size
 
     def create_shorts(self, text: str, audio_path: str, output_path: str, word_offsets: list = None, media_paths: list = None, branding: dict = None, template_mode: bool = False):
+
+        print(f"DEBUG: START create_shorts. Output: {output_path}")
+        sys.stdout.flush()
         """
         media_paths can contain both image and video file paths.
         branding: dict with keys like 'accent_color', 'bg_color', 'music_volume', 'logo_path', 'channel_name'
@@ -28,12 +32,14 @@ class VideoShortsGenerator:
         self.sfx_clips = []
 
         if template_mode:
+
             # 1. Base Layer (Background Color)
             bg_color = (branding or {}).get('bg_color', (15, 25, 45))
             bg_clips.append(ColorClip(size=self.size, color=bg_color, duration=duration))
             
             # 2. Anchor Layer (Full Screen)
             anchor_video_path = (branding or {}).get('anchor_video_path')
+
             anchor_added = False
             if anchor_video_path and os.path.exists(anchor_video_path):
                 print(f"Adding AI Anchor video: {anchor_video_path}")
@@ -145,65 +151,9 @@ class VideoShortsGenerator:
                 if actual_bg_dur < duration:
                     bg_clips[-1] = bg_clips[-1].set_duration(duration - bg_clips[-1].start)
     
-    def apply_sniper_zoom(self, clip, duration):
-        """Rapid zoom in (Sniper effect)."""
-        # Zoom from 1.0 to 1.5 quickly over the duration
-        return clip.resize(lambda t: 1.0 + (0.5 * (t / duration)**2))
 
-    def apply_glitch_effect(self, clip, duration):
-        """Simulates chromatic aberration (RGB split) and shake."""
-        # Simple implementation: Periodic position jitter
-        def varying_pos(t):
-            if int(t * 10) % 2 == 0: # Jitter every 0.1s
-                return (random.randint(-5, 5), random.randint(-5, 5))
-            return 'center'
-        
-        # Color inversion or tint could be done here but requires numpy intensity
-        # For now, we stick to position jitter (Shake) which is part of glitch
-        return clip.set_position(varying_pos)
 
-    def _add_sfx(self, clips, index, clip_duration):
-        """Adds SFXAudioClip if files exist."""
-        sfx_dir = "automation/media/sfx"
-        if not os.path.exists(sfx_dir): return
 
-        # Calculate start time based on index (approximate)
-        # This is tricky because clips have variable duration in the list.
-        # We need the accumulation of previous clips' duration.
-        # However, `bg_clips` in `create_shorts` are ImageClips/VideoClips.
-        # We can calculate start time from the last clip added to `clips`.
-        
-        if not clips: return
-        current_clip = clips[-1]
-        start_time = current_clip.start
-        
-        # Audio needs to be loaded
-        loaded_sfx = None
-        
-        try:
-            # 1. Riser at the very start (Index 0)
-            if index == 0:
-                riser_path = os.path.join(sfx_dir, "riser.mp3")
-                if os.path.exists(riser_path):
-                    loaded_sfx = AudioFileClip(riser_path).set_start(0).volumex(0.8)
-            
-            # 2. Transition SFX (Kick/Whoosh) for other clips
-            elif index > 0:
-                # Randomly add slide/kick
-                if random.random() < 0.6: # 60% chance
-                    sfx_files = [f for f in os.listdir(sfx_dir) if f.endswith('.mp3') and ('kick' in f or 'whoosh' in f or 'slide' in f)]
-                    if sfx_files:
-                        chosen_sfx = random.choice(sfx_files)
-                        sfx_path = os.path.join(sfx_dir, chosen_sfx)
-                        loaded_sfx = AudioFileClip(sfx_path).set_start(start_time).volumex(0.6)
-
-            if loaded_sfx:
-                if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
-                self.sfx_clips.append(loaded_sfx)
-        
-        except Exception as e:
-            print(f"SFX Error: {e}")
-        
         if not bg_clips:
             bg_clips.append(ColorClip(size=self.size, color=(15, 15, 35), duration=duration))
         
@@ -385,6 +335,8 @@ class VideoShortsGenerator:
             except:
                 pass
         
+
+        
         # Exclusively use Science music if channel_name suggests it
         music_files = []
         is_science = "science" in str(channel_name).lower()
@@ -437,14 +389,38 @@ class VideoShortsGenerator:
             final_audio = audio
         print(f"DEBUG: Audio components: {len(audio_components) if 'audio_components' in locals() else 'N/A'}")
         
+
         final_video = CompositeVideoClip(clips, size=self.size).set_audio(final_audio).set_duration(duration)
         print(f"DEBUG: Writing video to {output_path} with duration {duration:.2f}s and {len(clips)} clips.")
+        sys.stdout.flush()
+
+        
         try:
-            final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, preset='ultrafast', logger='bar')
+            # Using logger=None to avoid progress bar buffering issues in some CI environments
+            final_video.write_videofile(
+                output_path, 
+                fps=24, 
+                codec="libx264", 
+                audio_codec="aac", 
+                threads=4, 
+                preset='ultrafast', 
+                logger=None 
+            )
+            print(f"DEBUG: Video written successfully to {output_path}")
+            sys.stdout.flush()
+
+            
+            if not os.path.exists(output_path):
+                 print(f"CRITICAL: write_videofile returned but file {output_path} is missing!")
+                 sys.stdout.flush()
+
+                 
         except Exception as e:
             print(f"CRITICAL ERROR writing video: {e}")
             import traceback
             traceback.print_exc()
+            sys.stdout.flush()
+
             raise e
 
     def _wrap_text(self, text, width):
@@ -454,3 +430,62 @@ class VideoShortsGenerator:
             else: lines.append(" ".join(curr)); curr = [w]
         lines.append(" ".join(curr))
         return "\n".join(lines)
+
+    def apply_sniper_zoom(self, clip, duration):
+        """Rapid zoom in (Sniper effect)."""
+        # Zoom from 1.0 to 1.5 quickly over the duration
+        return clip.resize(lambda t: 1.0 + (0.5 * (t / duration)**2))
+
+    def apply_glitch_effect(self, clip, duration):
+        """Simulates chromatic aberration (RGB split) and shake."""
+        # Simple implementation: Periodic position jitter
+        def varying_pos(t):
+            if int(t * 10) % 2 == 0: # Jitter every 0.1s
+                return (random.randint(-5, 5), random.randint(-5, 5))
+            return 'center'
+        
+        # Color inversion or tint could be done here but requires numpy intensity
+        # For now, we stick to position jitter (Shake) which is part of glitch
+        return clip.set_position(varying_pos)
+
+    def _add_sfx(self, clips, index, clip_duration):
+        """Adds SFXAudioClip if files exist."""
+        sfx_dir = "automation/media/sfx"
+        if not os.path.exists(sfx_dir): return
+
+        # Calculate start time based on index (approximate)
+        # This is tricky because clips have variable duration in the list.
+        # We need the accumulation of previous clips' duration.
+        # However, `bg_clips` in `create_shorts` are ImageClips/VideoClips.
+        # We can calculate start time from the last clip added to `clips`.
+        
+        if not clips: return
+        current_clip = clips[-1]
+        start_time = current_clip.start
+        
+        # Audio needs to be loaded
+        loaded_sfx = None
+        
+        try:
+            # 1. Riser at the very start (Index 0)
+            if index == 0:
+                riser_path = os.path.join(sfx_dir, "riser.mp3")
+                if os.path.exists(riser_path):
+                    loaded_sfx = AudioFileClip(riser_path).set_start(0).volumex(0.8)
+            
+            # 2. Transition SFX (Kick/Whoosh) for other clips
+            elif index > 0:
+                # Randomly add slide/kick
+                if random.random() < 0.6: # 60% chance
+                    sfx_files = [f for f in os.listdir(sfx_dir) if f.endswith('.mp3') and ('kick' in f or 'whoosh' in f or 'slide' in f)]
+                    if sfx_files:
+                        chosen_sfx = random.choice(sfx_files)
+                        sfx_path = os.path.join(sfx_dir, chosen_sfx)
+                        loaded_sfx = AudioFileClip(sfx_path).set_start(start_time).volumex(0.6)
+
+            if loaded_sfx:
+                if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
+                self.sfx_clips.append(loaded_sfx)
+        
+        except Exception as e:
+            print(f"SFX Error: {e}")
