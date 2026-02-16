@@ -78,11 +78,9 @@ class ImageFetcher:
                         return filtered[:max_results]
             except Exception as e:
                 print(f"DDG Search error for '{query}' (Attempt {attempt+1}/3): {e}")
-                err_str = str(e).lower()
-                if "ratelimit" in err_str or "forbidden" in err_str or "403" in err_str:
-                    time.sleep(5 * (attempt + 1)) 
-                else:
-                    break
+                # Retry on almost any error since DDG is flaky
+                time.sleep(5 * (attempt + 1)) 
+                continue
         
         # Fallback to Wikimedia
         print(f"DDG failed for '{query}'. Trying Wikimedia Fallback...")

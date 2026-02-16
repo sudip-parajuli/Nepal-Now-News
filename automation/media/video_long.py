@@ -304,7 +304,10 @@ class VideoLongGenerator:
                             target_x = text_start_x + cursor_x_offset - 90
                             target_y = base_screen_y
                             
-                            h_clip = h_clip.set_start(h_start).set_duration(h_dur).set_position((target_x, target_y))
+                            # Sync Adjustment: Add small delay to match audio latency
+                            SYNC_OFFSET = 0.15 
+                            
+                            h_clip = h_clip.set_start(h_start + SYNC_OFFSET).set_duration(h_dur).set_position((target_x, target_y))
                             caption_clips.append(h_clip)
                         
                         cursor_x_offset += word_len + space_len

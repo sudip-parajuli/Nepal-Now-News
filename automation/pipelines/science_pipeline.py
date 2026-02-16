@@ -66,14 +66,25 @@ class SciencePipeline(BasePipeline):
         
         # 5. Create Video
         video_path = "automation/storage/science_shorts_final.mp4"
-        self.vgen.create_shorts(
-            script, 
-            audio_path, 
-            video_path, 
-            word_offsets=word_offsets, 
-            media_paths=media_paths,
-            branding=self.config.get('branding')
-        )
+        try:
+            print(f"DEBUG: calling val.create_shorts with {len(media_paths)} media items.")
+            self.vgen.create_shorts(
+                script, 
+                audio_path, 
+                video_path, 
+                word_offsets=word_offsets, 
+                media_paths=media_paths,
+                branding=self.config.get('branding')
+            )
+            if os.path.exists(video_path):
+                print(f"DEBUG: Science Shorts created successfully at {video_path}")
+            else:
+                print(f"CRITICAL: Science Shorts creation executed but file missing: {video_path}")
+        except Exception as e:
+            print(f"CRITICAL ERROR in create_shorts: {e}")
+            import traceback
+            traceback.print_exc()
+            raise e
         
         # 6. Upload
         if True: # Always call _upload, it handles is_test internally
