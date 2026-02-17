@@ -14,7 +14,7 @@ class ElevenLabsTTS:
         # but 'eleven_multilingual_v2' model is key for Nepali.
         # "Chris" is often good for news.
     def __init__(self, voice_id=None):
-        self.api_key = os.getenv("ELEVENLABS_API_KEY")
+        self.api_key = os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVENLAB_API_KEY")
         if not self.api_key:
             print("WARNING: ELEVENLABS_API_KEY not found in environment variables.")
         self.client = ElevenLabs(api_key=self.api_key)

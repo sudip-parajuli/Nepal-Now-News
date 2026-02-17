@@ -92,7 +92,8 @@ class TTSEngine:
         text = re.sub(r'\s+', ' ', text)
 
         # --- ELEVENLABS INTEGRATION ---
-        api_key = os.getenv("ELEVENLABS_API_KEY")
+        # --- ELEVENLABS INTEGRATION ---
+        api_key = os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVENLAB_API_KEY")
         use_elevenlabs = self.allow_elevenlabs and (api_key is not None)
         eleven_audio_generated = False
         word_offsets = []
