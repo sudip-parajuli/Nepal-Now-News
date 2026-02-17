@@ -3,21 +3,18 @@ from elevenlabs.client import ElevenLabs
 from elevenlabs import save
 
 class ElevenLabsTTS:
-    def __init__(self):
-        self.api_key = os.getenv("ELEVENLABS_API_KEY")
-        if not self.api_key:
-            print("WARNING: ELEVENLABS_API_KEY not found in environment variables.")
-        self.client = ElevenLabs(api_key=self.api_key)
-        # Default Nepali voice or a voice that sounds good for Nepali
-        # We might need a specific Voice ID. For now, let's use a standard one or one provided by user if any.
-        # User didn't specify a voice ID, so we might need to list them or use a default 'Rachel' or similar, 
-        # but 'eleven_multilingual_v2' model is key for Nepali.
-        # "Chris" is often good for news.
     def __init__(self, voice_id=None):
         self.api_key = os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVENLAB_API_KEY")
         if not self.api_key:
             print("WARNING: ELEVENLABS_API_KEY not found in environment variables.")
-        self.client = ElevenLabs(api_key=self.api_key)
+        
+        self.client = None
+        if self.api_key:
+            try:
+                self.client = ElevenLabs(api_key=self.api_key)
+            except Exception as e:
+                print(f"Failed to initialize ElevenLabs client: {e}")
+
         # Use passed voice_id, or env var, or default "Rachel"
         self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
         self.model = "eleven_multilingual_v2" 

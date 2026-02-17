@@ -113,8 +113,8 @@ class TTSEngine:
                     print("DEBUG: ElevenLabs generation successful.")
                 else:
                     print(f"DEBUG: ElevenLabs generation returned no file or empty file. Path: {output_path}")
-            except ImportError:
-                 print("DEBUG: ElevenLabs library not installed or `elevenlabs_tts.py` missing.")
+            except ImportError as e:
+                 print(f"DEBUG: ElevenLabs library not installed or `elevenlabs_tts.py` missing. Error: {e}")
             except Exception as e:
                 print(f"DEBUG: ElevenLabs integration failed: {e}. Falling back to Edge TTS.")
 
