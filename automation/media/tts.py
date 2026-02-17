@@ -99,7 +99,7 @@ class TTSEngine:
         word_offsets = []
 
         if self.allow_elevenlabs and not api_key:
-             print("DEBUG: ElevenLabs allowed but API KEY missing.")
+             print(f"DEBUG: ElevenLabs allowed but API KEY missing. Available Keys: {[k for k in os.environ.keys() if 'ELEVEN' in k]}")
         
         if use_elevenlabs:
             try:
