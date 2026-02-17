@@ -112,6 +112,61 @@ class VideoLongGenerator:
         if curr: lines.append(" ".join(curr))
         return lines
 
+    def get_science_text_clip(self, txt, fsize, clr, stroke_clr='black', stroke_w=6, shadow_offset=4):
+        try:
+             # Science Font Loading (Montserrat Black or Arial Black fallback)
+            science_font = None
+            # Slightly smaller for long form compared to shorts
+            science_font_size = 85 
+            
+            science_font_paths = [
+                "C:\\Windows\\Fonts\\arialbd.ttf",
+                "C:\\Windows\\Fonts\\ariblk.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            ]
+            if os.path.exists("automation/media/assets/Montserrat-Black.ttf"):
+                science_font_paths.insert(0, "automation/media/assets/Montserrat-Black.ttf")
+            
+            for path in science_font_paths:
+                if os.path.exists(path):
+                    try:
+                        science_font = ImageFont.truetype(path, science_font_size)
+                        break
+                    except: continue
+            
+            if not science_font: science_font = self.font # Fallback
+
+            cur_font = science_font
+            dummy = Image.new('RGB', (1, 1))
+            draw = ImageDraw.Draw(dummy)
+            bbox = draw.textbbox((0, 0), txt, font=cur_font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            
+            pad = 20
+            img_w = tw + (pad * 2) + stroke_w + abs(shadow_offset)
+            img_h = th + (pad * 2) + stroke_w + abs(shadow_offset)
+            
+            img = Image.new('RGBA', (int(img_w), int(img_h)), (0,0,0,0))
+            d = ImageDraw.Draw(img)
+            
+            # Hard Drop Shadow
+            d.text((pad + shadow_offset, pad + shadow_offset), txt, font=cur_font, fill='black')
+            
+            # Strong Stroke
+            for off_x in range(-stroke_w, stroke_w+1, 2):
+                    for off_y in range(-stroke_w, stroke_w+1, 2):
+                        if off_x == 0 and off_y == 0: continue
+                        d.text((pad + off_x, pad + off_y), txt, font=cur_font, fill=stroke_clr)
+            
+            # Main Text
+            d.text((pad, pad), txt, font=cur_font, fill=clr)
+            
+            return ImageClip(np.array(img))
+        except Exception as e:
+            print(f"Science Render Error (Long): {e}")
+            return None
+
     def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
@@ -194,6 +249,16 @@ class VideoLongGenerator:
                             clip = clip.crossfadein(overlap)
                         
                         bg_clips.append(clip)
+                        
+                        # Add Transition SFX (Whoosh)
+                        # We don't have a dedicated SFX track in this generator yet, 
+                        # so we need to mix it into audio later or composite it here?
+                        # `VideoLongGenerator` structure separates audio mix at the end.
+                        # We'll collect SFX timestamps and mix them later.
+                        if not hasattr(self, 'sfx_events'): self.sfx_events = []
+                        if i > 0:
+                             self.sfx_events.append({'time': start_time, 'file': 'whoosh.mp3'})
+
                     except Exception as e:
                         print(f"Error processing media {m_path}: {e}")
             
@@ -312,8 +377,59 @@ class VideoLongGenerator:
                         
                         cursor_x_offset += word_len + space_len
 
+                        cursor_x_offset += word_len + space_len
+
             except Exception as e:
                 print(f"Karaoke Render Error: {e}") 
+        
+        # --- SCIENCE CAPTION OVERRIDE (LONG FORM) ---
+        # If this is a science video, we might want to replace the above logic OR 
+        # add the science style if specifically requested.
+        # The `template_mode` is False for Science usually.
+        # We can check `branding` for channel name too.
+        
+        channel_name_str = str((branding or {}).get('channel_name', "")).lower()
+        if "science" in channel_name_str and not template_mode:
+            print("Applying Science Visual Application (Long Form Override)...")
+            caption_clips = [] # Clear previous attempts
+            
+            # --- SCIENCE LOGIC ---
+            # Similar to shorts but adapted for landscape (Center Screen is nice)
+            processed_chunks = []
+            current_chunk = []
+            current_len = 0
+            
+            for w in word_offsets:
+                word_clean = w['word']
+                if current_len > 25 or len(current_chunk) >= 5: # Slightly longer chunks for long form
+                     processed_chunks.append(current_chunk)
+                     current_chunk = []
+                     current_len = 0
+                current_chunk.append(w)
+                current_len += len(word_clean) + 1
+                if word_clean.endswith(('.', '?', '!', ',')):
+                    processed_chunks.append(current_chunk)
+                    current_chunk = []
+                    current_len = 0
+            if current_chunk: processed_chunks.append(current_chunk)
+            
+            for chunk in processed_chunks:
+                if not chunk: continue
+                chunk_start = chunk[0]['start']
+                chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
+                if chunk_end - chunk_start < 0.3: chunk_end = chunk_start + 0.5
+                
+                full_text = " ".join([c['word'] for c in chunk])
+                display_text = full_text.replace('*', '')
+                
+                is_highlight = '*' in full_text
+                text_color = '#FFD700' if is_highlight else 'white'
+                
+                # Render centering
+                sci_clip = self.get_science_text_clip(display_text.upper(), 85, text_color)
+                if sci_clip:
+                    sci_clip = sci_clip.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position('center')
+                    caption_clips.append(sci_clip)
         
         # Cleanup
         chunk = None
@@ -353,9 +469,23 @@ class VideoLongGenerator:
                     bg_music = bg_music.set_duration(total_duration)
                 
                 # Dimmer volume as requested: 0.04 instead of 0.07/0.12
+                # Dimmer volume as requested: 0.04 instead of 0.07/0.12
                 bg_music = bg_music.volumex(0.04)
+                
+                audio_mix = [audio.volumex(1.15), bg_music]
+                
+                # Add gathered SFX
+                if hasattr(self, 'sfx_events') and self.sfx_events:
+                     sfx_dir = "automation/media/sfx"
+                     for event in self.sfx_events:
+                         sfx_file = event['file']
+                         sfx_path = os.path.join(sfx_dir, sfx_file)
+                         if os.path.exists(sfx_path):
+                             sfx_clip = AudioFileClip(sfx_path).set_start(event['time']).volumex(0.5)
+                             audio_mix.append(sfx_clip)
+
                 from moviepy.audio.AudioClip import CompositeAudioClip
-                final_audio = CompositeAudioClip([audio.volumex(1.15), bg_music])
+                final_audio = CompositeAudioClip(audio_mix)
                 final_video = final_video.set_audio(final_audio)
             except Exception as e:
                 print(f"Music Loop Error: {e}")

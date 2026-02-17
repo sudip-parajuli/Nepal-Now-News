@@ -139,6 +139,7 @@ class ScriptWriter:
         Rules:
         - Avoid clicks or exaggeration.
         - Be scientifically accurate.
+        - **IMPORTANT**: Wrap key entities (Names, Numbers, Shocking Adjectives) in asterisks for highlighting. Example: "The *Sun* is *400 times* larger than the *Moon*."
         - RETURN ONLY THE ENGLISH SPEECH TEXT.
         - DO NOT include music cues or labels like [Narrator].
         """
@@ -164,6 +165,7 @@ class ScriptWriter:
         Rules:
         - Maintain high scientific accuracy.
         - Use sophisticated yet accessible vocabulary.
+        - **IMPORTANT**: Wrap key entities (Names, Numbers, Shocking Adjectives) in asterisks for highlighting. Example: "The *Sun* is *400 times* larger than the *Moon*."
         - RETURN ONLY THE SPEECH TEXT. No cues or labels.
         - Aim for approximately 400-600 words.
         """

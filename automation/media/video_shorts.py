@@ -231,33 +231,190 @@ class VideoShortsGenerator:
             
             if not font: font = ImageFont.load_default()
 
-            def get_pillow_text_clip(txt, fsize, clr, bg=None):
-                try:
-                    # Measure text
-                    dummy = Image.new('RGB', (1, 1))
-                    draw = ImageDraw.Draw(dummy)
-                    bbox = draw.textbbox((0, 0), txt, font=font)
-                    tw = bbox[2] - bbox[0]
-                    th = bbox[3] - bbox[1]
-                    # Ensure minimum height for Devanagari descenders/ascenders
-                    th = max(th, FONT_SIZE)
+            # --- SCIENCE CAPTION GENERATOR ---
+            channel_name_str = str((branding or {}).get('channel_name', "")).lower()
+            is_science_mode = "science" in channel_name_str or not template_mode # Default to science style if not news template
+            
+            if is_science_mode:
+                print("DEBUG: Using Science Caption Style (Typewriter, Bold, Highlight)")
+                
+                # Science Font Loading (Montserrat Black or Arial Black)
+                science_font = None
+                science_font_size = 110
+                
+                science_font_paths = [
+                    # Windows
+                    "C:\\Windows\\Fonts\\arialbd.ttf",
+                    "C:\\Windows\\Fonts\\ariblk.ttf",
+                    "C:\\Windows\\Fonts\\impact.ttf",
+                     # Linux
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+                ]
+                
+                # Try to load custom font if available locally
+                # automation/media/assets/Montserrat-Black.ttf ?
+                if os.path.exists("automation/media/assets/Montserrat-Black.ttf"):
+                    science_font_paths.insert(0, "automation/media/assets/Montserrat-Black.ttf")
+                
+                for path in science_font_paths:
+                    if os.path.exists(path):
+                        try:
+                            science_font = ImageFont.truetype(path, science_font_size)
+                            print(f"Loaded Science Font: {path}")
+                            break
+                        except: continue
+                
+                if not science_font: science_font = font # Fallback
+                
+                def get_science_text_clip(txt, fsize, clr, stroke_clr='black', stroke_w=8, shadow_offset=6):
+                    try:
+                        # Re-load font at correct size if needed, or use current
+                        cur_font = science_font
+                        
+                        dummy = Image.new('RGB', (1, 1))
+                        draw = ImageDraw.Draw(dummy)
+                        bbox = draw.textbbox((0, 0), txt, font=cur_font)
+                        tw = bbox[2] - bbox[0]
+                        th = bbox[3] - bbox[1]
+                        
+                        # Margins
+                        pad = 20
+                        
+                        # Create Image (RGBA)
+                        # Width + Shadow + Stroke
+                        img_w = tw + (pad * 2) + stroke_w + abs(shadow_offset)
+                        img_h = th + (pad * 2) + stroke_w + abs(shadow_offset)
+                        
+                        # Center point
+                        cx, cy = img_w // 2, img_h // 2
+                        
+                        img = Image.new('RGBA', (int(img_w), int(img_h)), (0,0,0,0))
+                        d = ImageDraw.Draw(img)
+                        
+                        # Draw Position: Center
+                        txt_pos = (pad, pad) # Simplified top-left anchor for now, considering bbox quirks
+                        
+                        # Hard Drop Shadow
+                        d.text((pad + shadow_offset, pad + shadow_offset), txt, font=cur_font, fill='black')
+                        
+                        # Strong Stroke
+                        # Pillow's stroke_width is okay, but manual 8-way draw is bolder
+                        for off_x in range(-stroke_w, stroke_w+1, 2):
+                             for off_y in range(-stroke_w, stroke_w+1, 2):
+                                 if off_x == 0 and off_y == 0: continue
+                                 d.text((pad + off_x, pad + off_y), txt, font=cur_font, fill=stroke_clr)
+                        
+                        # Main Text
+                        d.text((pad, pad), txt, font=cur_font, fill=clr)
+                        
+                        return ImageClip(np.array(img))
+                    except Exception as e:
+                        print(f"Science Render Error: {e}")
+                        return None
+
+                # Process words for Typewriter Effect
+                # 1. Group words into phrase chunks (1-3 words) to keep pace fast
+                # 2. Check for Asterisks *word*
+                
+                processed_chunks = []
+                current_chunk = []
+                current_len = 0
+                
+                # Semantic Chunking Heuristic
+                for w in word_offsets:
+                    word_clean = w['word']
                     
-                    # Padding: 10 vertical, 80 horizontal for larger margins
-                    v_pad, h_pad = 10, 80
-                    img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
-                    d = ImageDraw.Draw(img)
-                    if bg: d.rectangle([0, 0, tw + h_pad*2, th + v_pad*2], fill=bg)
+                    # Check if this word starts a new chunk (e.g. long word using content)
+                    if current_len > 15 or len(current_chunk) >= 3: 
+                         processed_chunks.append(current_chunk)
+                         current_chunk = []
+                         current_len = 0
                     
-                    # Stroke for all text for visibility
-                    for offset in [(-2,-2), (2,-2), (-2,2), (2,2)]:
-                        d.text((h_pad+offset[0], v_pad+offset[1]), txt, font=font, fill='black')
+                    current_chunk.append(w)
+                    current_len += len(word_clean) + 1
                     
-                    d.text((h_pad, v_pad), txt, font=font, fill=clr)
-                    img_np = np.array(img)
-                    return ImageClip(img_np)
-                except Exception as e:
-                    print(f"Pillow Render Error: {e}")
-                    return None
+                    # Split on punctuation
+                    if word_clean.endswith(('.', '?', '!', ',')):
+                        processed_chunks.append(current_chunk)
+                        current_chunk = []
+                        current_len = 0
+                        
+                if current_chunk: processed_chunks.append(current_chunk)
+
+                for chunk in processed_chunks:
+                    if not chunk: continue
+                    
+                    chunk_start = chunk[0]['start']
+                    chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
+                    
+                    # Ensure minimum duration for readability
+                    if chunk_end - chunk_start < 0.3: chunk_end = chunk_start + 0.5
+                    
+                    # Construct text and check highlighting
+                    full_text = " ".join([c['word'] for c in chunk])
+                    
+                    # Clean text for display (remove asterisks)
+                    display_text = full_text.replace('*', '')
+                    
+                    # Determine Color
+                    # If ANY word in chunk has asterisk, we highlight the KEY words.
+                    # BETTER: For Typewriter, we display the whole chunk.
+                    # We need to construct a Composite of individual words if mixed?
+                    # "Visual Typewriter": Words appear one by one OR small chunks.
+                    # User request: "Current phrase appears. Previous phrase disappears instantly."
+                    
+                    # Check highlighting
+                    is_highlight = '*' in full_text
+                    text_color = '#FFD700' if is_highlight else 'white' # Gold or White
+                    
+                    # Render
+                    sci_clip = get_science_text_clip(display_text.upper(), science_font_size, text_color)
+                    
+                    if sci_clip:
+                        sci_clip = sci_clip.set_start(chunk_start).set_duration(chunk_end - chunk_start)
+                        sci_clip = sci_clip.set_position('center')
+                        clips.append(sci_clip)
+                        
+                # --- TITLE CARD (HOOK) ---
+                # Parse first sentence from text for Title if not explicitly provided?
+                # For now, we don't have explicit Title input passed to this function usually.
+                # We can skip strict Title Card unless we have a "title" arg.
+                # But we can add the "Dong" sound at the start anyway.
+                if os.path.exists("automation/media/sfx/dong.mp3"):
+                     dong = AudioFileClip("automation/media/sfx/dong.mp3").set_start(0).volumex(0.8)
+                     if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
+                     self.sfx_clips.insert(0, dong) # Ensure it's first
+
+            else:
+                # --- ORIGINAL NEWS CAPTION GENERATOR ---
+                def get_pillow_text_clip(txt, fsize, clr, bg=None):
+                    try:
+                        # Measure text
+                        dummy = Image.new('RGB', (1, 1))
+                        draw = ImageDraw.Draw(dummy)
+                        bbox = draw.textbbox((0, 0), txt, font=font)
+                        tw = bbox[2] - bbox[0]
+                        th = bbox[3] - bbox[1]
+                        # Ensure minimum height for Devanagari descenders/ascenders
+                        th = max(th, FONT_SIZE)
+                        
+                        # Padding: 10 vertical, 80 horizontal for larger margins
+                        v_pad, h_pad = 10, 80
+                        img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
+                        d = ImageDraw.Draw(img)
+                        if bg: d.rectangle([0, 0, tw + h_pad*2, th + v_pad*2], fill=bg)
+                        
+                        # Stroke for all text for visibility
+                        for offset in [(-2,-2), (2,-2), (-2,2), (2,2)]:
+                            d.text((h_pad+offset[0], v_pad+offset[1]), txt, font=font, fill='black')
+                        
+                        d.text((h_pad, v_pad), txt, font=font, fill=clr)
+                        img_np = np.array(img)
+                        return ImageClip(img_np)
+                    except Exception as e:
+                        print(f"Pillow Render Error: {e}")
+                        return None
 
             # Wrap into lines
             lines, curr_line, curr_len = [], [], 0
@@ -448,17 +605,12 @@ class VideoShortsGenerator:
         # For now, we stick to position jitter (Shake) which is part of glitch
         return clip.set_position(varying_pos)
 
+
     def _add_sfx(self, clips, index, clip_duration):
         """Adds SFXAudioClip if files exist."""
         sfx_dir = "automation/media/sfx"
         if not os.path.exists(sfx_dir): return
 
-        # Calculate start time based on index (approximate)
-        # This is tricky because clips have variable duration in the list.
-        # We need the accumulation of previous clips' duration.
-        # However, `bg_clips` in `create_shorts` are ImageClips/VideoClips.
-        # We can calculate start time from the last clip added to `clips`.
-        
         if not clips: return
         current_clip = clips[-1]
         start_time = current_clip.start
@@ -467,21 +619,36 @@ class VideoShortsGenerator:
         loaded_sfx = None
         
         try:
-            # 1. Riser at the very start (Index 0)
+            # 1. Riser/Dong at the very start (Index 0)
             if index == 0:
+                # PRIORITIZE DONG for Science
+                dong_path = os.path.join(sfx_dir, "dong.mp3")
                 riser_path = os.path.join(sfx_dir, "riser.mp3")
-                if os.path.exists(riser_path):
+                
+                # Check if we are in science mode? Hard to tell here without context, 
+                # but "dong" is generally good for hooks.
+                if os.path.exists(dong_path):
+                     loaded_sfx = AudioFileClip(dong_path).set_start(0).volumex(0.8)
+                elif os.path.exists(riser_path):
                     loaded_sfx = AudioFileClip(riser_path).set_start(0).volumex(0.8)
             
-            # 2. Transition SFX (Kick/Whoosh) for other clips
+            # 2. Transition SFX (Whoosh/Kick) for other clips
             elif index > 0:
-                # Randomly add slide/kick
-                if random.random() < 0.6: # 60% chance
-                    sfx_files = [f for f in os.listdir(sfx_dir) if f.endswith('.mp3') and ('kick' in f or 'whoosh' in f or 'slide' in f)]
-                    if sfx_files:
-                        chosen_sfx = random.choice(sfx_files)
-                        sfx_path = os.path.join(sfx_dir, chosen_sfx)
-                        loaded_sfx = AudioFileClip(sfx_path).set_start(start_time).volumex(0.6)
+                # Science: ALWAYS Whoosh/Slide for fast pace
+                # News: Random
+                
+                # We'll default to high frequency for now as Shorts are fast
+                whoosh_path = os.path.join(sfx_dir, "whoosh.mp3")
+                
+                if random.random() < 0.7: # 70% chance
+                    if os.path.exists(whoosh_path) and random.random() > 0.3:
+                         loaded_sfx = AudioFileClip(whoosh_path).set_start(start_time).volumex(0.6)
+                    else:
+                        sfx_files = [f for f in os.listdir(sfx_dir) if f.endswith('.mp3') and ('kick' in f or 'slide' in f)]
+                        if sfx_files:
+                            chosen_sfx = random.choice(sfx_files)
+                            sfx_path = os.path.join(sfx_dir, chosen_sfx)
+                            loaded_sfx = AudioFileClip(sfx_path).set_start(start_time).volumex(0.6)
 
             if loaded_sfx:
                 if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
