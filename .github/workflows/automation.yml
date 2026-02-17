@@ -79,6 +79,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+          ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
@@ -118,6 +120,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
+          ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
@@ -131,6 +135,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
+          ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
