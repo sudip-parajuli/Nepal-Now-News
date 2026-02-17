@@ -29,14 +29,18 @@ class ElevenLabsTTS:
             return None
 
         try:
-            audio = self.client.generate(
+            # Use V1 SDK method: text_to_speech.convert
+            # Returns a generator of bytes
+            audio_generator = self.client.text_to_speech.convert(
                 text=text,
-                voice=self.voice_id,
-                model=self.model
+                voice_id=self.voice_id,
+                model_id=self.model
             )
             
-            # Save the audio
-            save(audio, output_path)
+            # Save the audio manually to avoid dependency on 'save' utility
+            with open(output_path, "wb") as f:
+                for chunk in audio_generator:
+                    f.write(chunk)
             
             return output_path
         except Exception as e:
