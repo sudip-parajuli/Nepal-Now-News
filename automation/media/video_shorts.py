@@ -126,14 +126,11 @@ class VideoShortsGenerator:
                         
                         if not is_video:
                             # Apply Random Visual Effects
-                            effect_type = random.choice(["zoom", "glitch", "static"])
+                            effect_type = random.choice(["zoom", "static"])
                             
                             if effect_type == "zoom":
                                 # Sniper Zoom: Rapid scale up
                                 clip = self.apply_sniper_zoom(clip, transition_time)
-                            elif effect_type == "glitch":
-                                # Glitch: RGB Split/Shake
-                                clip = self.apply_glitch_effect(clip, transition_time)
                             else:
                                 # Standard slow zoom
                                 clip = clip.resize(lambda t: 1.0 + 0.1 * (t / transition_time))
@@ -576,17 +573,7 @@ class VideoShortsGenerator:
         # Zoom from 1.0 to 1.5 quickly over the duration
         return clip.resize(lambda t: 1.0 + (0.5 * (t / duration)**2))
 
-    def apply_glitch_effect(self, clip, duration):
-        """Simulates chromatic aberration (RGB split) and shake."""
-        # Simple implementation: Periodic position jitter
-        def varying_pos(t):
-            if int(t * 10) % 2 == 0: # Jitter every 0.1s
-                return (random.randint(-5, 5), random.randint(-5, 5))
-            return 'center'
-        
-        # Color inversion or tint could be done here but requires numpy intensity
-        # For now, we stick to position jitter (Shake) which is part of glitch
-        return clip.set_position(varying_pos)
+
 
 
     def _add_sfx(self, clips, index, clip_duration):
