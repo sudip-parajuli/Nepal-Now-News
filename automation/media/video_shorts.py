@@ -240,7 +240,7 @@ class VideoShortsGenerator:
                 
                 # Science Font Loading (Montserrat Black or Arial Black)
                 science_font = None
-                science_font_size = 110
+                science_font_size = 80 # Reduced from 110 to fit screen
                 
                 science_font_paths = [
                     # Windows
@@ -253,7 +253,6 @@ class VideoShortsGenerator:
                 ]
                 
                 # Try to load custom font if available locally
-                # automation/media/assets/Montserrat-Black.ttf ?
                 if os.path.exists("automation/media/assets/Montserrat-Black.ttf"):
                     science_font_paths.insert(0, "automation/media/assets/Montserrat-Black.ttf")
                 
@@ -267,7 +266,7 @@ class VideoShortsGenerator:
                 
                 if not science_font: science_font = font # Fallback
                 
-                def get_science_text_clip(txt, fsize, clr, stroke_clr='black', stroke_w=8, shadow_offset=6):
+                def get_science_text_clip(txt, fsize, clr, stroke_clr='black', stroke_w=6, shadow_offset=5):
                     try:
                         # Re-load font at correct size if needed, or use current
                         cur_font = science_font
@@ -282,24 +281,17 @@ class VideoShortsGenerator:
                         pad = 20
                         
                         # Create Image (RGBA)
-                        # Width + Shadow + Stroke
                         img_w = tw + (pad * 2) + stroke_w + abs(shadow_offset)
                         img_h = th + (pad * 2) + stroke_w + abs(shadow_offset)
-                        
-                        # Center point
-                        cx, cy = img_w // 2, img_h // 2
                         
                         img = Image.new('RGBA', (int(img_w), int(img_h)), (0,0,0,0))
                         d = ImageDraw.Draw(img)
                         
                         # Draw Position: Center
-                        txt_pos = (pad, pad) # Simplified top-left anchor for now, considering bbox quirks
-                        
                         # Hard Drop Shadow
                         d.text((pad + shadow_offset, pad + shadow_offset), txt, font=cur_font, fill='black')
                         
                         # Strong Stroke
-                        # Pillow's stroke_width is okay, but manual 8-way draw is bolder
                         for off_x in range(-stroke_w, stroke_w+1, 2):
                              for off_y in range(-stroke_w, stroke_w+1, 2):
                                  if off_x == 0 and off_y == 0: continue
@@ -314,19 +306,16 @@ class VideoShortsGenerator:
                         return None
 
                 # Process words for Typewriter Effect
-                # 1. Group words into phrase chunks (1-3 words) to keep pace fast
-                # 2. Check for Asterisks *word*
-                
+                # 1. Group words into phrase chunks suitable for wrapping
                 processed_chunks = []
                 current_chunk = []
                 current_len = 0
                 
-                # Semantic Chunking Heuristic
                 for w in word_offsets:
                     word_clean = w['word']
                     
                     # Check if this word starts a new chunk (e.g. long word using content)
-                    if current_len > 15 or len(current_chunk) >= 3: 
+                    if current_len > 18 or len(current_chunk) >= 4: 
                          processed_chunks.append(current_chunk)
                          current_chunk = []
                          current_len = 0
@@ -351,25 +340,19 @@ class VideoShortsGenerator:
                     # Ensure minimum duration for readability
                     if chunk_end - chunk_start < 0.3: chunk_end = chunk_start + 0.5
                     
-                    # Construct text and check highlighting
                     full_text = " ".join([c['word'] for c in chunk])
-                    
-                    # Clean text for display (remove asterisks)
                     display_text = full_text.replace('*', '')
                     
-                    # Determine Color
-                    # If ANY word in chunk has asterisk, we highlight the KEY words.
-                    # BETTER: For Typewriter, we display the whole chunk.
-                    # We need to construct a Composite of individual words if mixed?
-                    # "Visual Typewriter": Words appear one by one OR small chunks.
-                    # User request: "Current phrase appears. Previous phrase disappears instantly."
+                    # WRAPPING for Safety
+                    # If text is too long (over 15 chars), force a wrap
+                    import textwrap
+                    wrapped_lines = textwrap.wrap(display_text, width=15)
+                    final_display_text = "\n".join(wrapped_lines)
                     
-                    # Check highlighting
                     is_highlight = '*' in full_text
-                    text_color = '#FFD700' if is_highlight else 'white' # Gold or White
+                    text_color = '#FFD700' if is_highlight else 'white' 
                     
-                    # Render
-                    sci_clip = get_science_text_clip(display_text.upper(), science_font_size, text_color)
+                    sci_clip = get_science_text_clip(final_display_text.upper(), science_font_size, text_color)
                     
                     if sci_clip:
                         sci_clip = sci_clip.set_start(chunk_start).set_duration(chunk_end - chunk_start)

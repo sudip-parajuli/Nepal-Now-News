@@ -45,4 +45,8 @@ class ElevenLabsTTS:
             return output_path
         except Exception as e:
             print(f"ElevenLabs Generation Error: {e}")
+            try:
+                print(f"DEBUG: Client dir: {dir(self.client)}")
+                print(f"DEBUG: Client type: {type(self.client)}")
+            except: pass
             return None

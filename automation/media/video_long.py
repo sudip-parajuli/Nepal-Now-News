@@ -290,97 +290,78 @@ class VideoLongGenerator:
             current_line_len += w_len + 1
         if current_line: lines.append(current_line)
 
-        # Render Captions
-        FONT_SIZE = 75 # Larger for single line clarity
-        BOTTOM_MARGIN = 150 # Position from bottom
-        
-        for chunk in lines:
-            if not chunk: continue
+        # --- STANDARD CAPTIONS (NON-SCIENCE) ---
+        if not ("science" in str((branding or {}).get('channel_name', "")).lower() and not template_mode):
+            # Render Standard Captions
+            FONT_SIZE = 75 
+            BOTTOM_MARGIN = 150 
             
-            chunk_start = chunk[0]['start']
-            chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
-            
-            # Ensure minimum visibility
-            if chunk_end - chunk_start < 0.5:
-                 chunk_end = chunk_start + 1.0
-
-            chunk_text = " ".join([w['word'] for w in chunk])
-            is_nepali = any(ord(c) > 127 for c in chunk_text)
-            
-            try:
-                # 1. Render LINE BASE (White)
-                # We render the whole line centered.
-                base_txt = self.get_pillow_text_clip(chunk_text, FONT_SIZE, 'white', bg=(0,0,0,180), stroke_width=2)
+            for chunk in lines:
+                if not chunk: continue
                 
-                if base_txt:
-                    base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start)
-                    txt_w, txt_h = base_txt.size
-                    pos_y = self.size[1] - txt_h - BOTTOM_MARGIN
-                    base_txt = base_txt.set_position(('center', pos_y))
-                    caption_clips.append(base_txt)
-                    
-                    # 2. Render HIGHLIGHTS (Yellow) - Overlay exactly
-                    # To overlap perfectly, we must calculate the X offset of each word *within* the rendered base line.
-                    # Base clip has padding: h_pad=90, v_pad=20 (from provided layout logic).
-                    # Text starts at (90, 20) inside the clip.
-                    # Clip is centered on screen: Screen_X = (1920 - Clip_W) / 2
-                    
-                    base_screen_x = (self.size[0] - txt_w) // 2
-                    base_screen_y = pos_y
-                    
-                    text_start_x = base_screen_x + 90 # Where text actually starts drawing
-                    text_start_y = base_screen_y + 20
-                    
-                    # Load font to measure offsets
-                    # We reuse logic from get_pillow_text_clip to ensure matching metrics
-                    l_font = self._load_best_font(FONT_SIZE, text=chunk_text)
-                    
-                    cursor_x_offset = 0
-                    
-                    for i, w_info in enumerate(chunk):
-                        word = w_info['word']
-                        
-                        # Measure this word
-                        word_len = l_font.getlength(word)
-                        space_len = l_font.getlength(" ") if i < len(chunk) - 1 else 0
-                        
-                        # Highlight Word Text Clip
-                        # We render JUST the word in Yellow.
-                        # Important: get_pillow_text_clip adds its own padding (90, 20)!
-                        # If we use get_pillow_text_clip for the Highlight, we must position it such that 
-                        # its text aligns with the base text.
-                        # Easier strategy: Render word with transparent background?
-                        # Or adjust position by subtracting padding.
-                        
-                        h_clip = self.get_pillow_text_clip(word, FONT_SIZE, 'yellow', bg=None, stroke_width=2)
-                        
-                        if h_clip:
-                            h_start = max(chunk_start, w_info['start'])
-                            h_dur = w_info['duration']
-                            if h_dur <= 0: h_dur = 0.2
-                            
-                            # Position Calculation
-                            # Target Screen X for this word = text_start_x + cursor_x_offset
-                            # h_clip draws text at (90, 20)
-                            # So Top-Left of h_clip should be at:
-                            # X = (Target Screen X) - 90
-                            # Y = (text_start_y) - 20 = base_screen_y
-                            
-                            target_x = text_start_x + cursor_x_offset - 90
-                            target_y = base_screen_y
-                            
-                            # Sync Adjustment: Add small delay to match audio latency
-                            SYNC_OFFSET = 0.15 
-                            
-                            h_clip = h_clip.set_start(h_start + SYNC_OFFSET).set_duration(h_dur).set_position((target_x, target_y))
-                            caption_clips.append(h_clip)
-                        
-                        cursor_x_offset += word_len + space_len
+                chunk_start = chunk[0]['start']
+                chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
+                
+                # Ensure minimum visibility
+                if chunk_end - chunk_start < 0.5:
+                     chunk_end = chunk_start + 1.0
 
-                        cursor_x_offset += word_len + space_len
+                chunk_text = " ".join([w['word'] for w in chunk])
+                is_nepali = any(ord(c) > 127 for c in chunk_text)
+                
+                try:
+                    # 1. Render LINE BASE (White)
+                    # We render the whole line centered.
+                    base_txt = self.get_pillow_text_clip(chunk_text, FONT_SIZE, 'white', bg=(0,0,0,180), stroke_width=2)
+                    
+                    if base_txt:
+                        base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start)
+                        txt_w, txt_h = base_txt.size
+                        pos_y = self.size[1] - txt_h - BOTTOM_MARGIN
+                        base_txt = base_txt.set_position(('center', pos_y))
+                        caption_clips.append(base_txt)
+                        
+                        # 2. Render HIGHLIGHTS (Yellow) - Overlay exactly
+                        base_screen_x = (self.size[0] - txt_w) // 2
+                        base_screen_y = pos_y
+                        
+                        text_start_x = base_screen_x + 90 # Where text actually starts drawing (h_pad)
+                        text_start_y = base_screen_y + 20
+                        
+                        # Load font to measure offsets
+                        l_font = self._load_best_font(FONT_SIZE, text=chunk_text)
+                        
+                        cursor_x_offset = 0
+                        
+                        for i, w_info in enumerate(chunk):
+                            word = w_info['word']
+                            
+                            # Measure this word
+                            word_len = l_font.getlength(word)
+                            space_len = l_font.getlength(" ") if i < len(chunk) - 1 else 0
+                            
+                            # Highlight Word Text Clip
+                            h_clip = self.get_pillow_text_clip(word, FONT_SIZE, 'yellow', bg=None, stroke_width=2)
+                            
+                            if h_clip:
+                                h_start = max(chunk_start, w_info['start'])
+                                h_dur = w_info['duration']
+                                if h_dur <= 0: h_dur = 0.2
+                                
+                                # Position Calculation
+                                target_x = text_start_x + cursor_x_offset - 90
+                                target_y = base_screen_y
+                                
+                                # Sync Adjustment
+                                SYNC_OFFSET = 0.15 
+                                
+                                h_clip = h_clip.set_start(h_start + SYNC_OFFSET).set_duration(h_dur).set_position((target_x, target_y))
+                                caption_clips.append(h_clip)
+                            
+                            cursor_x_offset += word_len + space_len
 
-            except Exception as e:
-                print(f"Karaoke Render Error: {e}") 
+                except Exception as e:
+                    print(f"Karaoke Render Error: {e}") 
         
         # --- SCIENCE CAPTION OVERRIDE (LONG FORM) ---
         # If this is a science video, we might want to replace the above logic OR 

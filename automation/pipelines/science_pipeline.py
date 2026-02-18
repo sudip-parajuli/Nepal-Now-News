@@ -53,11 +53,22 @@ class SciencePipeline(BasePipeline):
 
     async def _run_shorts(self, topic: str, is_test: bool):
         # 2. Generate Script
-        script = self.script_writer.generate_science_facts(topic)
-        print(f"Short Script generated.")
+        # Categories: General, Did You Know, What If
+        categories = ["General", "Did You Know?", "What If?"]
+        category = random.choice(categories)
+        print(f"Selected Category: {category}")
+        
+        prompt_topic = topic
+        if category == "Did You Know?":
+            prompt_topic = f"Did you know {topic}?"
+        elif category == "What If?":
+            prompt_topic = f"What if {topic}?"
+            
+        script = self.script_writer.generate_science_facts(prompt_topic)
+        print(f"Short Script generated ({category}).")
         
         # 3. Fetch Media
-        media_paths = await self._fetch_media(topic, script)
+        media_paths = await self._fetch_media(prompt_topic, script)
             
         # 4. Generate Audio
         male_voice = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
