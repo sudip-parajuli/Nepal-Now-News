@@ -10,7 +10,7 @@ tts_voice:
   rate: "+15%"  # Urgent Speed (User Selection)
   pitch: "-2Hz" # Deep/Loud Pitch
   volume: "+80%" # Very High Volume
-  elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM" # Rachel (Default Female) - CHANGE THIS to a specific Nepali voice ID if known
+  elevenlabs_voice_id: "cgSgspJ2msm6clMCkdW9" # Jessica (Playful, Bright, Warm)
 upload:
   shorts: true
   long: true

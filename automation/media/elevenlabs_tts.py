@@ -8,8 +8,8 @@ class ElevenLabsTTS:
             print("WARNING: ELEVENLABS_API_KEY not found in environment variables.")
         
         self.client = None
-        # Use passed voice_id, or env var, or default "Rachel"
-        self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
+        # Use passed voice_id, or env var, or default "Jessica"
+        self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "cgSgspJ2msm6clMCkdW9"
         self.model = "eleven_multilingual_v2" 
 
         if self.api_key:
