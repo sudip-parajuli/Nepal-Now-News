@@ -125,13 +125,15 @@ class TTSEngine:
         else:
             # --- FALLBACK: EDGE TTS ---
             voice = voice or self.voice_map.get("female")
+            # Strip emotional tags for Edge TTS as it doesn't support them
+            edge_text = re.sub(r'\[.*?\]', '', text).strip()
             print(f"DEBUG: TTSEngine communicating with voice: {voice} (Rate: {rate or self.rate}, Pitch: {pitch or self.pitch})")
             MAX_RETRIES = 3
             retry_count = 0
             
             while retry_count < MAX_RETRIES:
                 try:
-                    communicate = edge_tts.Communicate(text, voice, rate=rate or self.rate, pitch=pitch or self.pitch, volume=volume or self.volume)
+                    communicate = edge_tts.Communicate(edge_text, voice, rate=rate or self.rate, pitch=pitch or self.pitch, volume=volume or self.volume)
                     audio_data = bytearray()
                     temp_offsets = []
                     

@@ -24,8 +24,8 @@ class VideoShortsGenerator:
         # Branding defaults
         accent = (branding or {}).get('accent_color', 'yellow')
         bg_overlay_color = (branding or {}).get('bg_color', (0,0,0))
-        # Default VERY LOW for news if not specified
-        music_vol = (branding or {}).get('music_volume', 0.01)
+        # Default for news if not specified
+        music_vol = (branding or {}).get('music_volume', 0.03)
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
         channel_name = (branding or {}).get('channel_name', "Nepal Now")
         
@@ -347,7 +347,10 @@ class VideoShortsGenerator:
                     if chunk_end - chunk_start < 0.3: chunk_end = chunk_start + 0.5
                     
                     full_text = " ".join([c['word'] for c in chunk])
+                    import re
+                    # Strip any bracketed tags like [serious] or [slightly slow]
                     display_text = full_text.replace('*', '')
+                    display_text = re.sub(r'\[.*?\]', '', display_text).strip()
                     
                     # WRAPPING for Safety
                     # If text is too long (over 12 chars), force a wrap to maintain side margins

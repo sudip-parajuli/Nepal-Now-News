@@ -66,7 +66,9 @@ class ScriptWriter:
         Rules:
         - Use standard Nepali news reporting grammar.
         - Ensure natural flow and correct tense usage.
-        - RETURN ONLY THE NEPALI SPEECH TEXT. 
+        - **NEW: Include emotional and pacing cues in brackets like [serious], [sad], [slightly slow], [happy] to influence the voice engine.**
+        - Place these cues at the start of relevant sentences or phrases.
+        - RETURN ONLY THE NEPALI SPEECH TEXT WITH THESE CUES. 
         - DO NOT include narrator labels.
         End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
         """
