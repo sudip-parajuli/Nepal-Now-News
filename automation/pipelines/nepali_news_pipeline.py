@@ -135,6 +135,8 @@ class NepaliNewsPipeline(BasePipeline):
                 # Update branding with anchor video
                 branding = self.config.get('branding', {}).copy()
                 branding['anchor_video_path'] = anchor_video_path
+                # USER FEEDBACK: Set music volume very low for news (0.01)
+                branding['music_volume'] = branding.get('music_volume', 0.01)
 
                 video_path = f"automation/storage/news_breaking_{item['hash'][:8]}.mp4"
                 self.vgen_shorts.create_shorts(

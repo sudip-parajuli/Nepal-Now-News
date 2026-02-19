@@ -24,7 +24,8 @@ class VideoShortsGenerator:
         # Branding defaults
         accent = (branding or {}).get('accent_color', 'yellow')
         bg_overlay_color = (branding or {}).get('bg_color', (0,0,0))
-        music_vol = (branding or {}).get('music_volume', 0.07)
+        # Default VERY LOW for news if not specified
+        music_vol = (branding or {}).get('music_volume', 0.01)
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
         channel_name = (branding or {}).get('channel_name', "Nepal Now")
         
@@ -101,6 +102,10 @@ class VideoShortsGenerator:
             transition_time = duration / len(media_paths) if len(media_paths) > 0 else 4.0
             transition_time = max(min(transition_time, 6.0), 3.0) 
             
+            # Check for Science Mode early for effects
+            channel_name_str = str((branding or {}).get('channel_name', "")).lower()
+            is_science_mode = "science" in channel_name_str or not template_mode
+
             for i, m_path in enumerate(media_paths):
                 if os.path.exists(m_path):
                     try:
@@ -126,7 +131,11 @@ class VideoShortsGenerator:
                         
                         if not is_video:
                             # Apply Random Visual Effects
-                            effect_type = random.choice(["zoom", "static"])
+                            # USER REFREMENT: Science channel uses ONLY zoom-in
+                            if is_science_mode:
+                                effect_type = "zoom"
+                            else:
+                                effect_type = random.choice(["zoom", "static"])
                             
                             if effect_type == "zoom":
                                 # Sniper Zoom: Rapid scale up
@@ -237,7 +246,7 @@ class VideoShortsGenerator:
                 
                 # Science Font Loading (Montserrat Black or Arial Black)
                 science_font = None
-                science_font_size = 80 # Reduced from 110 to fit screen
+                science_font_size = 70 # Reduced from 80 for better visibility/margins
                 
                 science_font_paths = [
                     # Windows
@@ -275,7 +284,7 @@ class VideoShortsGenerator:
                         th = bbox[3] - bbox[1]
                         
                         # Margins
-                        pad = 20
+                        pad = 40 # Increased padding for better margins
                         
                         # Create Image (RGBA)
                         img_w = tw + (pad * 2) + stroke_w + abs(shadow_offset)
@@ -341,9 +350,9 @@ class VideoShortsGenerator:
                     display_text = full_text.replace('*', '')
                     
                     # WRAPPING for Safety
-                    # If text is too long (over 15 chars), force a wrap
+                    # If text is too long (over 12 chars), force a wrap to maintain side margins
                     import textwrap
-                    wrapped_lines = textwrap.wrap(display_text, width=15)
+                    wrapped_lines = textwrap.wrap(display_text, width=12)
                     final_display_text = "\n".join(wrapped_lines)
                     
                     is_highlight = '*' in full_text
@@ -510,14 +519,13 @@ class VideoShortsGenerator:
                 if bg_music.duration > 4:
                     bg_music = bg_music.audio_fadein(2).audio_fadeout(2)
                 
-                audio_components = [audio.volumex(1.2), bg_music]
-                
-                # Add SFX if any were triggered
                 if hasattr(self, 'sfx_clips') and self.sfx_clips:
                     print(f"Adding {len(self.sfx_clips)} SFX clips to final audio.")
                     audio_components.extend(self.sfx_clips)
 
                 from moviepy.audio.AudioClip import CompositeAudioClip
+                # Boost Voice to 1.4x for clarity against music
+                audio_components[0] = audio_components[0].volumex(1.4) 
                 final_audio = CompositeAudioClip(audio_components)
             except Exception as e:
                 print(f"Failed to load background music or SFX: {e}")
