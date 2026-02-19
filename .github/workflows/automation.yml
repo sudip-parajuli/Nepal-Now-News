@@ -22,7 +22,7 @@ on:
         options:
           - all
           - breaking
-          - storytelling
+          # - storytelling
           - science
           - science_long
       is_test:
