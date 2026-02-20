@@ -106,7 +106,7 @@ class NepaliNewsPipeline(BasePipeline):
                 assets_dir = "automation/media/assets"
                 
                 # Check for specific emotion video
-                video_filename = "anchor_neutral.mp4" # Default to neutral as it's the only one available
+                video_filename = "nepali_anchor.mp4" # Use the new longer anchor video
                 video_path = os.path.join(assets_dir, video_filename)
                 
                 anchor_source = None

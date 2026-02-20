@@ -64,11 +64,10 @@ class ScriptWriter:
         Language: Nepali (Devanagari script)
         Tone: Professional news anchor, formal, neutral.
         Rules:
-        - Use standard Nepali news reporting grammar.
+        - Use simple, conversational Nepali that is very easy for a general audience to understand.
+        - Fix any factual or typographical errors present in the source content.
         - Ensure natural flow and correct tense usage.
-        - **NEW: Include emotional and pacing cues in brackets like [serious], [sad], [slightly slow], [happy] to influence the voice engine.**
-        - Place these cues at the start of relevant sentences or phrases.
-        - RETURN ONLY THE NEPALI SPEECH TEXT WITH THESE CUES. 
+        - RETURN ONLY THE NEPALI SPEECH TEXT. 
         - DO NOT include narrator labels.
         End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
         """
@@ -91,9 +90,9 @@ class ScriptWriter:
         {text}
         
         Rules:
-        - Fix ONLY spelling and grammatical errors (e.g., 'सुरु' vs 'शुरु', 'खुसी' vs 'खुश').
-        - Retain the exact meaning and tone.
-        - DO NOT change the structure or length significantly.
+        - Fix ALL spelling and grammatical errors (e.g., 'सुरु' vs 'शुरु', 'खुसी' vs 'खुश').
+        - Ensure the tone remains simple, conversational, and easy to understand.
+        - Correct any awkward phrasing while retaining the original facts.
         - RETURN ONLY THE CORRECTED NEPALI TEXT.
         """
         corrected = self._call_with_retry(prompt)

@@ -10,7 +10,7 @@ class ElevenLabsTTS:
         self.client = None
         # Use passed voice_id, or env var, or default "Jessica"
         self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "cgSgspJ2msm6clMCkdW9"
-        self.model = "eleven_multilingual_v2" 
+        self.model = "eleven_turbo_v2_5" 
 
         if self.api_key:
             try:

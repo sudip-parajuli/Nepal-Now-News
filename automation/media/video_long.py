@@ -210,7 +210,13 @@ class VideoLongGenerator:
             transition_time = total_duration / len(media_paths)
             transition_time = max(min(transition_time, 6.0), 3.0) 
             
-            for i, m_path in enumerate(media_paths):
+            import math
+            required_clips = math.ceil(total_duration / transition_time) + 1
+            extended_media_paths = []
+            while len(extended_media_paths) < required_clips:
+                extended_media_paths.extend(media_paths)
+            
+            for i, m_path in enumerate(extended_media_paths):
                 if os.path.exists(m_path):
                     try:
                         is_video = m_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv'))
@@ -382,7 +388,8 @@ class VideoLongGenerator:
             
             for w in word_offsets:
                 word_clean = w['word']
-                if current_len > 25 or len(current_chunk) >= 5: # Slightly longer chunks for long form
+                # Kinetic Typography: Extremely punchy, 1-3 words max
+                if current_len > 15 or len(current_chunk) >= 2: 
                      processed_chunks.append(current_chunk)
                      current_chunk = []
                      current_len = 0
@@ -406,9 +413,11 @@ class VideoLongGenerator:
                 is_highlight = '*' in full_text
                 text_color = '#FFD700' if is_highlight else 'white'
                 
-                # Render centering
-                sci_clip = self.get_science_text_clip(display_text.upper(), 85, text_color)
+                # Render centering with Pop-In Animation (Kinetic Typography)
+                sci_clip = self.get_science_text_clip(display_text.upper(), 90, text_color)
                 if sci_clip:
+                    # Pop in scale from 0.7 to 1.0 in 0.15s
+                    sci_clip = sci_clip.resize(lambda t: min(1.0, 0.7 + (t / 0.15) * 0.3) if t < 0.15 else 1.0)
                     sci_clip = sci_clip.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position('center')
                     caption_clips.append(sci_clip)
         
