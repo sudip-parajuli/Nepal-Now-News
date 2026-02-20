@@ -55,74 +55,8 @@ class ScriptWriter:
         
         return "Error: Maximum retries reached for LLM generation."
 
-    def rewrite_for_shorts(self, headline: str, content: str) -> str:
-        prompt = f"""
-        Rewrite this breaking news into a 25–40 second YouTube Shorts script in Nepali.
-        Headline: {headline}
-        Content: {content}
-
-        Language: Nepali (Devanagari script)
-        Tone: Professional news anchor, formal, neutral.
-        Rules:
-        - Use simple, conversational Nepali that is very easy for a general audience to understand.
-        - Fix any factual or typographical errors present in the source content.
-        - Ensure natural flow and correct tense usage.
-        - RETURN ONLY THE NEPALI SPEECH TEXT. 
-        - DO NOT include narrator labels.
-        End with: 'थप अपडेटका लागि हामीसँगै रहनुहोला।'
-        """
-        script = self._call_with_retry(prompt)
-        
-        # --- PROOFREADING STEP ---
-        print("DEBUG: Proofreading script for spelling errors...")
-        script = self.proofread_script(script)
-        
-        return self.clean_script(script)
-
-    def proofread_script(self, text: str) -> str:
-        """
-        Checks the Nepali script for spelling mistakes and corrects them using the LLM.
-        """
-        prompt = f"""
-        Proofread and correct the spelling/grammar of the following Nepali script.
-        
-        Script:
-        {text}
-        
-        Rules:
-        - Fix ALL spelling and grammatical errors (e.g., 'सुरु' vs 'शुरु', 'खुसी' vs 'खुश').
-        - Ensure the tone remains simple, conversational, and easy to understand.
-        - Correct any awkward phrasing while retaining the original facts.
-        - RETURN ONLY THE CORRECTED NEPALI TEXT.
-        """
-        corrected = self._call_with_retry(prompt)
-        # If the corrected text is empty or fails, return original
-        return corrected if corrected and "Error" not in corrected else text
-
-    def analyze_sentiment(self, headline: str, content: str) -> str:
-        """
-        Analyzes the sentiment of the news to determine if it is GOOD/HAPPY or NEUTRAL/BAD.
-        Returns: 'HAPPY' or 'NEUTRAL'
-        """
-        prompt = f"""
-        Analyze the sentiment of this news for an AI news anchor expression.
-        
-        Headline: {headline}
-        Content: {content}
-        
-        Classify as:
-        - "HAPPY": If the news is positive, uplifting, about achievements, festivals, winning, or good progress.
-        - "NEUTRAL": If the news is serious, sad, about politics, crime, accidents, death, or general information.
-        
-        RETURN ONLY THE WORD "HAPPY" OR "NEUTRAL".
-        """
-        try:
-            result = self._call_with_retry(prompt).strip().upper()
-            if "HAPPY" in result: return "HAPPY"
-            return "NEUTRAL"
-        except Exception as e:
-            print(f"Sentiment Analysis Failed: {e}")
-            return "NEUTRAL" # Default to neutral on error
+    def _dummy_placeholder(self):
+        pass
 
     def generate_science_facts(self, topic: str) -> str:
         prompt = f"""

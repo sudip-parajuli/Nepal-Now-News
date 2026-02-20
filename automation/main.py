@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 sys.path.append(os.getcwd())
 
 from automation.config_loader import ConfigLoader
-from automation.pipelines.nepali_news_pipeline import NepaliNewsPipeline
 from automation.pipelines.science_pipeline import SciencePipeline
 
 load_dotenv()
@@ -47,9 +46,7 @@ async def main():
 
     # Route to Pipeline
     pipeline = None
-    if channel_type == "news":
-        pipeline = NepaliNewsPipeline(config)
-    elif channel_type == "science":
+    if channel_type == "science":
         pipeline = SciencePipeline(config)
     else:
         print(f"Error: Unknown channel type '{channel_type}'")
