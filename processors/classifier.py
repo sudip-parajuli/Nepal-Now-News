@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 
 class NewsClassifier:
     BREAKING_KEYWORDS = [
-        "breaking", "live", "alert", "emergency", "update", 
-        "explosion", "earthquake", "crash", "attack", "decision", 
-        "deadly", "shooting", "urgent", "tsunami", "nuclear", "flash",
-        "ब्रेकिङ", "ताजा", "अपडेट", "घटना", "मृत्यु", 
-        "घाइते", "विस्फोट", "भूकम्प", "आक्रमण", "फैसला", "जरुरी",
-        "प्रमुख", "खतरा", "अवरुद्ध", "पक्राउ"
+        "breaking", "live", "alert", "emergency", 
+        "explosion", "earthquake", "crash", "attack", 
+        "deadly", "shooting", "urgent", "tsunami", "nuclear",
+        "ब्रेकिङ", "ताजा", "मृत्यु", 
+        "घाइते", "विस्फोट", "भूकम्प", "आक्रमण", 
+        "खतरा", "अवरुद्ध", "पक्राउ"
     ]
 
     def __init__(self, breaking_window_hours: int = 2):
