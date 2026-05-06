@@ -242,141 +242,139 @@ class VideoShortsGenerator:
             is_science_mode = "science" in channel_name_str or not template_mode # Default to science style if not news template
             
             if is_science_mode:
-                print("DEBUG: Using Science Caption Style (Typewriter, Bold, Highlight)")
+                print("DEBUG: Using Pop-Up Word caption style (scale-in, bold, keyword highlight)")
                 
-                # Science Font Loading (Montserrat Black or Arial Black)
-                science_font = None
-                science_font_size = 70 # Reduced from 80 for better visibility/margins
-                
-                science_font_paths = [
-                    # Windows
-                    "C:\\Windows\\Fonts\\arialbd.ttf",
-                    "C:\\Windows\\Fonts\\ariblk.ttf",
-                    "C:\\Windows\\Fonts\\impact.ttf",
-                     # Linux
+                # ── Font: Heavy/Extra-Bold sans-serif ─────────────────────────────────
+                POP_FONT_SIZE = 88
+                pop_font = None
+                pop_font_paths = [
+                    "automation/media/assets/Montserrat-Black.ttf",
+                    "automation/media/assets/Montserrat-ExtraBold.ttf",
+                    "C:\\Windows\\Fonts\\ariblk.ttf",   # Arial Black
+                    "C:\\Windows\\Fonts\\impact.ttf",    # Impact
+                    "C:\\Windows\\Fonts\\arialbd.ttf",   # Arial Bold
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+                    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
                 ]
-                
-                # Try to load custom font if available locally
-                if os.path.exists("automation/media/assets/Montserrat-Black.ttf"):
-                    science_font_paths.insert(0, "automation/media/assets/Montserrat-Black.ttf")
-                
-                for path in science_font_paths:
-                    if os.path.exists(path):
+                for _fp in pop_font_paths:
+                    if os.path.exists(_fp):
                         try:
-                            science_font = ImageFont.truetype(path, science_font_size)
-                            print(f"Loaded Science Font: {path}")
+                            pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
+                            print(f"PopUp Font loaded: {_fp}")
                             break
                         except: continue
-                
-                if not science_font: science_font = font # Fallback
-                
-                def get_science_text_clip(txt, fsize, clr, stroke_clr='black', stroke_w=6, shadow_offset=5):
-                    try:
-                        # Re-load font at correct size if needed, or use current
-                        cur_font = science_font
-                        
-                        dummy = Image.new('RGB', (1, 1))
-                        draw = ImageDraw.Draw(dummy)
-                        bbox = draw.textbbox((0, 0), txt, font=cur_font)
-                        tw = bbox[2] - bbox[0]
-                        th = bbox[3] - bbox[1]
-                        
-                        # Margins
-                        pad = 40 # Increased padding for better margins
-                        
-                        # Create Image (RGBA)
-                        img_w = tw + (pad * 2) + stroke_w + abs(shadow_offset)
-                        img_h = th + (pad * 2) + stroke_w + abs(shadow_offset)
-                        
-                        img = Image.new('RGBA', (int(img_w), int(img_h)), (0,0,0,0))
-                        d = ImageDraw.Draw(img)
-                        
-                        # Draw Position: Center
-                        # Hard Drop Shadow
-                        d.text((pad + shadow_offset, pad + shadow_offset), txt, font=cur_font, fill='black')
-                        
-                        # Strong Stroke
-                        for off_x in range(-stroke_w, stroke_w+1, 2):
-                             for off_y in range(-stroke_w, stroke_w+1, 2):
-                                 if off_x == 0 and off_y == 0: continue
-                                 d.text((pad + off_x, pad + off_y), txt, font=cur_font, fill=stroke_clr)
-                        
-                        # Main Text
-                        d.text((pad, pad), txt, font=cur_font, fill=clr)
-                        
-                        return ImageClip(np.array(img))
-                    except Exception as e:
-                        print(f"Science Render Error: {e}")
-                        return None
+                if not pop_font:
+                    pop_font = font  # last-resort fallback
 
-                # Process words for Typewriter Effect
-                # 1. Group words into phrase chunks suitable for wrapping
-                processed_chunks = []
-                current_chunk = []
-                current_len = 0
-                
+                # ── Keyword detection ─────────────────────────────────────────────────
+                _STOP = {
+                    'the','a','an','is','are','was','were','be','been','being',
+                    'of','in','on','at','to','for','and','or','but','so','yet',
+                    'it','its','this','that','these','those','with','from','by',
+                    'as','into','do','does','did','not','no','have','has','had',
+                    'will','would','can','could','should','may','might','what',
+                    'which','who','when','where','why','how','if','than','then',
+                    'there','here','they','we','he','she','you','i','my','your',
+                    'our','their','his','her','also','just','even','up','out',
+                    'about','over','more','very','such','each',
+                }
+
+                def _is_keyword(w):
+                    clean = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
+                    if not clean: return False
+                    if clean in _STOP: return False
+                    if '*' in w: return True        # explicitly marked in script
+                    if len(clean) >= 6: return True  # long words = content words
+                    return False
+
+                # ── Render one chunk as RGBA PIL image with per-word colors ──────────
+                def _render_popup(words_list, highlight_mask):
+                    STROKE = 3
+                    SHADOW = 4
+                    HP, VP = 28, 22
+
+                    dummy = Image.new('RGB', (1, 1))
+                    dd = ImageDraw.Draw(dummy)
+                    sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
+                    sp_w = max(sp_bbox[2] - sp_bbox[0], 12)
+
+                    dims, max_h = [], 0
+                    for wrd in words_list:
+                        bb = dd.textbbox((0, 0), wrd, font=pop_font)
+                        ww, wh = bb[2]-bb[0], bb[3]-bb[1]
+                        dims.append((ww, wh))
+                        max_h = max(max_h, wh)
+
+                    total_w = sum(d[0] for d in dims) + sp_w * (len(words_list)-1)
+                    img_w = int(total_w + HP*2 + STROKE*2 + SHADOW + 4)
+                    img_h = int(max_h + VP*2 + STROKE*2 + SHADOW + 4)
+
+                    img = Image.new('RGBA', (img_w, img_h), (0, 0, 0, 0))
+                    d = ImageDraw.Draw(img)
+                    x = HP + STROKE
+                    y = VP + STROKE
+                    for idx, (wrd, (ww, _)) in enumerate(zip(words_list, dims)):
+                        clr = '#FFD700' if highlight_mask[idx] else 'white'
+                        d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
+                        for dx in range(-STROKE, STROKE+1):
+                            for dy in range(-STROKE, STROKE+1):
+                                if dx == 0 and dy == 0: continue
+                                d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
+                        d.text((x, y), wrd, font=pop_font, fill=clr)
+                        x += ww + sp_w
+                    return img
+
+                # ── Group word_offsets into 2-3 word chunks ───────────────────────────
+                pop_chunks = []
+                cur_chunk, cur_len = [], 0
                 for w in word_offsets:
-                    word_clean = w['word']
-                    
-                    # Check if this word starts a new chunk (e.g. long word using content)
-                    if current_len > 18 or len(current_chunk) >= 4: 
-                         processed_chunks.append(current_chunk)
-                         current_chunk = []
-                         current_len = 0
-                    
-                    current_chunk.append(w)
-                    current_len += len(word_clean) + 1
-                    
-                    # Split on punctuation
-                    if word_clean.endswith(('.', '?', '!', ',')):
-                        processed_chunks.append(current_chunk)
-                        current_chunk = []
-                        current_len = 0
-                        
-                if current_chunk: processed_chunks.append(current_chunk)
+                    wclean = re.sub(r'\[.*?\]', '', w['word'].replace('*', '')).strip()
+                    if not wclean: continue
+                    # Flush at 3 words or after punctuation
+                    if cur_len >= 3 or (cur_len >= 2 and wclean.endswith(('.','?','!',','))):
+                        pop_chunks.append(cur_chunk)
+                        cur_chunk, cur_len = [], 0
+                    cur_chunk.append({**w, 'display': wclean})
+                    cur_len += 1
+                    if wclean.endswith(('.', '?', '!')):
+                        pop_chunks.append(cur_chunk)
+                        cur_chunk, cur_len = [], 0
+                if cur_chunk:
+                    pop_chunks.append(cur_chunk)
 
-                for chunk in processed_chunks:
+                # ── Render each chunk with 80→100% scale-in pop animation ─────────────
+                for chunk in pop_chunks:
                     if not chunk: continue
-                    
                     chunk_start = chunk[0]['start']
-                    chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
-                    
-                    # Ensure minimum duration for readability
-                    if chunk_end - chunk_start < 0.3: chunk_end = chunk_start + 0.5
-                    
-                    full_text = " ".join([c['word'] for c in chunk])
-                    import re
-                    # Strip any bracketed tags like [serious] or [slightly slow]
-                    display_text = full_text.replace('*', '')
-                    display_text = re.sub(r'\[.*?\]', '', display_text).strip()
-                    
-                    # WRAPPING for Safety
-                    # If text is too long (over 12 chars), force a wrap to maintain side margins
-                    import textwrap
-                    wrapped_lines = textwrap.wrap(display_text, width=12)
-                    final_display_text = "\n".join(wrapped_lines)
-                    
-                    is_highlight = '*' in full_text
-                    text_color = '#FFD700' if is_highlight else 'white' 
-                    
-                    sci_clip = get_science_text_clip(final_display_text.upper(), science_font_size, text_color)
-                    
-                    if sci_clip:
-                        sci_clip = sci_clip.set_start(chunk_start).set_duration(chunk_end - chunk_start)
-                        sci_clip = sci_clip.set_position('center')
-                        clips.append(sci_clip)
-                        
-                # --- TITLE CARD (HOOK) ---
-                # Parse first sentence from text for Title if not explicitly provided?
-                # For now, we don't have explicit Title input passed to this function usually.
-                # We can skip strict Title Card unless we have a "title" arg.
-                # But we can add the "Dong" sound at the start anyway.
+                    chunk_end   = chunk[-1]['start'] + chunk[-1]['duration']
+                    chunk_dur   = max(chunk_end - chunk_start, 0.35)
+
+                    words_display = [c['display'].upper() for c in chunk]
+                    hi_mask       = [_is_keyword(c['word']) for c in chunk]
+
+                    try:
+                        pil_img  = _render_popup(words_display, hi_mask)
+                        pop_clip = ImageClip(np.array(pil_img))
+                        # Pop-in: scale 80% → 100% over first 0.18 s
+                        anim_dur = min(0.18, chunk_dur * 0.35)
+                        pop_clip = pop_clip.resize(
+                            lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
+                        )
+                        pop_clip = (pop_clip
+                                    .set_start(chunk_start)
+                                    .set_duration(chunk_dur)
+                                    .set_position('center'))
+                        clips.append(pop_clip)
+                    except Exception as e:
+                        print(f"PopUp render error: {e}")
+                        continue
+
+                # Dong SFX hook
                 if os.path.exists("automation/media/sfx/dong.mp3"):
-                     dong = AudioFileClip("automation/media/sfx/dong.mp3").set_start(0).volumex(0.8)
-                     if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
-                     self.sfx_clips.insert(0, dong) # Ensure it's first
+                    dong = AudioFileClip("automation/media/sfx/dong.mp3").set_start(0).volumex(0.8)
+                    if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
+                    self.sfx_clips.insert(0, dong)
 
             else:
                 # --- ORIGINAL NEWS CAPTION GENERATOR ---

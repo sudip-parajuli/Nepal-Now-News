@@ -66,7 +66,6 @@ class TTSEngine:
             return output_path, []
 
         # 1. Normalize Decimals (e.g. "4.5" -> "4 point 5") BEFORE generic punctuation handling
-        # This prevents "4." being treated as a sentence end.
         text = re.sub(r'(\d+)\.(\d+)', r'\1 point \2', text)
 
         # Detection: If text contains Devanagari, apply Nepali normalization
@@ -86,21 +85,40 @@ class TTSEngine:
                 text = re.sub(abbr, full, text)
             text = re.sub(r'([।.,!?])(?=[^\s])', r'\1 ', text)
         else:
-            # English specific normalization
             text = re.sub(r'([.,!?])(?=[^\s])', r'\1 ', text)
 
         text = re.sub(r'\s+', ' ', text)
 
-        # --- ELEVENLABS INTEGRATION ---
-        # --- ELEVENLABS INTEGRATION ---
-        api_key = os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVENLAB_API_KEY")
-        use_elevenlabs = self.allow_elevenlabs and (api_key is not None)
-        eleven_audio_generated = False
         word_offsets = []
+        hume_generated = False
+        eleven_audio_generated = False
 
-        if self.allow_elevenlabs and not api_key:
-             print(f"DEBUG: ElevenLabs allowed but API KEY missing. Available Keys: {[k for k in os.environ.keys() if 'ELEVEN' in k]}")
-        
+        # ── STAGE 1: HUME AI (Primary — expressive, human-sounding) ──────────────
+        # Only used for English content (science channel).
+        is_english = not bool(re.search(r'[\u0900-\u097F]', text))
+        hume_api_key = os.getenv("HUME_API_KEY")
+        if is_english and hume_api_key:
+            try:
+                from automation.media.hume_tts import HumeTTS
+                hume_voice_id = self.voice_map.get("hume_voice_id")
+                hume = HumeTTS(voice_id=hume_voice_id)
+                result_path, hume_offsets = hume.generate_audio(text, output_path)
+                if result_path and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    hume_generated = True
+                    word_offsets = hume_offsets
+                    print("DEBUG: Hume TTS generation successful.")
+                else:
+                    print("DEBUG: Hume TTS returned no audio. Falling back.")
+            except Exception as e:
+                print(f"DEBUG: Hume TTS failed: {e}. Falling back.")
+
+        # ── STAGE 2: ELEVENLABS (Secondary fallback) ──────────────────────────────
+        api_key = os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVENLAB_API_KEY")
+        use_elevenlabs = self.allow_elevenlabs and (api_key is not None) and not hume_generated
+
+        if self.allow_elevenlabs and not api_key and not hume_generated:
+            print(f"DEBUG: ElevenLabs allowed but API KEY missing.")
+
         if use_elevenlabs:
             try:
                 from automation.media.elevenlabs_tts import ElevenLabsTTS
@@ -112,16 +130,15 @@ class TTSEngine:
                     eleven_audio_generated = True
                     print("DEBUG: ElevenLabs generation successful.")
                 else:
-                    print(f"DEBUG: ElevenLabs generation returned no file or empty file. Path: {output_path}")
+                    print(f"DEBUG: ElevenLabs returned empty/no file. Falling back to Edge TTS.")
             except ImportError as e:
-                 print(f"DEBUG: ElevenLabs library not installed or `elevenlabs_tts.py` missing. Error: {e}")
+                print(f"DEBUG: ElevenLabs not installed: {e}")
             except Exception as e:
-                print(f"DEBUG: ElevenLabs integration failed: {e}. Falling back to Edge TTS.")
+                print(f"DEBUG: ElevenLabs failed: {e}. Falling back to Edge TTS.")
 
-        if eleven_audio_generated:
-            # ElevenLabs does not strictly return word offsets in the basic API (without extra complexity)
-            # We will use the fallback estimator for offsets since we have the audio file and text.
-            pass 
+        if hume_generated or eleven_audio_generated:
+            # Hume/ElevenLabs succeeded — offsets already captured (or estimated below)
+            pass
         else:
             # --- FALLBACK: EDGE TTS ---
             voice = voice or self.voice_map.get("female")

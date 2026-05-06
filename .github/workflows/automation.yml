@@ -80,6 +80,8 @@ jobs:
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
           ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
+          HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
@@ -95,6 +97,8 @@ jobs:
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_SCIENCE }}
           ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
+          HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
