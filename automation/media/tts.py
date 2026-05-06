@@ -98,7 +98,7 @@ class TTSEngine:
         is_english = not bool(re.search(r'[\u0900-\u097F]', text))
         _hume_available = any(
             os.getenv(k) for k in
-            ["HUME_API_KEY","HUME_API_KEY1","HUME_API_KEY2","HUME_API_KEY3","HUME_API_KEY4","HUME_API_KEY5"]
+            ["HUME_API_KEY","HUME_API_KEY2","HUME_API_KEY3","HUME_API_KEY4","HUME_API_KEY5"]
         )
         if is_english and _hume_available:
             try:

@@ -22,7 +22,6 @@ class HumeTTS:
         self.api_keys = []
         for env_name in [
             "HUME_API_KEY",
-            "HUME_API_KEY1",
             "HUME_API_KEY2",
             "HUME_API_KEY3",
             "HUME_API_KEY4",

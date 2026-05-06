@@ -81,10 +81,10 @@ jobs:
           ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
-          HUME_API_KEY1: ${{ secrets.HUME_API_KEY1 }}
           HUME_API_KEY2: ${{ secrets.HUME_API_KEY2 }}
           HUME_API_KEY3: ${{ secrets.HUME_API_KEY3 }}
           HUME_API_KEY4: ${{ secrets.HUME_API_KEY4 }}
+          HUME_API_KEY5: ${{ secrets.HUME_API_KEY5 }}
           HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
           HUME_VOICE_ID_1: ${{ secrets.HUME_VOICE_ID_1 }}
         run: |
@@ -103,10 +103,10 @@ jobs:
           ELEVENLAB_API_KEY: ${{ secrets.ELEVENLAB_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
-          HUME_API_KEY1: ${{ secrets.HUME_API_KEY1 }}
           HUME_API_KEY2: ${{ secrets.HUME_API_KEY2 }}
           HUME_API_KEY3: ${{ secrets.HUME_API_KEY3 }}
           HUME_API_KEY4: ${{ secrets.HUME_API_KEY4 }}
+          HUME_API_KEY5: ${{ secrets.HUME_API_KEY5 }}
           HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
           HUME_VOICE_ID_1: ${{ secrets.HUME_VOICE_ID_1 }}
         run: |
