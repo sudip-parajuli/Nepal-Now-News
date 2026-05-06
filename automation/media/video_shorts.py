@@ -297,32 +297,70 @@ class VideoShortsGenerator:
                     dummy = Image.new('RGB', (1, 1))
                     dd = ImageDraw.Draw(dummy)
                     sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
+                def _render_popup(words_list, highlight_mask):
+                    STROKE = 3
+                    SHADOW = 4
+                    HP, VP = 28, 22
+                    MAX_W = 900 # Safe width for 1080p Shorts
+
+                    dummy = Image.new('RGB', (1, 1))
+                    dd = ImageDraw.Draw(dummy)
+                    sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
                     sp_w = max(sp_bbox[2] - sp_bbox[0], 12)
 
-                    dims, max_h = [], 0
-                    for wrd in words_list:
+                    lines = []
+                    current_line = []
+                    current_w = 0
+                    max_h = 0
+                    
+                    for idx, wrd in enumerate(words_list):
                         bb = dd.textbbox((0, 0), wrd, font=pop_font)
                         ww, wh = bb[2]-bb[0], bb[3]-bb[1]
-                        dims.append((ww, wh))
                         max_h = max(max_h, wh)
+                        
+                        if current_line and current_w + ww + sp_w > MAX_W:
+                            lines.append(current_line)
+                            current_line = []
+                            current_w = 0
+                            
+                        current_line.append((idx, wrd, ww, wh))
+                        current_w += ww + sp_w if current_line else ww
+                    
+                    if current_line:
+                        lines.append(current_line)
 
-                    total_w = sum(d[0] for d in dims) + sp_w * (len(words_list)-1)
+                    # Calculate total image dimensions
+                    line_widths = []
+                    for line in lines:
+                        lw = sum(w[2] for w in line) + sp_w * (max(len(line) - 1, 0))
+                        line_widths.append(lw)
+                    
+                    total_w = max(line_widths) if line_widths else 0
+                    total_h = len(lines) * max_h + max(len(lines) - 1, 0) * 10
+                    
                     img_w = int(total_w + HP*2 + STROKE*2 + SHADOW + 4)
-                    img_h = int(max_h + VP*2 + STROKE*2 + SHADOW + 4)
+                    img_h = int(total_h + VP*2 + STROKE*2 + SHADOW + 4)
 
                     img = Image.new('RGBA', (img_w, img_h), (0, 0, 0, 0))
                     d = ImageDraw.Draw(img)
-                    x = HP + STROKE
+                    
                     y = VP + STROKE
-                    for idx, (wrd, (ww, _)) in enumerate(zip(words_list, dims)):
-                        clr = '#FFD700' if highlight_mask[idx] else 'white'
-                        d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
-                        for dx in range(-STROKE, STROKE+1):
-                            for dy in range(-STROKE, STROKE+1):
-                                if dx == 0 and dy == 0: continue
-                                d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
-                        d.text((x, y), wrd, font=pop_font, fill=clr)
-                        x += ww + sp_w
+                    for line_idx, line in enumerate(lines):
+                        # Center line horizontally
+                        line_w = line_widths[line_idx]
+                        x = (img_w - line_w) // 2
+                        
+                        for idx, wrd, ww, _ in line:
+                            clr = '#FFD700' if highlight_mask[idx] else 'white'
+                            d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
+                            for dx in range(-STROKE, STROKE+1):
+                                for dy in range(-STROKE, STROKE+1):
+                                    if dx == 0 and dy == 0: continue
+                                    d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
+                            d.text((x, y), wrd, font=pop_font, fill=clr)
+                            x += ww + sp_w
+                        y += max_h + 10
+                        
                     return img
 
                 # ── Group word_offsets into 2-3 word chunks ───────────────────────────
@@ -406,70 +444,70 @@ class VideoShortsGenerator:
                         print(f"Pillow Render Error: {e}")
                         return None
 
-            # Wrap into lines
-            lines, curr_line, curr_len = [], [], 0
-            for w in word_offsets:
-                if curr_len + len(w['word']) > MAX_CHARS_PER_LINE and curr_line:
-                    lines.append(curr_line)
-                    curr_line, curr_len = [], 0
-                curr_line.append(w)
-                curr_len += len(w['word']) + 1
-            if curr_line: lines.append(curr_line)
-            
-            # Show two lines at a time
-            for i in range(0, len(lines), 2):
-                chunk = lines[i : i+2]
-                chunk_start = chunk[0][0]['start']
-                chunk_end = chunk[-1][-1]['start'] + chunk[-1][-1]['duration']
+                # Wrap into lines
+                lines, curr_line, curr_len = [], [], 0
+                for w in word_offsets:
+                    if curr_len + len(w['word']) > MAX_CHARS_PER_LINE and curr_line:
+                        lines.append(curr_line)
+                        curr_line, curr_len = [], 0
+                    curr_line.append(w)
+                    curr_len += len(w['word']) + 1
+                if curr_line: lines.append(curr_line)
                 
-                for line_idx, line in enumerate(chunk):
-                    # y_pos for first line vs second line
-                    y_pos = START_Y + (line_idx * LINE_HEIGHT)
+                # Show two lines at a time
+                for i in range(0, len(lines), 2):
+                    chunk = lines[i : i+2]
+                    chunk_start = chunk[0][0]['start']
+                    chunk_end = chunk[-1][-1]['start'] + chunk[-1][-1]['duration']
                     
-                    line_text = " ".join([w['word'] for w in line])
-                    is_nepali = any(ord(c) > 127 for c in line_text)
-                    if not is_nepali:
-                        line_text = line_text.upper()
+                    for line_idx, line in enumerate(chunk):
+                        # y_pos for first line vs second line
+                        y_pos = START_Y + (line_idx * LINE_HEIGHT)
                         
-                    try:
-                        # Render full line base in white
-                        base_txt = get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
-                        if base_txt:
-                            base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position(('center', y_pos))
-                            clips.append(base_txt)
+                        line_text = " ".join([w['word'] for w in line])
+                        is_nepali = any(ord(c) > 127 for c in line_text)
+                        if not is_nepali:
+                            line_text = line_text.upper()
                             
-                            # Calculate starting X for centering the whole line
-                            line_width = base_txt.size[0]
-                            # get_pillow_text_clip adds h_pad=80
-                            text_start_x = (self.size[0] - line_width) // 2 + 80
-                            
-                            cumulative_text = ""
-                            for w_info in line:
-                                w_text = w_info['word']
-                                if not is_nepali:
-                                    w_text = w_text.upper()
+                        try:
+                            # Render full line base in white
+                            base_txt = get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
+                            if base_txt:
+                                base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position(('center', y_pos))
+                                clips.append(base_txt)
                                 
-                                try:
-                                    l_font = font # Reuse already loaded best font
-                                    start_offset = l_font.getlength(cumulative_text)
-                                    word_x = text_start_x + start_offset - 80 # Adjust for h_pad
+                                # Calculate starting X for centering the whole line
+                                line_width = base_txt.size[0]
+                                # get_pillow_text_clip adds h_pad=80
+                                text_start_x = (self.size[0] - line_width) // 2 + 80
+                                
+                                cumulative_text = ""
+                                for w_info in line:
+                                    w_text = w_info['word']
+                                    if not is_nepali:
+                                        w_text = w_text.upper()
                                     
-                                    h_start = max(0, w_info['start'] - 0.05)
-                                    h_dur = w_info['duration'] + 0.1
+                                    try:
+                                        l_font = font # Reuse already loaded best font
+                                        start_offset = l_font.getlength(cumulative_text)
+                                        word_x = text_start_x + start_offset - 80 # Adjust for h_pad
+                                        
+                                        h_start = max(0, w_info['start'] - 0.05)
+                                        h_dur = w_info['duration'] + 0.1
 
-                                    # HIGHLIGHT: Yellow color instead of red background
-                                    highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT)
-                                    if highlight:
-                                        highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((word_x, y_pos))
-                                        clips.append(highlight)
-                                    
-                                    cumulative_text += w_text + " "
-                                except Exception as e:
-                                    print(f"Word Positioning Error: {e}")
-                                    continue
-                    except Exception as e:
-                        print(f"Caption Rendering Error (Pillow): {e}")
-                        continue
+                                        # HIGHLIGHT: Yellow color instead of red background
+                                        highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT)
+                                        if highlight:
+                                            highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((word_x, y_pos))
+                                            clips.append(highlight)
+                                        
+                                        cumulative_text += w_text + " "
+                                    except Exception as e:
+                                        print(f"Word Positioning Error: {e}")
+                                        continue
+                        except Exception as e:
+                            print(f"Caption Rendering Error (Pillow): {e}")
+                            continue
         else:
             print("WARNING: No word_offsets found. Using fallback text.")
             try:
