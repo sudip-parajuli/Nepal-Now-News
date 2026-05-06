@@ -6,42 +6,64 @@ import requests
 class HumeTTS:
     """
     Hume AI Octave TTS integration (free tier).
-    Uses the REST API directly for maximum version compatibility.
-    Produces expressive, human-sounding voice output.
+    - Rotates up to 6 API keys (HUME_API_KEY, HUME_API_KEY1..HUME_API_KEY5)
+      automatically when a key hits its quota/rate limit.
+    - Randomly picks from available voice IDs (HUME_VOICE_ID, HUME_VOICE_ID_1)
+      each call for natural variety.
     """
 
     BASE_URL = "https://api.hume.ai/v0/tts"
 
     def __init__(self, voice_id: str = None):
-        self.api_key = os.getenv("HUME_API_KEY")
-        self.voice_id = (
-            voice_id
-            or os.getenv("HUME_VOICE_ID")
-            or os.getenv("HUME_VOICE_ID_SCIENCE")
-        )
+        import random
+        self._random = random
 
-        if not self.api_key:
-            print("HumeTTS WARNING: HUME_API_KEY not set in environment.")
-        if not self.voice_id:
-            print("HumeTTS WARNING: No voice ID set. Using Hume default voice.")
+        # Collect all available API keys in priority order
+        self.api_keys = []
+        for env_name in [
+            "HUME_API_KEY",
+            "HUME_API_KEY1",
+            "HUME_API_KEY2",
+            "HUME_API_KEY3",
+            "HUME_API_KEY4",
+            "HUME_API_KEY5",
+        ]:
+            val = os.getenv(env_name, "").strip()
+            if val:
+                self.api_keys.append(val)
+
+        # Collect all available voice IDs
+        self.voice_ids = []
+        if voice_id:
+            self.voice_ids.append(voice_id)
+        for env_name in ["HUME_VOICE_ID", "HUME_VOICE_ID_1"]:
+            val = os.getenv(env_name, "").strip()
+            if val and val not in self.voice_ids:
+                self.voice_ids.append(val)
+
+        if not self.api_keys:
+            print("HumeTTS WARNING: No HUME_API_KEY* found in environment.")
+        else:
+            print(f"HumeTTS: {len(self.api_keys)} API key(s) and {len(self.voice_ids)} voice ID(s) available.")
 
     def generate_audio(self, text: str, output_path: str):
         """
         Generate TTS audio using Hume Octave API.
+        Rotates through all available API keys on quota/rate-limit errors.
         Returns (output_path, word_offsets) on success, or (None, []) on failure.
         """
-        if not self.api_key:
-            print("HumeTTS: Skipping — no API key.")
+        if not self.api_keys:
+            print("HumeTTS: Skipping — no API keys available.")
             return None, []
 
-        headers = {
-            "X-Hume-Api-Key": self.api_key,
-            "Content-Type": "application/json",
-        }
+        # Pick a random voice ID for this call (variety + rotation)
+        chosen_voice = self._random.choice(self.voice_ids) if self.voice_ids else None
+        if chosen_voice:
+            print(f"HumeTTS: Using voice ID: {chosen_voice[:8]}...")
 
         utterance = {"text": text}
-        if self.voice_id:
-            utterance["voice"] = {"id": self.voice_id}
+        if chosen_voice:
+            utterance["voice"] = {"id": chosen_voice}
 
         payload = {
             "utterances": [utterance],
@@ -49,55 +71,69 @@ class HumeTTS:
             "num_generations": 1,
         }
 
-        try:
-            print(f"HumeTTS: Requesting audio for: {text[:60]}...")
-            resp = requests.post(
-                self.BASE_URL, headers=headers, json=payload, timeout=90
-            )
+        # Try each key in sequence
+        for attempt, api_key in enumerate(self.api_keys, start=1):
+            key_preview = f"{api_key[:6]}...{api_key[-4:]}"
+            print(f"HumeTTS: Attempting key {attempt}/{len(self.api_keys)} ({key_preview}) ...")
 
-            if resp.status_code != 200:
-                print(
-                    f"HumeTTS: API error {resp.status_code} — {resp.text[:300]}"
+            headers = {
+                "X-Hume-Api-Key": api_key,
+                "Content-Type": "application/json",
+            }
+
+            try:
+                resp = requests.post(
+                    self.BASE_URL, headers=headers, json=payload, timeout=90
                 )
-                return None, []
 
-            data = resp.json()
-            generations = data.get("generations", [])
+                # Quota / auth errors — rotate to next key
+                if resp.status_code in (401, 402, 403, 429):
+                    print(
+                        f"HumeTTS: Key {attempt} returned {resp.status_code} "
+                        f"({resp.text[:120]}). Trying next key..."
+                    )
+                    continue
 
-            if not generations:
-                print("HumeTTS: Empty generations list in response.")
-                return None, []
+                if resp.status_code != 200:
+                    print(f"HumeTTS: Key {attempt} API error {resp.status_code}: {resp.text[:200]}")
+                    continue
 
-            gen = generations[0]
-            audio_b64 = gen.get("audio", "")
+                data = resp.json()
+                generations = data.get("generations", [])
+                if not generations:
+                    print(f"HumeTTS: Key {attempt} — empty generations list.")
+                    continue
 
-            if not audio_b64:
-                print("HumeTTS: No audio field in generation.")
-                return None, []
+                gen = generations[0]
+                audio_b64 = gen.get("audio", "")
+                if not audio_b64:
+                    print(f"HumeTTS: Key {attempt} — no audio field.")
+                    continue
 
-            audio_bytes = base64.b64decode(audio_b64)
+                audio_bytes = base64.b64decode(audio_b64)
 
-            out_dir = os.path.dirname(output_path)
-            if out_dir:
-                os.makedirs(out_dir, exist_ok=True)
+                out_dir = os.path.dirname(output_path)
+                if out_dir:
+                    os.makedirs(out_dir, exist_ok=True)
 
-            with open(output_path, "wb") as f:
-                f.write(audio_bytes)
+                with open(output_path, "wb") as f:
+                    f.write(audio_bytes)
 
-            print(
-                f"HumeTTS: Audio saved to {output_path} ({len(audio_bytes):,} bytes)"
-            )
+                print(
+                    f"HumeTTS: ✓ Key {attempt} succeeded — "
+                    f"{len(audio_bytes):,} bytes → {output_path}"
+                )
 
-            word_offsets = self._extract_word_offsets(gen)
-            print(f"HumeTTS: Extracted {len(word_offsets)} word timestamps.")
+                word_offsets = self._extract_word_offsets(gen)
+                print(f"HumeTTS: Extracted {len(word_offsets)} word timestamps.")
+                return output_path, word_offsets
 
-            return output_path, word_offsets
+            except requests.exceptions.Timeout:
+                print(f"HumeTTS: Key {attempt} timed out (90 s). Trying next key...")
+            except Exception as e:
+                print(f"HumeTTS: Key {attempt} unexpected error — {e}. Trying next key...")
 
-        except requests.exceptions.Timeout:
-            print("HumeTTS: Request timed out (90s).")
-        except Exception as e:
-            print(f"HumeTTS: Unexpected error — {e}")
-
+        print("HumeTTS: All API keys exhausted — falling back to next TTS engine.")
         return None, []
 
     def _extract_word_offsets(self, generation: dict) -> list:

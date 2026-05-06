@@ -96,8 +96,11 @@ class TTSEngine:
         # ── STAGE 1: HUME AI (Primary — expressive, human-sounding) ──────────────
         # Only used for English content (science channel).
         is_english = not bool(re.search(r'[\u0900-\u097F]', text))
-        hume_api_key = os.getenv("HUME_API_KEY")
-        if is_english and hume_api_key:
+        _hume_available = any(
+            os.getenv(k) for k in
+            ["HUME_API_KEY","HUME_API_KEY1","HUME_API_KEY2","HUME_API_KEY3","HUME_API_KEY4","HUME_API_KEY5"]
+        )
+        if is_english and _hume_available:
             try:
                 from automation.media.hume_tts import HumeTTS
                 hume_voice_id = self.voice_map.get("hume_voice_id")
