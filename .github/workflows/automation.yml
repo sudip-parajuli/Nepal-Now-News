@@ -2,13 +2,6 @@ name: Nepal Now Automation (News & Science)
 
 on:
   schedule:
-    # Frequently check for breaking news (Every 30 mins)
-    - cron: '*/30 * * * *'
-    # Daily News Summary (Disabled)
-    # - cron: '45 1,13 * * *'
-    
-    # Storytelling Program (Disabled)
-    # - cron: '0 14 * * 2,4,6'
     # Science Fact Shorts (7:00 AM & 6:30 PM NPT)
     # 15 1 UTC = 7:00 AM NPT, 45 12 UTC = 6:30 PM NPT
     - cron: '15 1,12 * * *'
@@ -20,7 +13,6 @@ on:
         default: 'all'
         type: choice
         options:
-          - all
           - science
           - science_long
       is_test:
@@ -73,7 +65,7 @@ jobs:
       - name: Run Science Facts (Shorts)
         if: |
           github.event.schedule == '15 1,12 * * *' || 
-          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'science'))
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'science')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -95,7 +87,7 @@ jobs:
       - name: Run Science Detailed (Long Form)
         if: |
           github.event.schedule == '15 1,12 * * *' || 
-          (github.event_name == 'workflow_dispatch' && (github.event.inputs.pipeline == 'all' || github.event.inputs.pipeline == 'science_long'))
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'science_long')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -133,7 +125,7 @@ jobs:
             git fetch origin main
             
             # Use python for union merge
-            python -c "import json, os, subprocess; [ ( (lambda f: ( (lambda d1, d2: open(f, 'w').write(json.dumps(list(set(d1)|set(d2))))) (json.load(open(f)), json.loads(subprocess.check_output(['git', 'show', 'origin/main:'+f]).decode())) ) (f) ) if os.path.exists(f) else None ) for f in ['automation/storage/posted_news.json', 'automation/storage/posted_science.json', 'automation/storage/news_hashes.json'] ]"
+            python -c "import json, os, subprocess; [ ( (lambda f: ( (lambda d1, d2: open(f, 'w').write(json.dumps(list(set(d1)|set(d2))))) (json.load(open(f)), json.loads(subprocess.check_output(['git', 'show', 'origin/main:'+f]).decode())) ) (f) ) if os.path.exists(f) else None ) for f in ['automation/storage/posted_science.json'] ]"
             
             git add automation/storage/*.json
             git commit -m 'Update state (merged)' || echo 'Nothing to commit after merge'

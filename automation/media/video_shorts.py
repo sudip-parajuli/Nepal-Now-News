@@ -237,310 +237,188 @@ class VideoShortsGenerator:
             
             if not font: font = ImageFont.load_default()
 
-            # --- SCIENCE CAPTION GENERATOR ---
-            channel_name_str = str((branding or {}).get('channel_name', "")).lower()
-            is_science_mode = "science" in channel_name_str or not template_mode # Default to science style if not news template
+            print("DEBUG: Using Pop-Up Word caption style (scale-in, bold, keyword highlight)")
             
-            if is_science_mode:
-                print("DEBUG: Using Pop-Up Word caption style (scale-in, bold, keyword highlight)")
+            # ── Font: Heavy/Extra-Bold sans-serif ─────────────────────────────────
+            POP_FONT_SIZE = 88
+            pop_font = None
+            pop_font_paths = [
+                "automation/media/assets/Montserrat-Black.ttf",
+                "automation/media/assets/Montserrat-ExtraBold.ttf",
+                "C:\\Windows\\Fonts\\ariblk.ttf",   # Arial Black
+                "C:\\Windows\\Fonts\\impact.ttf",    # Impact
+                "C:\\Windows\\Fonts\\arialbd.ttf",   # Arial Bold
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            ]
+            for _fp in pop_font_paths:
+                if os.path.exists(_fp):
+                    try:
+                        pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
+                        print(f"PopUp Font loaded: {_fp}")
+                        break
+                    except: continue
+            if not pop_font:
+                pop_font = font  # last-resort fallback
+
+            # ── Keyword detection ─────────────────────────────────────────────────
+            _STOP = {
+                'the','a','an','is','are','was','were','be','been','being',
+                'of','in','on','at','to','for','and','or','but','so','yet',
+                'it','its','this','that','these','those','with','from','by',
+                'as','into','do','does','did','not','no','have','has','had',
+                'will','would','can','could','should','may','might','what',
+                'which','who','when','where','why','how','if','than','then',
+                'there','here','they','we','he','she','you','i','my','your',
+                'our','their','his','her','also','just','even','up','out',
+                'about','over','more','very','such','each',
+            }
+
+            def _is_keyword(w):
+                clean = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
+                if not clean: return False
+                if clean in _STOP: return False
+                if '*' in w: return True        # explicitly marked in script
+                if len(clean) >= 6: return True  # long words = content words
+                return False
+
+            # ── Render one chunk as RGBA PIL image with per-word colors ──────────
+            def _render_popup(words_list, highlight_mask):
+                STROKE = 3
+                SHADOW = 4
+                HP, VP = 28, 22
+
+                dummy = Image.new('RGB', (1, 1))
+                dd = ImageDraw.Draw(dummy)
+                sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
+            def _render_popup(words_list, highlight_mask):
+                STROKE = 3
+                SHADOW = 4
+                HP, VP = 28, 22
+                MAX_W = 900 # Safe width for 1080p Shorts
+
+                dummy = Image.new('RGB', (1, 1))
+                dd = ImageDraw.Draw(dummy)
+                sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
+                sp_w = max(sp_bbox[2] - sp_bbox[0], 12)
+
+                lines = []
+                current_line = []
+                current_w = 0
+                max_h = 0
                 
-                # ── Font: Heavy/Extra-Bold sans-serif ─────────────────────────────────
-                POP_FONT_SIZE = 88
-                pop_font = None
-                pop_font_paths = [
-                    "automation/media/assets/Montserrat-Black.ttf",
-                    "automation/media/assets/Montserrat-ExtraBold.ttf",
-                    "C:\\Windows\\Fonts\\ariblk.ttf",   # Arial Black
-                    "C:\\Windows\\Fonts\\impact.ttf",    # Impact
-                    "C:\\Windows\\Fonts\\arialbd.ttf",   # Arial Bold
-                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-                ]
-                for _fp in pop_font_paths:
-                    if os.path.exists(_fp):
-                        try:
-                            pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
-                            print(f"PopUp Font loaded: {_fp}")
-                            break
-                        except: continue
-                if not pop_font:
-                    pop_font = font  # last-resort fallback
-
-                # ── Keyword detection ─────────────────────────────────────────────────
-                _STOP = {
-                    'the','a','an','is','are','was','were','be','been','being',
-                    'of','in','on','at','to','for','and','or','but','so','yet',
-                    'it','its','this','that','these','those','with','from','by',
-                    'as','into','do','does','did','not','no','have','has','had',
-                    'will','would','can','could','should','may','might','what',
-                    'which','who','when','where','why','how','if','than','then',
-                    'there','here','they','we','he','she','you','i','my','your',
-                    'our','their','his','her','also','just','even','up','out',
-                    'about','over','more','very','such','each',
-                }
-
-                def _is_keyword(w):
-                    clean = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
-                    if not clean: return False
-                    if clean in _STOP: return False
-                    if '*' in w: return True        # explicitly marked in script
-                    if len(clean) >= 6: return True  # long words = content words
-                    return False
-
-                # ── Render one chunk as RGBA PIL image with per-word colors ──────────
-                def _render_popup(words_list, highlight_mask):
-                    STROKE = 3
-                    SHADOW = 4
-                    HP, VP = 28, 22
-
-                    dummy = Image.new('RGB', (1, 1))
-                    dd = ImageDraw.Draw(dummy)
-                    sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
-                def _render_popup(words_list, highlight_mask):
-                    STROKE = 3
-                    SHADOW = 4
-                    HP, VP = 28, 22
-                    MAX_W = 900 # Safe width for 1080p Shorts
-
-                    dummy = Image.new('RGB', (1, 1))
-                    dd = ImageDraw.Draw(dummy)
-                    sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
-                    sp_w = max(sp_bbox[2] - sp_bbox[0], 12)
-
-                    lines = []
-                    current_line = []
-                    current_w = 0
-                    max_h = 0
+                for idx, wrd in enumerate(words_list):
+                    bb = dd.textbbox((0, 0), wrd, font=pop_font)
+                    ww, wh = bb[2]-bb[0], bb[3]-bb[1]
+                    max_h = max(max_h, wh)
                     
-                    for idx, wrd in enumerate(words_list):
-                        bb = dd.textbbox((0, 0), wrd, font=pop_font)
-                        ww, wh = bb[2]-bb[0], bb[3]-bb[1]
-                        max_h = max(max_h, wh)
-                        
-                        if current_line and current_w + ww + sp_w > MAX_W:
-                            lines.append(current_line)
-                            current_line = []
-                            current_w = 0
-                            
-                        current_line.append((idx, wrd, ww, wh))
-                        current_w += ww + sp_w if current_line else ww
-                    
-                    if current_line:
+                    if current_line and current_w + ww + sp_w > MAX_W:
                         lines.append(current_line)
-
-                    # Calculate total image dimensions
-                    line_widths = []
-                    for line in lines:
-                        lw = sum(w[2] for w in line) + sp_w * (max(len(line) - 1, 0))
-                        line_widths.append(lw)
-                    
-                    total_w = max(line_widths) if line_widths else 0
-                    total_h = len(lines) * max_h + max(len(lines) - 1, 0) * 10
-                    
-                    img_w = int(total_w + HP*2 + STROKE*2 + SHADOW + 4)
-                    img_h = int(total_h + VP*2 + STROKE*2 + SHADOW + 4)
-
-                    img = Image.new('RGBA', (img_w, img_h), (0, 0, 0, 0))
-                    d = ImageDraw.Draw(img)
-                    
-                    y = VP + STROKE
-                    for line_idx, line in enumerate(lines):
-                        # Center line horizontally
-                        line_w = line_widths[line_idx]
-                        x = (img_w - line_w) // 2
+                        current_line = []
+                        current_w = 0
                         
-                        for idx, wrd, ww, _ in line:
-                            clr = '#FFD700' if highlight_mask[idx] else 'white'
-                            d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
-                            for dx in range(-STROKE, STROKE+1):
-                                for dy in range(-STROKE, STROKE+1):
-                                    if dx == 0 and dy == 0: continue
-                                    d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
-                            d.text((x, y), wrd, font=pop_font, fill=clr)
-                            x += ww + sp_w
-                        y += max_h + 10
-                        
-                    return img
-
-                # ── Group word_offsets into 2-3 word chunks ───────────────────────────
-                pop_chunks = []
-                cur_chunk, cur_len = [], 0
-                for w in word_offsets:
-                    wclean = re.sub(r'\[.*?\]', '', w['word'].replace('*', '')).strip()
-                    if not wclean: continue
-                    # Flush at 3 words or after punctuation
-                    if cur_len >= 3 or (cur_len >= 2 and wclean.endswith(('.','?','!',','))):
-                        pop_chunks.append(cur_chunk)
-                        cur_chunk, cur_len = [], 0
-                    cur_chunk.append({**w, 'display': wclean})
-                    cur_len += 1
-                    if wclean.endswith(('.', '?', '!')):
-                        pop_chunks.append(cur_chunk)
-                        cur_chunk, cur_len = [], 0
-                if cur_chunk:
-                    pop_chunks.append(cur_chunk)
-
-                # ── Render each chunk with 80→100% scale-in pop animation ─────────────
-                for chunk in pop_chunks:
-                    if not chunk: continue
-                    chunk_start = chunk[0]['start']
-                    chunk_end   = chunk[-1]['start'] + chunk[-1]['duration']
-                    chunk_dur   = max(chunk_end - chunk_start, 0.35)
-
-                    words_display = [c['display'].upper() for c in chunk]
-                    hi_mask       = [_is_keyword(c['word']) for c in chunk]
-
-                    try:
-                        pil_img  = _render_popup(words_display, hi_mask)
-                        pop_clip = ImageClip(np.array(pil_img))
-                        # Pop-in: scale 80% → 100% over first 0.18 s
-                        anim_dur = min(0.18, chunk_dur * 0.35)
-                        pop_clip = pop_clip.resize(
-                            lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
-                        )
-                        pop_clip = (pop_clip
-                                    .set_start(chunk_start)
-                                    .set_duration(chunk_dur)
-                                    .set_position('center'))
-                        clips.append(pop_clip)
-                    except Exception as e:
-                        print(f"PopUp render error: {e}")
-                        continue
-
-                # Dong SFX hook
-                if os.path.exists("automation/media/sfx/dong.mp3"):
-                    dong = AudioFileClip("automation/media/sfx/dong.mp3").set_start(0).volumex(0.8)
-                    if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
-                    self.sfx_clips.insert(0, dong)
-
-            else:
-                # --- ORIGINAL NEWS CAPTION GENERATOR ---
-                def get_pillow_text_clip(txt, fsize, clr, bg=None):
-                    try:
-                        # Measure text
-                        dummy = Image.new('RGB', (1, 1))
-                        draw = ImageDraw.Draw(dummy)
-                        bbox = draw.textbbox((0, 0), txt, font=font)
-                        tw = bbox[2] - bbox[0]
-                        th = bbox[3] - bbox[1]
-                        # Ensure minimum height for Devanagari descenders/ascenders
-                        th = max(th, FONT_SIZE)
-                        
-                        # Padding: 10 vertical, 80 horizontal for larger margins
-                        v_pad, h_pad = 10, 80
-                        img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
-                        d = ImageDraw.Draw(img)
-                        if bg: d.rectangle([0, 0, tw + h_pad*2, th + v_pad*2], fill=bg)
-                        
-                        # Stroke for all text for visibility
-                        for offset in [(-2,-2), (2,-2), (-2,2), (2,2)]:
-                            d.text((h_pad+offset[0], v_pad+offset[1]), txt, font=font, fill='black')
-                        
-                        d.text((h_pad, v_pad), txt, font=font, fill=clr)
-                        img_np = np.array(img)
-                        return ImageClip(img_np)
-                    except Exception as e:
-                        print(f"Pillow Render Error: {e}")
-                        return None
-
-                # Wrap into lines
-                lines, curr_line, curr_len = [], [], 0
-                for w in word_offsets:
-                    if curr_len + len(w['word']) > MAX_CHARS_PER_LINE and curr_line:
-                        lines.append(curr_line)
-                        curr_line, curr_len = [], 0
-                    curr_line.append(w)
-                    curr_len += len(w['word']) + 1
-                if curr_line: lines.append(curr_line)
+                    current_line.append((idx, wrd, ww, wh))
+                    current_w += ww + sp_w if current_line else ww
                 
-                # Show two lines at a time
-                for i in range(0, len(lines), 2):
-                    chunk = lines[i : i+2]
-                    chunk_start = chunk[0][0]['start']
-                    chunk_end = chunk[-1][-1]['start'] + chunk[-1][-1]['duration']
+                if current_line:
+                    lines.append(current_line)
+
+                # Calculate total image dimensions
+                line_widths = []
+                for line in lines:
+                    lw = sum(w[2] for w in line) + sp_w * (max(len(line) - 1, 0))
+                    line_widths.append(lw)
+                
+                total_w = max(line_widths) if line_widths else 0
+                total_h = len(lines) * max_h + max(len(lines) - 1, 0) * 10
+                
+                img_w = int(total_w + HP*2 + STROKE*2 + SHADOW + 4)
+                img_h = int(total_h + VP*2 + STROKE*2 + SHADOW + 4)
+
+                img = Image.new('RGBA', (img_w, img_h), (0, 0, 0, 0))
+                d = ImageDraw.Draw(img)
+                
+                y = VP + STROKE
+                for line_idx, line in enumerate(lines):
+                    # Center line horizontally
+                    line_w = line_widths[line_idx]
+                    x = (img_w - line_w) // 2
                     
-                    for line_idx, line in enumerate(chunk):
-                        # y_pos for first line vs second line
-                        y_pos = START_Y + (line_idx * LINE_HEIGHT)
-                        
-                        line_text = " ".join([w['word'] for w in line])
-                        is_nepali = any(ord(c) > 127 for c in line_text)
-                        if not is_nepali:
-                            line_text = line_text.upper()
-                            
-                        try:
-                            # Render full line base in white
-                            base_txt = get_pillow_text_clip(line_text, FONT_SIZE, NORMAL_TEXT)
-                            if base_txt:
-                                base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position(('center', y_pos))
-                                clips.append(base_txt)
-                                
-                                # Calculate starting X for centering the whole line
-                                line_width = base_txt.size[0]
-                                # get_pillow_text_clip adds h_pad=80
-                                text_start_x = (self.size[0] - line_width) // 2 + 80
-                                
-                                cumulative_text = ""
-                                for w_info in line:
-                                    w_text = w_info['word']
-                                    if not is_nepali:
-                                        w_text = w_text.upper()
-                                    
-                                    try:
-                                        l_font = font # Reuse already loaded best font
-                                        start_offset = l_font.getlength(cumulative_text)
-                                        word_x = text_start_x + start_offset - 80 # Adjust for h_pad
-                                        
-                                        h_start = max(0, w_info['start'] - 0.05)
-                                        h_dur = w_info['duration'] + 0.1
+                    for idx, wrd, ww, _ in line:
+                        clr = '#FFD700' if highlight_mask[idx] else 'white'
+                        d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
+                        for dx in range(-STROKE, STROKE+1):
+                            for dy in range(-STROKE, STROKE+1):
+                                if dx == 0 and dy == 0: continue
+                                d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
+                        d.text((x, y), wrd, font=pop_font, fill=clr)
+                        x += ww + sp_w
+                    y += max_h + 10
+                    
+                return img
 
-                                        # HIGHLIGHT: Yellow color instead of red background
-                                        highlight = get_pillow_text_clip(w_text, FONT_SIZE, HIGHLIGHT_TEXT)
-                                        if highlight:
-                                            highlight = highlight.set_start(h_start).set_duration(h_dur).set_position((word_x, y_pos))
-                                            clips.append(highlight)
-                                        
-                                        cumulative_text += w_text + " "
-                                    except Exception as e:
-                                        print(f"Word Positioning Error: {e}")
-                                        continue
-                        except Exception as e:
-                            print(f"Caption Rendering Error (Pillow): {e}")
-                            continue
-        else:
-            print("WARNING: No word_offsets found. Using fallback text.")
-            try:
-                # Basic static fallback with Pillow
-                msg = self._wrap_text(text, 20).upper()
-                txt = get_pillow_text_clip(msg, 70, 'white', bg='black')
-                if txt:
-                    txt = txt.set_duration(duration).set_position('center')
-                    clips.append(txt)
-            except:
-                pass
+            # ── Group word_offsets into 2-3 word chunks ───────────────────────────
+            pop_chunks = []
+            cur_chunk, cur_len = [], 0
+            for w in word_offsets:
+                wclean = re.sub(r'\[.*?\]', '', w['word'].replace('*', '')).strip()
+                if not wclean: continue
+                # Flush at 3 words or after punctuation
+                if cur_len >= 3 or (cur_len >= 2 and wclean.endswith(('.','?','!',','))):
+                    pop_chunks.append(cur_chunk)
+                    cur_chunk, cur_len = [], 0
+                cur_chunk.append({**w, 'display': wclean})
+                cur_len += 1
+                if wclean.endswith(('.', '?', '!')):
+                    pop_chunks.append(cur_chunk)
+                    cur_chunk, cur_len = [], 0
+            if cur_chunk:
+                pop_chunks.append(cur_chunk)
+
+            # ── Render each chunk with 80→100% scale-in pop animation ─────────────
+            for chunk in pop_chunks:
+                if not chunk: continue
+                chunk_start = chunk[0]['start']
+                chunk_end   = chunk[-1]['start'] + chunk[-1]['duration']
+                chunk_dur   = max(chunk_end - chunk_start, 0.35)
+
+                words_display = [c['display'].upper() for c in chunk]
+                hi_mask       = [_is_keyword(c['word']) for c in chunk]
+
+                try:
+                    pil_img  = _render_popup(words_display, hi_mask)
+                    pop_clip = ImageClip(np.array(pil_img))
+                    # Pop-in: scale 80% → 100% over first 0.18 s
+                    anim_dur = min(0.18, chunk_dur * 0.35)
+                    pop_clip = pop_clip.resize(
+                        lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
+                    )
+                    pop_clip = (pop_clip
+                                .set_start(chunk_start)
+                                .set_duration(chunk_dur)
+                                .set_position('center'))
+                    clips.append(pop_clip)
+                except Exception as e:
+                    print(f"PopUp render error: {e}")
+                    continue
+
+            # Dong SFX hook
+            if os.path.exists("automation/media/sfx/dong.mp3"):
+                dong = AudioFileClip("automation/media/sfx/dong.mp3").set_start(0).volumex(0.8)
+                if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
+                self.sfx_clips.insert(0, dong)
+
+
         
 
         
-        # Exclusively use Science music if channel_name suggests it
         music_files = []
-        is_science = "science" in str(channel_name).lower()
-        
-        if is_science:
-            # Check both possible science music directories
-            science_music_dirs = ["automation/music/science"]
-            for sdir in science_music_dirs:
-                if os.path.exists(sdir):
-                    music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
-            print(f"Science Channel detected. Found {len(music_files)} music files.")
-        
-        # If not science, or if science music was missing (failsafe), check other folders
-        # CRITICAL: If is_science is True, we DO NOT fall back to News music.
-        if not is_science:
-            # Check new 'news' directory
-            music_files = glob.glob("automation/music/news/*.mp3") + glob.glob("automation/music/*.mp3")
-            if not music_files: # Fallback to singular just in case
-                music_files = glob.glob("automation/music/*.mp3")
+        science_music_dirs = ["automation/music/science"]
+        for sdir in science_music_dirs:
+            if os.path.exists(sdir):
+                music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
+        print(f"Science background music found: {len(music_files)} files.")
 
         if music_files:
             try:
@@ -557,6 +435,8 @@ class VideoShortsGenerator:
                 # Gentle fades (2 seconds)
                 if bg_music.duration > 4:
                     bg_music = bg_music.audio_fadein(2).audio_fadeout(2)
+                
+                audio_components = [audio, bg_music]
                 
                 if hasattr(self, 'sfx_clips') and self.sfx_clips:
                     print(f"Adding {len(self.sfx_clips)} SFX clips to final audio.")

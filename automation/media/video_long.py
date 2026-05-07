@@ -68,104 +68,7 @@ class VideoLongGenerator:
         if not font: font = ImageFont.load_default()
         return font
 
-    def get_pillow_text_clip(self, txt, fsize, clr, bg=None, stroke_width=2):
-        try:
-            # Re-load if size differs or just use loaded but this is safer for variety
-            l_font = self._load_best_font(fsize, text=txt)
-            
-            # Measure text
-            dummy = Image.new('RGB', (1, 1))
-            draw = ImageDraw.Draw(dummy)
-            bbox = draw.textbbox((0, 0), txt, font=l_font)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-            th = max(th, fsize) # Minimum height
 
-            # Padding: 20 vertical, 90 horizontal for margins
-            v_pad, h_pad = 20, 90
-            img = Image.new('RGBA', (tw + h_pad*2, th + v_pad*2), (0,0,0,0))
-            d = ImageDraw.Draw(img)
-            
-            if bg:
-                d.rectangle([0, 0, tw + h_pad*2, th + v_pad*2], fill=bg)
-            
-            # Draw strong stroke for legibility on long videos
-            if clr == 'white':
-                for offset in [(-stroke_width,-stroke_width), (stroke_width,-stroke_width), 
-                              (-stroke_width,stroke_width), (stroke_width,stroke_width)]:
-                    d.text((h_pad+offset[0], v_pad+offset[1]), txt, font=l_font, fill='black')
-            
-            d.text((h_pad, v_pad), txt, font=l_font, fill=clr)
-            img_np = np.array(img)
-            return ImageClip(img_np)
-        except Exception as e:
-            print(f"Pillow Render Error (Long): {e}")
-            return None
-
-    def wrap_text(self, text, max_chars=40):
-        words, lines, curr, curr_len = text.split(), [], [], 0
-        for w in words:
-            if curr_len + len(w) + 1 <= max_chars:
-                curr.append(w); curr_len += len(w) + 1
-            else:
-                lines.append(" ".join(curr)); curr = [w]; curr_len = len(w)
-        if curr: lines.append(" ".join(curr))
-        return lines
-
-    def get_science_text_clip(self, txt, fsize, clr, stroke_clr='black', stroke_w=6, shadow_offset=4):
-        try:
-             # Science Font Loading (Montserrat Black or Arial Black fallback)
-            science_font = None
-            # Slightly smaller for long form compared to shorts
-            science_font_size = 85 
-            
-            science_font_paths = [
-                "C:\\Windows\\Fonts\\arialbd.ttf",
-                "C:\\Windows\\Fonts\\ariblk.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-            ]
-            if os.path.exists("automation/media/assets/Montserrat-Black.ttf"):
-                science_font_paths.insert(0, "automation/media/assets/Montserrat-Black.ttf")
-            
-            for path in science_font_paths:
-                if os.path.exists(path):
-                    try:
-                        science_font = ImageFont.truetype(path, science_font_size)
-                        break
-                    except: continue
-            
-            if not science_font: science_font = self.font # Fallback
-
-            cur_font = science_font
-            dummy = Image.new('RGB', (1, 1))
-            draw = ImageDraw.Draw(dummy)
-            bbox = draw.textbbox((0, 0), txt, font=cur_font)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-            
-            pad = 20
-            img_w = tw + (pad * 2) + stroke_w + abs(shadow_offset)
-            img_h = th + (pad * 2) + stroke_w + abs(shadow_offset)
-            
-            img = Image.new('RGBA', (int(img_w), int(img_h)), (0,0,0,0))
-            d = ImageDraw.Draw(img)
-            
-            # Hard Drop Shadow
-            d.text((pad + shadow_offset, pad + shadow_offset), txt, font=cur_font, fill='black')
-            
-            # Strong Stroke
-            for off_x in range(-stroke_w, stroke_w+1, 2):
-                    for off_y in range(-stroke_w, stroke_w+1, 2):
-                        if off_x == 0 and off_y == 0: continue
-                        d.text((pad + off_x, pad + off_y), txt, font=cur_font, fill=stroke_clr)
-            
-            # Main Text
-            d.text((pad, pad), txt, font=cur_font, fill=clr)
-            
-            return ImageClip(np.array(img))
-        except Exception as e:
-            print(f"Science Render Error (Long): {e}")
-            return None
 
     def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None):
         audio = AudioFileClip(audio_path)
@@ -279,177 +182,168 @@ class VideoLongGenerator:
         final_bg = CompositeVideoClip(bg_clips, size=self.size)
         caption_clips = []
         
-        # Line-level chunking logic (One line at a time, max ~30 chars)
-        lines = []
-        current_line = []
-        current_line_len = 0
-        MAX_CHARS_PER_LINE = 35 # Adjust for readability (approx 5-7 words)
-        
-        for w in word_offsets:
-            w_len = len(w['word'])
-            if current_line and (current_line_len + w_len + 1 > MAX_CHARS_PER_LINE):
-                lines.append(current_line)
-                current_line = []
-                current_line_len = 0
-            
-            current_line.append(w)
-            current_line_len += w_len + 1
-        if current_line: lines.append(current_line)
-
-        # --- STANDARD CAPTIONS (NON-SCIENCE) ---
-        if not ("science" in str((branding or {}).get('channel_name', "")).lower() and not template_mode):
-            # Render Standard Captions
-            FONT_SIZE = 75 
-            BOTTOM_MARGIN = 150 
-            
-            for chunk in lines:
-                if not chunk: continue
-                
-                chunk_start = chunk[0]['start']
-                chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
-                
-                # Ensure minimum visibility
-                if chunk_end - chunk_start < 0.5:
-                     chunk_end = chunk_start + 1.0
-
-                chunk_text = " ".join([w['word'] for w in chunk])
-                is_nepali = any(ord(c) > 127 for c in chunk_text)
-                
+        # ── Font: Heavy/Extra-Bold sans-serif ─────────────────────────────────
+        POP_FONT_SIZE = 95
+        pop_font = None
+        pop_font_paths = [
+            "automation/media/assets/Montserrat-Black.ttf",
+            "automation/media/assets/Montserrat-ExtraBold.ttf",
+            "C:\\Windows\\Fonts\\ariblk.ttf",
+            "C:\\Windows\\Fonts\\impact.ttf",
+            "C:\\Windows\\Fonts\\arialbd.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        ]
+        for _fp in pop_font_paths:
+            if os.path.exists(_fp):
                 try:
-                    # 1. Render LINE BASE (White)
-                    # We render the whole line centered.
-                    base_txt = self.get_pillow_text_clip(chunk_text, FONT_SIZE, 'white', bg=(0,0,0,180), stroke_width=2)
-                    
-                    if base_txt:
-                        base_txt = base_txt.set_start(chunk_start).set_duration(chunk_end - chunk_start)
-                        txt_w, txt_h = base_txt.size
-                        pos_y = self.size[1] - txt_h - BOTTOM_MARGIN
-                        base_txt = base_txt.set_position(('center', pos_y))
-                        caption_clips.append(base_txt)
-                        
-                        # 2. Render HIGHLIGHTS (Yellow) - Overlay exactly
-                        base_screen_x = (self.size[0] - txt_w) // 2
-                        base_screen_y = pos_y
-                        
-                        text_start_x = base_screen_x + 90 # Where text actually starts drawing (h_pad)
-                        text_start_y = base_screen_y + 20
-                        
-                        # Load font to measure offsets
-                        l_font = self._load_best_font(FONT_SIZE, text=chunk_text)
-                        
-                        cursor_x_offset = 0
-                        
-                        for i, w_info in enumerate(chunk):
-                            word = w_info['word']
-                            
-                            # Measure this word
-                            word_len = l_font.getlength(word)
-                            space_len = l_font.getlength(" ") if i < len(chunk) - 1 else 0
-                            
-                            # Highlight Word Text Clip
-                            h_clip = self.get_pillow_text_clip(word, FONT_SIZE, 'yellow', bg=None, stroke_width=2)
-                            
-                            if h_clip:
-                                h_start = max(chunk_start, w_info['start'])
-                                h_dur = w_info['duration']
-                                if h_dur <= 0: h_dur = 0.2
-                                
-                                # Position Calculation
-                                target_x = text_start_x + cursor_x_offset - 90
-                                target_y = base_screen_y
-                                
-                                # Sync Adjustment
-                                SYNC_OFFSET = 0.15 
-                                
-                                h_clip = h_clip.set_start(h_start + SYNC_OFFSET).set_duration(h_dur).set_position((target_x, target_y))
-                                caption_clips.append(h_clip)
-                            
-                            cursor_x_offset += word_len + space_len
+                    pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
+                    break
+                except: continue
+        if not pop_font:
+            pop_font = self.font
+            
+        # ── Keyword detection ─────────────────────────────────────────────────
+        _STOP = {
+            'the','a','an','is','are','was','were','be','been','being',
+            'of','in','on','at','to','for','and','or','but','so','yet',
+            'it','its','this','that','these','those','with','from','by',
+            'as','into','do','does','did','not','no','have','has','had',
+            'will','would','can','could','should','may','might','what',
+            'which','who','when','where','why','how','if','than','then',
+            'there','here','they','we','he','she','you','i','my','your',
+            'our','their','his','her','also','just','even','up','out',
+            'about','over','more','very','such','each',
+        }
 
-                except Exception as e:
-                    print(f"Karaoke Render Error: {e}") 
-        
-        # --- SCIENCE CAPTION OVERRIDE (LONG FORM) ---
-        # If this is a science video, we might want to replace the above logic OR 
-        # add the science style if specifically requested.
-        # The `template_mode` is False for Science usually.
-        # We can check `branding` for channel name too.
-        
-        channel_name_str = str((branding or {}).get('channel_name', "")).lower()
-        if "science" in channel_name_str and not template_mode:
-            print("Applying Science Visual Application (Long Form Override)...")
-            caption_clips = [] # Clear previous attempts
+        def _is_keyword(w):
+            clean = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
+            if not clean: return False
+            if clean in _STOP: return False
+            if '*' in w: return True
+            if len(clean) >= 6: return True
+            return False
+
+        # ── Render one chunk as RGBA PIL image with per-word colors ──────────
+        def _render_popup(words_list, highlight_mask):
+            STROKE = 4
+            SHADOW = 5
+            HP, VP = 32, 26
+            MAX_W = 1600 # Safe width for 1080p long form landscape
+
+            dummy = Image.new('RGB', (1, 1))
+            dd = ImageDraw.Draw(dummy)
+            sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
+            sp_w = max(sp_bbox[2] - sp_bbox[0], 12)
+
+            lines = []
+            current_line = []
+            current_w = 0
+            max_h = 0
             
-            # --- SCIENCE LOGIC ---
-            # Similar to shorts but adapted for landscape (Center Screen is nice)
-            processed_chunks = []
-            current_chunk = []
-            current_len = 0
+            for idx, wrd in enumerate(words_list):
+                bb = dd.textbbox((0, 0), wrd, font=pop_font)
+                ww, wh = bb[2]-bb[0], bb[3]-bb[1]
+                max_h = max(max_h, wh)
+                
+                if current_line and current_w + ww + sp_w > MAX_W:
+                    lines.append(current_line)
+                    current_line = []
+                    current_w = 0
+                    
+                current_line.append((idx, wrd, ww, wh))
+                current_w += ww + sp_w if current_line else ww
             
-            for w in word_offsets:
-                word_clean = w['word']
-                # Kinetic Typography: Extremely punchy, 1-3 words max
-                if current_len > 15 or len(current_chunk) >= 2: 
-                     processed_chunks.append(current_chunk)
-                     current_chunk = []
-                     current_len = 0
-                current_chunk.append(w)
-                current_len += len(word_clean) + 1
-                if word_clean.endswith(('.', '?', '!', ',')):
-                    processed_chunks.append(current_chunk)
-                    current_chunk = []
-                    current_len = 0
-            if current_chunk: processed_chunks.append(current_chunk)
+            if current_line:
+                lines.append(current_line)
+
+            line_widths = []
+            for line in lines:
+                lw = sum(w[2] for w in line) + sp_w * (max(len(line) - 1, 0))
+                line_widths.append(lw)
             
-            for chunk in processed_chunks:
-                if not chunk: continue
-                chunk_start = chunk[0]['start']
-                chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
-                if chunk_end - chunk_start < 0.3: chunk_end = chunk_start + 0.5
+            total_w = max(line_widths) if line_widths else 0
+            total_h = len(lines) * max_h + max(len(lines) - 1, 0) * 10
+            
+            img_w = int(total_w + HP*2 + STROKE*2 + SHADOW + 4)
+            img_h = int(total_h + VP*2 + STROKE*2 + SHADOW + 4)
+
+            img = Image.new('RGBA', (img_w, img_h), (0, 0, 0, 0))
+            d = ImageDraw.Draw(img)
+            
+            y = VP + STROKE
+            for line_idx, line in enumerate(lines):
+                line_w = line_widths[line_idx]
+                x = (img_w - line_w) // 2
                 
-                full_text = " ".join([c['word'] for c in chunk])
-                display_text = full_text.replace('*', '')
+                for idx, wrd, ww, _ in line:
+                    clr = '#FFD700' if highlight_mask[idx] else 'white'
+                    d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
+                    for dx in range(-STROKE, STROKE+1):
+                        for dy in range(-STROKE, STROKE+1):
+                            if dx == 0 and dy == 0: continue
+                            d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
+                    d.text((x, y), wrd, font=pop_font, fill=clr)
+                    x += ww + sp_w
+                y += max_h + 10
                 
-                is_highlight = '*' in full_text
-                text_color = '#FFD700' if is_highlight else 'white'
-                
-                # Render centering with Pop-In Animation (Kinetic Typography)
-                sci_clip = self.get_science_text_clip(display_text.upper(), 90, text_color)
-                if sci_clip:
-                    # Pop in scale from 0.7 to 1.0 in 0.15s
-                    sci_clip = sci_clip.resize(lambda t: min(1.0, 0.7 + (t / 0.15) * 0.3) if t < 0.15 else 1.0)
-                    sci_clip = sci_clip.set_start(chunk_start).set_duration(chunk_end - chunk_start).set_position('center')
-                    caption_clips.append(sci_clip)
-        
-        # Cleanup
-        chunk = None
- 
-        
-        # Remove old loop variables locally to avoid confusion
-        chunk = None
+            return img
+
+        # ── Group word_offsets into 2-3 word chunks ───────────────────────────
+        pop_chunks = []
+        cur_chunk, cur_len = [], 0
+        for w in word_offsets:
+            wclean = re.sub(r'\[.*?\]', '', w['word'].replace('*', '')).strip()
+            if not wclean: continue
+            if cur_len >= 3 or (cur_len >= 2 and wclean.endswith(('.','?','!',','))):
+                pop_chunks.append(cur_chunk)
+                cur_chunk, cur_len = [], 0
+            cur_chunk.append({**w, 'display': wclean})
+            cur_len += 1
+            if wclean.endswith(('.', '?', '!')):
+                pop_chunks.append(cur_chunk)
+                cur_chunk, cur_len = [], 0
+        if cur_chunk:
+            pop_chunks.append(cur_chunk)
+
+        # ── Render each chunk with 80→100% scale-in pop animation ─────────────
+        for chunk in pop_chunks:
+            if not chunk: continue
+            chunk_start = chunk[0]['start']
+            chunk_end   = chunk[-1]['start'] + chunk[-1]['duration']
+            chunk_dur   = max(chunk_end - chunk_start, 0.35)
+
+            words_display = [c['display'].upper() for c in chunk]
+            hi_mask       = [_is_keyword(c['word']) for c in chunk]
+
+            try:
+                pil_img  = _render_popup(words_display, hi_mask)
+                pop_clip = ImageClip(np.array(pil_img))
+                anim_dur = min(0.18, chunk_dur * 0.35)
+                pop_clip = pop_clip.resize(
+                    lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
+                )
+                pop_clip = pop_clip.set_start(chunk_start).set_duration(chunk_dur).set_position('center')
+                caption_clips.append(pop_clip)
+            except Exception as e:
+                print(f"PopUp render error: {e}")
+                continue
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
-        # Use Science music exclusively if the first segment is Science
-        is_science = segments and segments[0].get("type") == "science"
-        music_files = []
         
-        if is_science:
-            # Check both possible science music directories (legacy support + new)
-            science_music_dirs = ["automation/music/science"]
-            for sdir in science_music_dirs:
-                if os.path.exists(sdir):
-                    music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
-            
-            print(f"Science Video detected. Found {len(music_files)} science music files.")
-            
-        if not is_science:
-            # News logic: Fallback through various folders
-            music_files = glob.glob("automation/music/news/*.mp3") + glob.glob("automation/music/*.mp3")
+        music_files = []
+        science_music_dirs = ["automation/music/science"]
+        for sdir in science_music_dirs:
+            if os.path.exists(sdir):
+                music_files.extend(glob.glob(os.path.join(sdir, "*.mp3")))
+        
+        print(f"Science Video detected. Found {len(music_files)} science music files.")
         
         if music_files:
             try:
                 music_path = random.choice(music_files)
-                print(f"Using background music ({'SCIENCE' if is_science else 'NEWS'}): {music_path}")
+                print(f"Using background music: {music_path}")
                 from moviepy.audio.fx.all import audio_loop
                 bg_music = AudioFileClip(music_path)
                 # Loop the music if it's shorter than the video

@@ -23,7 +23,6 @@ async def list_channels():
 
 async def main():
     parser = argparse.ArgumentParser(description="Multi-Channel Autonomous Media Platform")
-    parser.add_argument("--config", help="Path to channel YAML config")
     parser.add_argument("--mode", default="breaking", choices=["breaking", "daily", "shorts", "storytelling"], help="Execution mode")
     parser.add_argument("--test", action="store_true", help="Run in test mode (skip upload)")
     parser.add_argument("--list", action="store_true", help="List available channels")
@@ -34,27 +33,12 @@ async def main():
         await list_channels()
         return
 
-    if not args.config:
-        parser.print_help()
-        print("\nAvailable channels:")
-        await list_channels()
-        return
+    # Force load Science Config
+    config = ConfigLoader.load_config("automation/config/science.yaml")
 
-    # Load Config
-    config = ConfigLoader.load_config(args.config)
-    channel_type = config.get("type")
-
-    # Route to Pipeline
-    pipeline = None
-    if channel_type == "science":
-        pipeline = SciencePipeline(config)
-    else:
-        print(f"Error: Unknown channel type '{channel_type}'")
-        sys.exit(1)
-
-    # Run Pipeline
-    if pipeline:
-        await pipeline.run(mode=args.mode, is_test=args.test)
+    # Run Pipeline directly
+    pipeline = SciencePipeline(config)
+    await pipeline.run(mode=args.mode, is_test=args.test)
 
 if __name__ == "__main__":
     asyncio.run(main())
