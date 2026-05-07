@@ -82,7 +82,7 @@ jobs:
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
-          python automation/main.py --config automation/config/science.yaml --mode shorts $FLAGS
+          python automation/main.py --mode shorts $FLAGS
 
       - name: Run Science Detailed (Long Form)
         if: |
@@ -104,7 +104,7 @@ jobs:
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
-          python automation/main.py --config automation/config/science.yaml --mode daily $FLAGS
+          python automation/main.py --mode daily $FLAGS
 
       - name: Commit State Changes
         if: always()
