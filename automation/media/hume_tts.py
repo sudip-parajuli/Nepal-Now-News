@@ -144,19 +144,34 @@ class HumeTTS:
 
         # Format 1: snippets[].timestamps (dict with begin/end)
         for snippet in generation.get("snippets", []):
+            if not isinstance(snippet, dict):
+                continue
             ts = snippet.get("timestamps", {})
             word = snippet.get("text", "").strip()
             if isinstance(ts, dict) and word:
-                begin = float(ts.get("begin", ts.get("start", 0.0)))
-                end = float(ts.get("end", begin + 0.3))
-                offsets.append({"word": word, "start": begin, "duration": end - begin})
+                try:
+                    # In some API versions ts['begin'] is a list of floats
+                    b_val = ts.get("begin", ts.get("start", 0.0))
+                    begin = float(b_val[0]) if isinstance(b_val, list) else float(b_val)
+                    e_val = ts.get("end", begin + 0.3)
+                    end = float(e_val[-1]) if isinstance(e_val, list) else float(e_val)
+                    offsets.append({"word": word, "start": begin, "duration": end - begin})
+                except Exception:
+                    pass
             elif isinstance(ts, list):
                 for t in ts:
+                    if not isinstance(t, dict):
+                        continue
                     w = t.get("word", "").strip()
-                    begin = float(t.get("begin", t.get("start", 0.0)))
-                    end = float(t.get("end", begin + 0.3))
-                    if w:
-                        offsets.append({"word": w, "start": begin, "duration": end - begin})
+                    try:
+                        b_val = t.get("begin", t.get("start", 0.0))
+                        begin = float(b_val[0]) if isinstance(b_val, list) else float(b_val)
+                        e_val = t.get("end", begin + 0.3)
+                        end = float(e_val[-1]) if isinstance(e_val, list) else float(e_val)
+                        if w:
+                            offsets.append({"word": w, "start": begin, "duration": end - begin})
+                    except Exception:
+                        pass
 
         if offsets:
             return offsets
