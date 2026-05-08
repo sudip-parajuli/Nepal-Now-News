@@ -166,10 +166,11 @@ class ScriptWriter:
 
         Requirements:
         1. Terms must be ready-to-search queries (e.g. "glowing bioluminescent jellyfish 4k", "Hubble telescope nebula deep space", "time lapse plant growth").
-        2. NO HUMANS, NO FACES, NO PEOPLE, NO TEXT.
-        3. Prioritize cinematic, 4k, macro, or animation styles.
-        4. Focus on the distinct segments of the script (Intro, Body, Conclusion).
-        5. Return ONLY the search terms, one per line.
+        2. STRICTLY NO HUMANS, NO FACES, NO PEOPLE, NO CHARACTERS, NO TEXT.
+        3. Make sure the search queries are related to science, such as: universe, cosmic, galaxy, stars, oceans, plants, creatures, and elements directly related to the script.
+        4. Prioritize cinematic, 4k, macro, or animation styles.
+        5. Focus on the distinct segments of the script (Intro, Body, Conclusion).
+        6. Return ONLY the search terms, one per line.
         """
         
         try:

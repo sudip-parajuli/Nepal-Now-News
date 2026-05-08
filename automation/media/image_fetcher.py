@@ -45,10 +45,10 @@ class ImageFetcher:
 
     def _search_ddg(self, query: str, max_results: int = 20, topic_context: str = None) -> list:
         # Exclude diagrams, text, and people for professional science look
-        negative_filters = "-person -face -human -man -woman -portrait -interview -talking -host -adult -child -people -diagram -chart -graph -map -vector -text -logo"
+        negative_filters = "-person -face -human -man -woman -portrait -interview -talking -host -adult -child -people -character -characters -diagram -chart -graph -map -vector -text -logo"
         
         if topic_context:
-            is_science = any(tw in topic_context.lower() for tw in ["space", "universe", "galaxy", "ocean", "science", "nature"])
+            is_science = any(tw in topic_context.lower() for tw in ["space", "universe", "galaxy", "ocean", "science", "nature", "stars", "cosmic", "plants", "creatures"])
             quality_boost = "4K cinematic " if is_science else ""
             search_query = f"{topic_context} {query} {quality_boost}{negative_filters}"
         else:

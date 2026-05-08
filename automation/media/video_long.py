@@ -308,11 +308,16 @@ class VideoLongGenerator:
             pop_chunks.append(cur_chunk)
 
         # ── Render each chunk with 80→100% scale-in pop animation ─────────────
-        for chunk in pop_chunks:
+        for i, chunk in enumerate(pop_chunks):
             if not chunk: continue
             chunk_start = chunk[0]['start']
-            chunk_end   = chunk[-1]['start'] + chunk[-1]['duration']
-            chunk_dur   = max(chunk_end - chunk_start, 0.35)
+            
+            if i < len(pop_chunks) - 1 and pop_chunks[i+1]:
+                next_start = pop_chunks[i+1][0]['start']
+                chunk_dur = max(next_start - chunk_start, 0.1)
+            else:
+                chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
+                chunk_dur = max(chunk_end - chunk_start, 0.35)
 
             words_display = [c['display'].upper() for c in chunk]
             hi_mask       = [_is_keyword(c['word']) for c in chunk]
