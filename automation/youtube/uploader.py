@@ -49,3 +49,31 @@ class YouTubeUploader:
         
         print(f"Video uploaded successfully! ID: {response.get('id')}")
         return response.get('id')
+    def upload_caption(self, video_id, srt_path, language="en", name="English"):
+        """
+        Uploads a caption file for a specific video.
+        """
+        if not self.youtube:
+            print("YouTube service not initialized.")
+            return None
+
+        print(f"Uploading captions for video {video_id}...")
+        body = {
+            'snippet': {
+                'videoId': video_id,
+                'language': language,
+                'name': name,
+                'isDefault': True
+            }
+        }
+
+        media = MediaFileUpload(srt_path, chunksize=-1, resumable=True)
+        request = self.youtube.captions().insert(
+            part="snippet",
+            body=body,
+            media_body=media
+        )
+
+        response = request.execute()
+        print(f"Captions uploaded successfully! ID: {response.get('id')}")
+        return response.get('id')

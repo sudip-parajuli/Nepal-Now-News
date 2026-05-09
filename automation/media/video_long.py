@@ -70,7 +70,7 @@ class VideoLongGenerator:
 
 
 
-    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None):
+    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None, burn_captions: bool = False):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
         
@@ -311,33 +311,34 @@ class VideoLongGenerator:
         if cur_chunk:
             pop_chunks.append(cur_chunk)
 
-        # ── Render each chunk with 80→100% scale-in pop animation ─────────────
-        for i, chunk in enumerate(pop_chunks):
-            if not chunk: continue
-            chunk_start = chunk[0]['start']
-            
-            if i < len(pop_chunks) - 1 and pop_chunks[i+1]:
-                next_start = pop_chunks[i+1][0]['start']
-                chunk_dur = max(next_start - chunk_start, 0.1)
-            else:
-                chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
-                chunk_dur = max(chunk_end - chunk_start, 0.35)
+        if burn_captions:
+            # ── Render each chunk with 80→100% scale-in pop animation ─────────────
+            for i, chunk in enumerate(pop_chunks):
+                if not chunk: continue
+                chunk_start = chunk[0]['start']
+                
+                if i < len(pop_chunks) - 1 and pop_chunks[i+1]:
+                    next_start = pop_chunks[i+1][0]['start']
+                    chunk_dur = max(next_start - chunk_start, 0.1)
+                else:
+                    chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
+                    chunk_dur = max(chunk_end - chunk_start, 0.35)
 
-            words_display = [c['display'].upper() for c in chunk]
-            hi_mask       = [_is_keyword(c['word']) for c in chunk]
+                words_display = [c['display'].upper() for c in chunk]
+                hi_mask       = [_is_keyword(c['word']) for c in chunk]
 
-            try:
-                pil_img  = _render_popup(words_display, hi_mask)
-                pop_clip = ImageClip(np.array(pil_img))
-                anim_dur = min(0.18, chunk_dur * 0.35)
-                pop_clip = pop_clip.resize(
-                    lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
-                )
-                pop_clip = pop_clip.set_start(chunk_start).set_duration(chunk_dur).set_position('center')
-                caption_clips.append(pop_clip)
-            except Exception as e:
-                print(f"PopUp render error: {e}")
-                continue
+                try:
+                    pil_img  = _render_popup(words_display, hi_mask)
+                    pop_clip = ImageClip(np.array(pil_img))
+                    anim_dur = min(0.18, chunk_dur * 0.35)
+                    pop_clip = pop_clip.resize(
+                        lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
+                    )
+                    pop_clip = pop_clip.set_start(chunk_start).set_duration(chunk_dur).set_position('center')
+                    caption_clips.append(pop_clip)
+                except Exception as e:
+                    print(f"PopUp render error: {e}")
+                    continue
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
         

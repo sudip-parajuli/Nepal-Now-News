@@ -11,6 +11,7 @@ from ..media.video_shorts import VideoShortsGenerator
 from ..media.nasa_fetcher import NASAFetcher
 from ..youtube.uploader import YouTubeUploader
 from ..youtube.auth import YouTubeAuth
+from ..media.srt_generator import generate_srt
 
 class SciencePipeline(BasePipeline):
     def __init__(self, config):
@@ -125,9 +126,13 @@ class SciencePipeline(BasePipeline):
         # Pass lower music volume 0.04
         vgen_long.create_daily_summary(segments, audio_path, video_path, word_offsets, media_paths=media_paths)
         
-        # 6. Upload
+        # 6. Generate SRT for long form (YouTube will show these as CC)
+        srt_path = "automation/storage/science_long.srt"
+        generate_srt(word_offsets, srt_path)
+        
+        # 7. Upload
         if True: # Always call _upload, it handles is_test internally
-            await self._upload(video_path, f"The Science of {topic}: Detailed Explanation", script, topic, is_test=is_test, is_shorts=False)
+            await self._upload(video_path, f"The Science of {topic}: Detailed Explanation", script, topic, is_test=is_test, is_shorts=False, srt_path=srt_path)
 
     async def _fetch_media(self, topic, script, count_per_kw=1):
         print("Fetching multi-segment media...")
@@ -155,7 +160,7 @@ class SciencePipeline(BasePipeline):
         
         return media_paths
 
-    async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True):
+    async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True, srt_path=None):
         print("Initializing YouTube service...")
         youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
         self.uploader = YouTubeUploader(youtube_service)
@@ -167,7 +172,12 @@ class SciencePipeline(BasePipeline):
         
         if not is_test:
             print(f"Uploading: {title}")
-            self.uploader.upload_video(video_path, title, description, tags)
+            video_id = self.uploader.upload_video(video_path, title, description, tags)
+            
+            # If we have an SRT file, upload it as captions
+            if video_id and srt_path and os.path.exists(srt_path):
+                print(f"Uploading captions from {srt_path}...")
+                self.uploader.upload_caption(video_id, srt_path)
         else:
             print(f"TEST MODE: Skipping upload for {title}")
         
