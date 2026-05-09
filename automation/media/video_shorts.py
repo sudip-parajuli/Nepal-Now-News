@@ -4,7 +4,7 @@ import sys
 import glob
 import random
 import re
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 class VideoShortsGenerator:
