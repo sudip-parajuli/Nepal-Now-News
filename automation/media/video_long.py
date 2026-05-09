@@ -140,7 +140,11 @@ class VideoLongGenerator:
                             else:
                                 clip = clip.subclip(0, dur)
                         else:
-                            clip = ImageClip(m_path).set_duration(dur)
+                            # Ensure image is RGB (fixes broadcast error if grayscale)
+                            with Image.open(m_path) as img:
+                                if img.mode != "RGB":
+                                    img = img.convert("RGB")
+                                clip = ImageClip(np.array(img)).set_duration(dur)
 
                         clip = clip.set_start(start_time)
                         w, h = clip.size

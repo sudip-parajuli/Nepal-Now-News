@@ -4,6 +4,8 @@ import sys
 import glob
 import random
 import re
+from PIL import Image
+import numpy as np
 
 class VideoShortsGenerator:
     def __init__(self, size=(1080, 1920)):
@@ -119,7 +121,11 @@ class VideoShortsGenerator:
                             else:
                                 clip = clip.subclip(0, transition_time)
                         else:
-                            clip = ImageClip(m_path).set_duration(transition_time)
+                            # Ensure image is RGB (fixes broadcast error if grayscale)
+                            with Image.open(m_path) as img:
+                                if img.mode != "RGB":
+                                    img = img.convert("RGB")
+                                clip = ImageClip(np.array(img)).set_duration(transition_time)
 
                         clip = clip.set_start(start_time)
                         
@@ -176,10 +182,7 @@ class VideoShortsGenerator:
             START_Y = (branding or {}).get('caption_y', default_y)
             HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'white'
             
-            from PIL import Image, ImageDraw, ImageFont
-            import numpy as np
-
-            # Load font (Cross-Platform)
+            # Layout: If template_mode (News), move to BOTTOM. Otherwise (Science), stay in CENTER.
             line_text_sample = " ".join([w['word'] for w in word_offsets[:10]])
             is_nepali_content = any(ord(c) > 127 for c in line_text_sample)
             
