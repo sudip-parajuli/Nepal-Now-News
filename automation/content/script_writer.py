@@ -175,7 +175,14 @@ class ScriptWriter:
         
         try:
             response = self._call_with_retry(prompt)
-            keywords = [line.strip().replace('"', '').replace('- ', '') for line in response.split('\n') if line.strip() and not line.lower().startswith("here")]
+            keywords = []
+            for line in response.split('\n'):
+                line = line.strip()
+                if not line or line.lower().startswith(("here", "sure", "ok", "based")): continue
+                # Strip leading numbers like "1. ", "1) ", " - ", " * "
+                line = re.sub(r'^(\d+[\.\)]\s*|[-\*\u2022]\s*)', '', line)
+                line = line.replace('"', '').strip()
+                if line: keywords.append(line)
             
             # Fallback if LLM fails
             if not keywords:
