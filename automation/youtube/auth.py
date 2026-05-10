@@ -5,7 +5,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+SCOPES = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.force-ssl'
+]
 
 class YouTubeAuth:
     @staticmethod

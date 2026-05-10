@@ -177,7 +177,11 @@ class SciencePipeline(BasePipeline):
             # If we have an SRT file, upload it as captions
             if video_id and srt_path and os.path.exists(srt_path):
                 print(f"Uploading captions from {srt_path}...")
-                self.uploader.upload_caption(video_id, srt_path)
+                try:
+                    self.uploader.upload_caption(video_id, srt_path)
+                except Exception as e:
+                    print(f"WARNING: Caption upload failed: {e}")
+                    print("This might be due to insufficient authentication scopes (youtube.force-ssl required).")
         else:
             print(f"TEST MODE: Skipping upload for {title}")
         
