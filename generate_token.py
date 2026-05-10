@@ -4,7 +4,10 @@ import base64
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 # The same scope as in youtube_uploader.py
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+SCOPES = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.force-ssl'
+]
 
 def generate():
     secrets_file = 'client_secrets.json'
