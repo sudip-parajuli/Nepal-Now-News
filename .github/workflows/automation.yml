@@ -75,6 +75,7 @@ jobs:
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
           HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
           HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
+          HUME_VOICE_ID_2: ${{ secrets.HUME_VOICE_ID_2 }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
@@ -90,6 +91,7 @@ jobs:
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
           HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
           HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
+          HUME_VOICE_ID_2: ${{ secrets.HUME_VOICE_ID_2 }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi

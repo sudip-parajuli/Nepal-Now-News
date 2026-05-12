@@ -35,7 +35,7 @@ class HumeTTS:
         self.voice_ids = []
         if voice_id:
             self.voice_ids.append(voice_id)
-        for env_name in ["HUME_VOICE_ID", "HUME_VOICE_ID_1"]:
+        for env_name in ["HUME_VOICE_ID", "HUME_VOICE_ID_1", "HUME_VOICE_ID_2", "HUME_VOICE_ID_3", "HUME_VOICE_ID_4", "HUME_VOICE_ID_5"]:
             val = os.getenv(env_name, "").strip()
             if val and val not in self.voice_ids:
                 self.voice_ids.append(val)
