@@ -1,5 +1,6 @@
 import os
 import time
+import random
 from google import genai
 from .auth import YouTubeAuth
 
@@ -8,6 +9,45 @@ class CommentHandler:
         self.youtube = youtube_service
         self.gemini_client = genai.Client(api_key=gemini_api_key)
         self.model_id = "gemini-2.0-flash"
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        if self.groq_api_key:
+            try:
+                from groq import Groq
+                self.groq_client = Groq(api_key=self.groq_api_key)
+            except ImportError:
+                self.groq_client = None
+        else:
+            self.groq_client = None
+
+    def _call_with_retry(self, prompt: str, max_retries: int = 3) -> str:
+        """Calls Gemini with fallback to Groq on rate limits."""
+        for attempt in range(max_retries):
+            try:
+                response = self.gemini_client.models.generate_content(
+                    model=self.model_id,
+                    contents=prompt
+                )
+                return response.text.strip()
+            except Exception as e:
+                err_msg = str(e).lower()
+                is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
+                
+                if is_quota_error and self.groq_client:
+                    print(f"Gemini Quota Exceeded. Trying Groq fallback for comment...")
+                    try:
+                        chat_completion = self.groq_client.chat.completions.create(
+                            messages=[{"role": "user", "content": prompt}],
+                            model="llama-3.3-70b-versatile",
+                        )
+                        return chat_completion.choices[0].message.content.strip()
+                    except Exception as groq_err:
+                        print(f"Groq fallback failed: {groq_err}")
+                
+                if attempt < max_retries - 1:
+                    time.sleep(2 + random.uniform(0, 1))
+                else:
+                    print(f"AI Generation Error: {e}")
+        return None
 
     def handle_comments(self, max_videos=5, channel_id=None):
         """Fetches recent videos and replies to new comments."""
@@ -143,15 +183,7 @@ class CommentHandler:
         
         Return ONLY the reply text.
         """
-        try:
-            response = self.gemini_client.models.generate_content(
-                model=self.model_id,
-                contents=prompt
-            )
-            return response.text.strip()
-        except Exception as e:
-            print(f"    AI Reply Gen Error: {e}")
-            return None
+        return self._call_with_retry(prompt)
 
     def _post_reply(self, parent_id, reply_text):
         """Posts the reply to YouTube."""
