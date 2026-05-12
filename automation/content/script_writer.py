@@ -80,33 +80,47 @@ class ScriptWriter:
         """
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
-
-    def expand_science_script(self, topic: str, short_script: str = "") -> str:
-        prompt = f"""
-        Expand the following topic into a MASTER-CLASS, deep-dive documentary script for a 4-5 minute YouTube video.
-        The audience is complaining about lack of depth, so BE EXTREMELY DETAILED.
-        
-        Topic: {topic}
-        Current Hook/Context: {short_script}
-
-        Requirements:
-        - Language: English
-        - Tone: Sophisticated, authoritative, yet engaging (Style: Kurzgesagt, Veritasium, or National Geographic).
-        - Structure:
-            1. Intriguing Intro: Hook the audience with a paradox or a "did you know" that challenges their intuition.
-            2. Scientific Mechanisms: Dive deep into the CHEMISTRY, PHYSICS, or BIOLOGY. Explain HOW things happen, not just THAT they happen.
-            3. Formulas & Data: Mention specific scientific names, constants, or formulas if applicable (e.g., "The Lattice structure of Bismuth...", "Melting point at 271.4 degrees Celsius...").
-            4. Historical Context: Who discovered this? What was the context?
-            5. Future & Implications: Why does this matter for the future of humanity or science?
-            6. Mind-Blowing Conclusion: Leave the viewer with a profound realization.
-        
-        Rules:
-        - Maintain 100% scientific accuracy. No clickbait or pseudoscience.
-        - Use rich, descriptive language to help with visual cues.
-        - **IMPORTANT**: Wrap key entities (Names, Numbers, Technical Terms, Shocking Adjectives) in asterisks for highlighting.
-        - RETURN ONLY THE SPEECH TEXT. No cues, no music labels, no [Narrator].
-        - Aim for approximately 600-800 words.
+    def expand_science_script(self, topic: str) -> str:
         """
+        Generates a master-class 900-word documentary script using the user's high-quality prompts.
+        """
+        # We alternate between the two styles provided by the user for variety
+        style = random.choice(["paradox", "discovery"])
+        
+        if style == "paradox":
+            hook_instr = "Open with an unexplained observation or paradox before naming the topic. Make the viewer feel that something is wrong with how they understand reality."
+        else:
+            hook_instr = "Open by narrating the specific moment a scientist or explorer first encountered this phenomenon. Use their name, the year, and sensory detail."
+
+        prompt = f"""
+        You are writing a master-class YouTube narration script for a science education channel.
+        Topic: "{topic}"
+
+        HOOK STYLE: {hook_instr}
+
+        TONE & VOICE:
+        Voice of awe and wonder — treat science as magic that actually works. Sentences are punchy and declarative. 
+        Never use filler phrases like "in the realm of", "profound implications", "awe-inspiring complexity", or "testament to human curiosity". 
+        Be specific at all times — name scientists, cite dates, use precise numbers.
+
+        STRUCTURE & LENGTH:
+        Target approximately 900 words (~6 minutes). 
+        Structure: hook → background context → core science mechanism → recent discovery or application → broader implications → memorable closing line.
+        End on a single surprising or poetic image that reframes what the viewer just learned.
+
+        SCIENCE ACCURACY:
+        Every mechanism must be explained causally — not just "X causes Y" but "X causes Y because of Z". 
+        Avoid vague words like "unique", "fascinating", "complex" unless immediately followed by a specific example.
+
+        VISUAL CUES:
+        This script is for an AI-automated channel. After every 2-3 sentences, add a short bracketed image cue in plain language, 
+        e.g. [microscope image of bismuth crystal surface] or [NASA photo of pulsar nebula].
+
+        OUTPUT FORMAT:
+        Write the full script ONLY. No meta-commentary. Begin with the first word of the narration.
+        **IMPORTANT**: Wrap key technical terms, numbers, or specific names in asterisks for visual highlighting.
+        """
+        
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
 

@@ -51,9 +51,9 @@ def generate_srt(word_offsets: list, output_path: str, words_per_caption: int = 
                  end_time = min(start_time + 1.0, word_offsets[i+1]['start'])
             
             text = " ".join([w['word'] for w in chunk])
-            # Strip emotional tags if any
+            # Strip emotional tags and formatting asterisks
             import re
-            text = re.sub(r'\[.*?\]', '', text).strip()
+            text = re.sub(r'\[.*?\]', '', text).replace('*', '').strip()
             
             idx = len(srt_content) + 1
             srt_content.append(f"{idx}")
