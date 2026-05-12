@@ -9,6 +9,8 @@ sys.path.append(os.getcwd())
 
 from automation.config_loader import ConfigLoader
 from automation.pipelines.science_pipeline import SciencePipeline
+from automation.youtube.auth import YouTubeAuth
+from automation.youtube.comment_handler import CommentHandler
 
 load_dotenv()
 
@@ -23,7 +25,7 @@ async def list_channels():
 
 async def main():
     parser = argparse.ArgumentParser(description="Multi-Channel Autonomous Media Platform")
-    parser.add_argument("--mode", default="breaking", choices=["breaking", "daily", "shorts", "storytelling"], help="Execution mode")
+    parser.add_argument("--mode", default="breaking", choices=["breaking", "daily", "shorts", "storytelling", "comments"], help="Execution mode")
     parser.add_argument("--test", action="store_true", help="Run in test mode (skip upload)")
     parser.add_argument("--list", action="store_true", help="List available channels")
     
@@ -35,6 +37,14 @@ async def main():
 
     # Force load Science Config
     config = ConfigLoader.load_config("automation/config/science.yaml")
+
+    if args.mode == "comments":
+        print("--- Starting AI Comment Auto-Reply ---")
+        youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
+        handler = CommentHandler(youtube_service, os.getenv("GEMINI_API_KEY"))
+        handler.handle_comments(max_videos=5)
+        print("--- AI Comment Auto-Reply Completed ---")
+        return
 
     # Run Pipeline directly
     pipeline = SciencePipeline(config)

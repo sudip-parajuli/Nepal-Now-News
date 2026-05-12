@@ -108,7 +108,7 @@ class SciencePipeline(BasePipeline):
         print(f"Expanded Script generated (~{len(script.split())} words).")
         
         # 3. Fetch Media (More for long form)
-        media_paths = await self._fetch_media(topic, script, count_per_kw=3)
+        media_paths = await self._fetch_media(topic, script, count_per_kw=2, is_long_form=True)
             
         # 4. Generate Audio
         male_voice = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
@@ -134,24 +134,21 @@ class SciencePipeline(BasePipeline):
         if True: # Always call _upload, it handles is_test internally
             await self._upload(video_path, f"The Science of {topic}: Detailed Explanation", script, topic, is_test=is_test, is_shorts=False, srt_path=srt_path)
 
-    async def _fetch_media(self, topic, script, count_per_kw=1):
-        print("Fetching multi-segment media...")
-        keywords_list = self.script_writer.generate_image_keywords(script, extra_context=topic)
+    async def _fetch_media(self, topic, script, count_per_kw=1, is_long_form=False):
+        print(f"Fetching multi-segment media (long_form={is_long_form})...")
+        keywords_list = self.script_writer.generate_image_keywords(script, extra_context=topic, is_long_form=is_long_form)
         media_paths = []
-        
-        for i, kw in enumerate(keywords_list):
-            # User Change: "lets not use the videos from NASA... better to use specific topic related images"
-            # We will strictly use high-quality images.
-            pass
         
         # Fetching images for all keywords
         # Generating a mix of "cinematic", "macro", "detailed" searches
         combined_keywords = []
         for kw in keywords_list:
+            # Variety of search modifiers
             combined_keywords.append(f"{kw} cinematic 4k")
-            combined_keywords.append(f"{kw} close up macro")
+            if is_long_form:
+                combined_keywords.append(f"{kw} close up macro")
             
-        print(f"Fetching {len(combined_keywords)} potential images for Science shorts...")
+        print(f"Fetching {len(combined_keywords)} potential images for Science content...")
         img_paths = self.image_fetcher.fetch_multi_images(combined_keywords, "science_temp", topic_context=topic)
         media_paths.extend(img_paths)
         

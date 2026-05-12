@@ -83,26 +83,29 @@ class ScriptWriter:
 
     def expand_science_script(self, topic: str, short_script: str = "") -> str:
         prompt = f"""
-        Expand the following topic/short script into a detailed, high-quality documentary-style script for a 3-4 minute YouTube video.
+        Expand the following topic into a MASTER-CLASS, deep-dive documentary script for a 4-5 minute YouTube video.
+        The audience is complaining about lack of depth, so BE EXTREMELY DETAILED.
         
         Topic: {topic}
-        Current Short Script: {short_script}
+        Current Hook/Context: {short_script}
 
         Requirements:
         - Language: English
-        - Tone: Professional, authoritative, engaging (like Kurzgesagt or National Geographic).
+        - Tone: Sophisticated, authoritative, yet engaging (Style: Kurzgesagt, Veritasium, or National Geographic).
         - Structure:
-            1. Detailed Introduction: Set the stage and explain why this topic matters.
-            2. Scientific Depth: Dive deep into the mechanics, history, and future implications.
-            3. Multiple Perspectives: Mention different theories or recent discoveries.
-            4. Conclusion: Summarize the profound impact of this scientific fact.
+            1. Intriguing Intro: Hook the audience with a paradox or a "did you know" that challenges their intuition.
+            2. Scientific Mechanisms: Dive deep into the CHEMISTRY, PHYSICS, or BIOLOGY. Explain HOW things happen, not just THAT they happen.
+            3. Formulas & Data: Mention specific scientific names, constants, or formulas if applicable (e.g., "The Lattice structure of Bismuth...", "Melting point at 271.4 degrees Celsius...").
+            4. Historical Context: Who discovered this? What was the context?
+            5. Future & Implications: Why does this matter for the future of humanity or science?
+            6. Mind-Blowing Conclusion: Leave the viewer with a profound realization.
         
         Rules:
-        - Maintain high scientific accuracy.
-        - Use sophisticated yet accessible vocabulary.
-        - **IMPORTANT**: Wrap key entities (Names, Numbers, Shocking Adjectives) in asterisks for highlighting. Example: "The *Sun* is *400 times* larger than the *Moon*."
-        - RETURN ONLY THE SPEECH TEXT. No cues or labels.
-        - Aim for approximately 400-600 words.
+        - Maintain 100% scientific accuracy. No clickbait or pseudoscience.
+        - Use rich, descriptive language to help with visual cues.
+        - **IMPORTANT**: Wrap key entities (Names, Numbers, Technical Terms, Shocking Adjectives) in asterisks for highlighting.
+        - RETURN ONLY THE SPEECH TEXT. No cues, no music labels, no [Narrator].
+        - Aim for approximately 600-800 words.
         """
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
@@ -153,24 +156,24 @@ class ScriptWriter:
         if start != -1 and end != -1: return text[start:end+1].strip()
         return text.strip()
 
-    def generate_image_keywords(self, text: str, extra_context: str = "Science") -> List[str]:
+    def generate_image_keywords(self, text: str, extra_context: str = "Science", is_long_form: bool = False) -> List[str]:
         """
         Generates a list of specific visual search terms for the script.
         Uses the LLM to analyze the entire text and produce timed visual cues.
         """
+        count = 35 if is_long_form else 12
         prompt = f"""
-        Analyze this science script and generate 10-15 SPECIFIC, VIVID, and CONCRETE visual search terms for Pexels/Storyblocks.
+        Analyze this science script and generate {count} SPECIFIC, VIVID, and CONCRETE visual search terms for Pexels/Storyblocks/NASA.
         
-        Script: "{text[:2000]}..." 
+        Script: "{text[:3000]}..." 
         Context: {extra_context}
 
         Requirements:
         1. Terms must be ready-to-search queries (e.g. "glowing bioluminescent jellyfish 4k", "Hubble telescope nebula deep space", "time lapse plant growth").
         2. STRICTLY NO HUMANS, NO FACES, NO PEOPLE, NO CHARACTERS, NO TEXT.
-        3. Make sure the search queries are related to science, such as: universe, cosmic, galaxy, stars, oceans, plants, creatures, and elements directly related to the script.
+        3. For each segment of the script (Intro, Body sections, Conclusion), provide diverse queries.
         4. Prioritize cinematic, 4k, macro, or animation styles.
-        5. Focus on the distinct segments of the script (Intro, Body, Conclusion).
-        6. Return ONLY the search terms, one per line.
+        5. Return ONLY the search terms, one per line. No numbers or bullet points.
         """
         
         try:
@@ -186,9 +189,9 @@ class ScriptWriter:
             
             # Fallback if LLM fails
             if not keywords:
-                keywords = [f"{extra_context} cinematic 4k"] * 5
+                keywords = [f"{extra_context} cinematic 4k"] * 10
                 
-            return keywords[:15] # Limit to 15 items
+            return keywords[:count + 5] 
         except Exception as e:
             print(f"Keyword Gen Error: {e}")
-            return [f"{extra_context} science background"] * 5
+            return [f"{extra_context} science background"] * 10
