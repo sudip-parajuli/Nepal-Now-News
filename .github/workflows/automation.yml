@@ -1,4 +1,13 @@
-name: Nepal Now Automation (News & Science)
+name: Science Video Automation
+
+run-name: >-
+  ${{ 
+    github.event_name == 'workflow_dispatch' && format('Manual: {0}{1}', github.event.inputs.pipeline, github.event.inputs.is_test && ' (TEST)' || '') ||
+    github.event.schedule == '15 1,12 * * *' && 'Scheduled: Science Shorts' ||
+    github.event.schedule == '0 22 * * 3,0' && 'Scheduled: Long-Form Deep Dive' ||
+    github.event.schedule == '0 3 * * *' && 'Scheduled: AI Comment Replies' ||
+    'Scheduled Science Task'
+  }}
 
 on:
   schedule:
