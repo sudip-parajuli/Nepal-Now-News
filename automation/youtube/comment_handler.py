@@ -20,16 +20,25 @@ class CommentHandler:
             uploads_playlist_id = None
             
             try:
-                if not channel_id:
-                    request = self.youtube.channels().list(mine=True, part='contentDetails')
+                # Use mine=True if channel_id is missing or seems like a placeholder
+                is_placeholder = channel_id and ("ID" in channel_id or "PLACEHOLDER" in channel_id.upper())
+                
+                if not channel_id or is_placeholder:
+                    print("No valid Channel ID in config, attempting to find 'mine'...")
+                    request = self.youtube.channels().list(mine=True, part='snippet,contentDetails')
                     response = request.execute()
-                    if 'items' in response:
-                        uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+                    if 'items' in response and len(response['items']) > 0:
+                        item = response['items'][0]
+                        uploads_playlist_id = item['contentDetails']['relatedPlaylists']['uploads']
+                        print(f"Found Channel: {item['snippet']['title']} ({item['id']})")
                 else:
-                    request = self.youtube.channels().list(id=channel_id, part='contentDetails')
+                    print(f"Using Channel ID: {channel_id}")
+                    request = self.youtube.channels().list(id=channel_id, part='snippet,contentDetails')
                     response = request.execute()
-                    if 'items' in response:
-                        uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+                    if 'items' in response and len(response['items']) > 0:
+                        item = response['items'][0]
+                        uploads_playlist_id = item['contentDetails']['relatedPlaylists']['uploads']
+                        print(f"Found Channel: {item['snippet']['title']}")
             except Exception as auth_err:
                 if "insufficientPermissions" in str(auth_err):
                     print("\n" + "!"*60)
