@@ -82,43 +82,52 @@ class ScriptWriter:
         return self.clean_script(script)
     def expand_science_script(self, topic: str) -> str:
         """
-        Generates a master-class 900-word documentary script using the user's high-quality prompts.
+        Generates a master-class 900-word documentary script with expanded styles.
         """
-        # We alternate between the two styles provided by the user for variety
-        style = random.choice(["paradox", "discovery"])
+        hooks = [
+            ("paradox", "Open with an unexplained observation or paradox. Make the viewer feel that something is wrong with how they understand reality."),
+            ("mystery", "Open with a genuine scientific mystery — something we only recently realized we don't understand."),
+            ("scale", "Open by describing the mind-blowing scale or numbers involved (extreme sizes, temperatures, or speeds)."),
+            ("counterintuitive", "Open with a counterintuitive fact that goes against common sense."),
+            ("history", "Open by narrating the specific moment of discovery. Use names, dates, and sensory details of the lab or field site."),
+            ("question", "Start with a direct, challenging question to the viewer that reframes a common object or idea.")
+        ]
+        tones = [
+            ("awe", "Awe and wonder (Style: Kurzgesagt) — Treat science as magic that actually works."),
+            ("conversational", "Conversational and curious (Style: Veritasium) — Build the logic from the ground up."),
+            ("journalistic", "Journalistic deep-dive — Serious, factual, and investigative."),
+            ("dramatic", "Dramatic narration — Build tension and release like a cinematic thriller.")
+        ]
         
-        if style == "paradox":
-            hook_instr = "Open with an unexplained observation or paradox before naming the topic. Make the viewer feel that something is wrong with how they understand reality."
-        else:
-            hook_instr = "Open by narrating the specific moment a scientist or explorer first encountered this phenomenon. Use their name, the year, and sensory detail."
+        hook_name, hook_instr = random.choice(hooks)
+        tone_name, tone_instr = random.choice(tones)
 
         prompt = f"""
         You are writing a master-class YouTube narration script for a science education channel.
         Topic: "{topic}"
 
         HOOK STYLE: {hook_instr}
+        TONE & VOICE: {tone_instr}
 
-        TONE & VOICE:
-        Voice of awe and wonder — treat science as magic that actually works. Sentences are punchy and declarative. 
-        Never use filler phrases like "in the realm of", "profound implications", "awe-inspiring complexity", or "testament to human curiosity". 
-        Be specific at all times — name scientists, cite dates, use precise numbers.
+        STRICT NARRATIVE RULES:
+        1. COGNITIVE DISSONANCE: Your hook must create immediate curiosity or a feeling that "this shouldn't be possible."
+        2. NO VAGUE FILLERS: Never use phrases like "in the realm of", "profound implications", or "testament to curiosity". 
+        3. SPECIFICITY: Use precise names, dates, and numbers. Cite specific scientists or missions.
+        4. CAUSAL DEPTH: Every mechanism must be explained causally. Use "X happens because of Z" logic, not just "X causes Y."
+        5. SENTENCE RHYTHM: Vary sentence length. Use short, punchy sentences (3-5 words) after long explanatory ones for impact.
+        6. NO ROBOTIC TONE: Read this as if you are a brilliant friend explaining a secret of the universe.
 
         STRUCTURE & LENGTH:
         Target approximately 900 words (~6 minutes). 
         Structure: hook → background context → core science mechanism → recent discovery or application → broader implications → memorable closing line.
-        End on a single surprising or poetic image that reframes what the viewer just learned.
-
-        SCIENCE ACCURACY:
-        Every mechanism must be explained causally — not just "X causes Y" but "X causes Y because of Z". 
-        Avoid vague words like "unique", "fascinating", "complex" unless immediately followed by a specific example.
+        End on a single surprising or poetic image that reframes the topic.
 
         VISUAL CUES:
-        This script is for an AI-automated channel. After every 2-3 sentences, add a short bracketed image cue in plain language, 
-        e.g. [microscope image of bismuth crystal surface] or [NASA photo of pulsar nebula].
+        This is for an image-based workflow. Every 2 sentences, add a short [bracketed image cue] in plain language (e.g. [macro photo of bismuth crystals] or [NASA animation of a pulsar]).
 
         OUTPUT FORMAT:
         Write the full script ONLY. No meta-commentary. Begin with the first word of the narration.
-        **IMPORTANT**: Wrap key technical terms, numbers, or specific names in asterisks for visual highlighting.
+        **IMPORTANT**: Wrap key technical terms, numbers, or names in single asterisks for visual highlighting.
         """
         
         script = self._call_with_retry(prompt)
