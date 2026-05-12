@@ -42,7 +42,8 @@ async def main():
         print("--- Starting AI Comment Auto-Reply ---")
         youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
         handler = CommentHandler(youtube_service, os.getenv("GEMINI_API_KEY"))
-        handler.handle_comments(max_videos=5)
+        channel_id = config.get("channel_id")
+        handler.handle_comments(max_videos=5, channel_id=channel_id)
         print("--- AI Comment Auto-Reply Completed ---")
         return
 

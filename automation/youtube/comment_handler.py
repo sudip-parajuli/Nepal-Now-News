@@ -9,15 +9,40 @@ class CommentHandler:
         self.gemini_client = genai.Client(api_key=gemini_api_key)
         self.model_id = "gemini-2.0-flash"
 
-    def handle_comments(self, max_videos=5):
+    def handle_comments(self, max_videos=5, channel_id=None):
         """Fetches recent videos and replies to new comments."""
         print(f"Scanning last {max_videos} videos for new comments...")
         
         try:
             # 1. Get recent uploads
-            request = self.youtube.channels().list(mine=True, part='contentDetails')
-            response = request.execute()
-            uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            # If channel_id is not provided, try to get it from the 'mine=True' call
+            # Note: channels().list(mine=True) requires 'youtube.readonly' or 'youtube.force-ssl'
+            uploads_playlist_id = None
+            
+            try:
+                if not channel_id:
+                    request = self.youtube.channels().list(mine=True, part='contentDetails')
+                    response = request.execute()
+                    if 'items' in response:
+                        uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+                else:
+                    request = self.youtube.channels().list(id=channel_id, part='contentDetails')
+                    response = request.execute()
+                    if 'items' in response:
+                        uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            except Exception as auth_err:
+                if "insufficientPermissions" in str(auth_err):
+                    print("\n" + "!"*60)
+                    print("CRITICAL: Insufficient Permissions to access YouTube Channel Details.")
+                    print("HINT: Your YOUTUBE_TOKEN_BASE64 might have been generated with only 'upload' scopes.")
+                    print("ACTION: Please re-generate your token using 'python generate_token.py' and update your GitHub Secret.")
+                    print("!"*60 + "\n")
+                    return
+                raise auth_err
+
+            if not uploads_playlist_id:
+                print("Could not find uploads playlist for this channel.")
+                return
 
             playlist_request = self.youtube.playlistItems().list(
                 playlistId=uploads_playlist_id,
