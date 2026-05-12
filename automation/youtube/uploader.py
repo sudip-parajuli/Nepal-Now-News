@@ -77,3 +77,24 @@ class YouTubeUploader:
         response = request.execute()
         print(f"Captions uploaded successfully! ID: {response.get('id')}")
         return response.get('id')
+
+    def upload_thumbnail(self, video_id, image_path):
+        """
+        Uploads a custom thumbnail for a specific video.
+        """
+        if not self.youtube:
+            print("YouTube service not initialized.")
+            return False
+
+        try:
+            print(f"Uploading thumbnail for video {video_id} from {image_path}...")
+            request = self.youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=MediaFileUpload(image_path)
+            )
+            response = request.execute()
+            print("Thumbnail uploaded successfully!")
+            return True
+        except Exception as e:
+            print(f"Thumbnail upload failed: {e}")
+            return False

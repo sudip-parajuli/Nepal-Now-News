@@ -195,3 +195,28 @@ class ScriptWriter:
         except Exception as e:
             print(f"Keyword Gen Error: {e}")
             return [f"{extra_context} science background"] * 10
+
+    def generate_thumbnail_info(self, topic: str, script: str) -> Dict[str, str]:
+        """Generates a catchy thumbnail text and a specific background image prompt."""
+        prompt = f"""
+        Based on this science script about "{topic}", generate two things for a YouTube thumbnail:
+        1. A catchy, curiosity-driven short phrase (max 4-5 words). It should NOT just repeat the title. It should create intrigue (e.g. "The Hidden Truth", "It Shouldn't Exist", "Physics Broken?").
+        2. A vivid image generation prompt for the background (no people, high contrast, cinematic, scientific).
+
+        Script: "{script[:1500]}..."
+
+        Return ONLY a JSON object:
+        {{
+          "text": " Catchy Phrase Here",
+          "image_prompt": "Image prompt here"
+        }}
+        """
+        response = self._call_with_retry(prompt)
+        try:
+            cleaned = self.clean_json_response(response)
+            return json.loads(cleaned)
+        except:
+            return {
+                "text": topic[:25],
+                "image_prompt": f"cinematic 4k photo of {topic}, scientific, deep space"
+            }

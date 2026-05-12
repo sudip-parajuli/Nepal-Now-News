@@ -130,9 +130,21 @@ class SciencePipeline(BasePipeline):
         srt_path = "automation/storage/science_long.srt"
         generate_srt(word_offsets, srt_path)
         
-        # 7. Upload
+        # 7. Generate Thumbnail
+        print("Generating automated thumbnail...")
+        from ..media.thumbnail_generator import ThumbnailGenerator
+        thumb_gen = ThumbnailGenerator()
+        thumb_info = self.script_writer.generate_thumbnail_info(topic, script)
+        thumb_path = thumb_gen.generate_thumbnail(thumb_info)
+
+        # 8. Upload
         if True: # Always call _upload, it handles is_test internally
-            await self._upload(video_path, f"The Science of {topic}: Detailed Explanation", script, topic, is_test=is_test, is_shorts=False, srt_path=srt_path)
+            video_id = await self._upload(video_path, f"The Science of {topic}: Detailed Explanation", script, topic, is_test=is_test, is_shorts=False, srt_path=srt_path)
+            
+            # 9. Upload Thumbnail if video succeeded
+            if video_id and thumb_path and os.path.exists(thumb_path) and not is_test:
+                print(f"Uploading thumbnail for video {video_id}...")
+                self.uploader.upload_thumbnail(video_id, thumb_path)
 
     async def _fetch_media(self, topic, script, count_per_kw=1, is_long_form=False):
         print(f"Fetching multi-segment media (long_form={is_long_form})...")
@@ -167,6 +179,7 @@ class SciencePipeline(BasePipeline):
         tags = ["science", "facts", "universe", "space", "educational"]
         if is_shorts: tags.append("shorts")
         
+        video_id = None
         if not is_test:
             print(f"Uploading: {title}")
             video_id = self.uploader.upload_video(video_path, title, description, tags)
@@ -181,5 +194,7 @@ class SciencePipeline(BasePipeline):
                     print("This might be due to insufficient authentication scopes (youtube.force-ssl required).")
         else:
             print(f"TEST MODE: Skipping upload for {title}")
+            video_id = "test_video_id"
         
         print(f"--- Science Pipeline Completed ---")
+        return video_id
