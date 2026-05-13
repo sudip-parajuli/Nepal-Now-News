@@ -25,7 +25,7 @@ class ImageFetcher:
         # --- Tier 1: DDG (try up to 5 queries, not just 3) ---
         ddg_failed_count = 0
         for i, q in enumerate(unique_queries[:5]):
-            refined_q = q if "photo" in q.lower() else f"{q} news photo"
+            refined_q = (q if "photo" in q.lower() else f"{q} news photo") + " -watermark -stock"
             print(f"Searching images for: {refined_q}...")
             results = self._search_ddg_only(refined_q, max_results=15)
 
@@ -33,6 +33,11 @@ class ImageFetcher:
                 ddg_failed_count = 0  # reset on success
                 count = 0
                 for img_url in results:
+                    # Watermark filtering: skip known stock sites in URL
+                    stock_sites = ["shutterstock.com", "alamy.com", "gettyimages.com", "dreamstime.com", "123rf.com", "depositphotos.com", "istockphoto.com", "vectorstock.com"]
+                    if any(site in img_url.lower() for site in stock_sites):
+                        continue
+
                     filename = f"{base_filename}_{len(paths)}.jpg"
                     path = self._download_image(img_url, filename)
                     if path:

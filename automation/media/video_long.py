@@ -154,8 +154,8 @@ class VideoLongGenerator:
                         clip = clip.set_position('center')
                         
                         if not is_video:
-                            # Apply a stronger zoom-in effect (1.0 to 1.15)
-                            clip = clip.resize(lambda t: 1.0 + 0.15 * (t / dur))
+                            # Apply a stronger zoom-in effect - SLOWED DOWN (0.15 -> 0.05)
+                            clip = clip.resize(lambda t: 1.0 + 0.05 * (t / dur))
                         
                         # Apply crossfade if not the first clip
                         if i > 0:

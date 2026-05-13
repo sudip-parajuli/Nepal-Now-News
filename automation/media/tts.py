@@ -204,9 +204,25 @@ class TTSEngine:
             
             start_time = 0
             for i, w in enumerate(words):
-                w_dur = (weights[i] / total_weight) * total_dur
+                # Add extra weight for punctuation pauses
+                punc_pause = 0
+                if w.endswith(('.', '?', '!')): punc_pause = 0.5
+                elif w.endswith(','): punc_pause = 0.2
+                
+                w_dur = (weights[i] / total_weight) * (total_dur - (text.count('.') + text.count('?') + text.count('!'))*0.5)
+                # Ensure w_dur is at least 0.2s
+                w_dur = max(w_dur, 0.2)
+                
                 word_offsets.append({"word": w, "start": start_time, "duration": w_dur})
-                start_time += w_dur
+                start_time += w_dur + punc_pause
+            
+            # Normalize back to total_dur if we overshot or undershot due to punc
+            actual_end = word_offsets[-1]['start'] + word_offsets[-1]['duration']
+            if actual_end > 0:
+                scale = total_dur / actual_end
+                for off in word_offsets:
+                    off['start'] *= scale
+                    off['duration'] *= scale
 
         return output_path, word_offsets
 

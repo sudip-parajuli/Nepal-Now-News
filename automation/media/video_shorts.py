@@ -147,8 +147,8 @@ class VideoShortsGenerator:
                                 # Sniper Zoom: Rapid scale up
                                 clip = self.apply_sniper_zoom(clip, transition_time)
                             else:
-                                # Standard slow zoom
-                                clip = clip.resize(lambda t: 1.0 + 0.1 * (t / transition_time))
+                                # Standard slow zoom - SLOWED DOWN (0.1 -> 0.04)
+                                clip = clip.resize(lambda t: 1.0 + 0.04 * (t / transition_time))
                             
                         bg_clips.append(clip)
 
@@ -504,9 +504,9 @@ class VideoShortsGenerator:
         return "\n".join(lines)
 
     def apply_sniper_zoom(self, clip, duration):
-        """Rapid zoom in (Sniper effect)."""
-        # Zoom from 1.0 to 1.5 quickly over the duration
-        return clip.resize(lambda t: 1.0 + (0.5 * (t / duration)**2))
+        """Rapid zoom in (Sniper effect) - SLOWED DOWN."""
+        # Linear zoom from 1.0 to 1.2 over the duration
+        return clip.resize(lambda t: 1.0 + (0.2 * (t / duration)))
 
 
 

@@ -70,18 +70,38 @@ class ThumbnailGenerator:
         return None
 
     def _load_font(self, fsize=120):
-        font_paths = [
+        # Cross-platform robust font list
+        font_paths = []
+        if os.name == 'nt':
+            windir = os.environ.get('WINDIR', 'C:\\Windows')
+            font_paths += [
+                os.path.join(windir, 'Fonts', 'ariblk.ttf'), # Arial Black
+                os.path.join(windir, 'Fonts', 'impact.ttf'), # Impact
+                os.path.join(windir, 'Fonts', 'arialbd.ttf'), # Arial Bold
+                os.path.join(windir, 'Fonts', 'segoeuib.ttf'), # Segoe UI Bold
+            ]
+        else:
+            font_paths += [
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            ]
+        
+        # Then custom assets
+        font_paths += [
             "automation/media/assets/Montserrat-Black.ttf",
-            "C:\\Windows\\Fonts\\ariblk.ttf",
-            "C:\\Windows\\Fonts\\impact.ttf",
-            "C:\\Windows\\Fonts\\arialbd.ttf",
             "automation/media/assets/NotoSansDevanagari-Regular.ttf"
         ]
+
         for path in font_paths:
             if os.path.exists(path):
                 try:
                     return ImageFont.truetype(path, fsize)
                 except: continue
+        
+        # Ultimate fallback for Windows
+        if os.name == 'nt':
+             return ImageFont.truetype("arial.ttf", fsize)
+             
         return ImageFont.load_default()
 
     def _draw_dynamic_text(self, draw, text, font):
