@@ -80,6 +80,8 @@ jobs:
           HUME_API_KEY5: ${{ secrets.HUME_API_KEY5 }}
           HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
           HUME_VOICE_ID_2: ${{ secrets.HUME_VOICE_ID_2 }}
+          HF_TOKEN: ${{ secrets.HUGGINGFACE_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
@@ -100,6 +102,8 @@ jobs:
           HUME_API_KEY5: ${{ secrets.HUME_API_KEY5 }}
           HUME_VOICE_ID: ${{ secrets.HUME_VOICE_ID }}
           HUME_VOICE_ID_2: ${{ secrets.HUME_VOICE_ID_2 }}
+          HF_TOKEN: ${{ secrets.HUGGINGFACE_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: |
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
