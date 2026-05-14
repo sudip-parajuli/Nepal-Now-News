@@ -68,9 +68,124 @@ class VideoLongGenerator:
         if not font: font = ImageFont.load_default()
         return font
 
+    def _render_kinetic_stat_clip(self, kinetic_stat: dict, duration: float):
+        """
+        Renders a full-screen count-up stat slide using MoviePy's VideoClip(make_frame).
+        The number counts up from 0 to its final value over the first 80% of duration.
+        """
+        from moviepy.editor import VideoClip
 
+        value    = kinetic_stat.get("value", 0)
+        unit     = kinetic_stat.get("unit", "")
+        label    = kinetic_stat.get("label", "")
+        w, h     = self.size
 
-    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None, burn_captions: bool = False):
+        # Fonts — big bold for value, smaller for unit/label
+        val_font = self._load_best_font(fsize=160)
+        unit_font = self._load_best_font(fsize=72)
+        lbl_font  = self._load_best_font(fsize=48)
+
+        def make_frame(t):
+            # Ease-out interpolation: accelerate quickly then settle
+            progress = min(t / max(duration * 0.80, 0.01), 1.0)
+            ease     = 1.0 - (1.0 - progress) ** 3   # cubic ease-out
+            current  = int(ease * value)
+
+            img  = Image.new("RGB", (w, h), (8, 8, 22))   # deep space dark
+            draw = ImageDraw.Draw(img)
+
+            # Subtle horizontal gradient bar accent
+            for x in range(w):
+                alpha = int(30 * abs(x / w - 0.5) * 2)
+                draw.line([(x, h // 2 - 130), (x, h // 2 + 130)],
+                          fill=(30 + alpha, 10, 60 + alpha))
+
+            # Value number  (centred)
+            val_str  = f"{current:,}"
+            v_bbox   = draw.textbbox((0, 0), val_str, font=val_font)
+            vw, vh   = v_bbox[2] - v_bbox[0], v_bbox[3] - v_bbox[1]
+            vx       = (w - vw) // 2
+            vy       = h // 2 - vh // 2 - 40
+            # Shadow
+            draw.text((vx + 4, vy + 4), val_str, font=val_font, fill=(0, 0, 0, 180))
+            draw.text((vx, vy), val_str, font=val_font, fill=(245, 195, 50))
+
+            # Unit  (right of value, vertically centred)
+            u_bbox = draw.textbbox((0, 0), unit, font=unit_font)
+            uw     = u_bbox[2] - u_bbox[0]
+            ux     = vx + vw + 18
+            uy     = vy + vh - (u_bbox[3] - u_bbox[1]) - 6
+            draw.text((ux, uy), unit, font=unit_font, fill=(200, 200, 255))
+
+            # Label  (below)
+            l_bbox = draw.textbbox((0, 0), label.upper(), font=lbl_font)
+            lx     = (w - (l_bbox[2] - l_bbox[0])) // 2
+            ly     = vy + vh + 28
+            draw.text((lx, ly), label.upper(), font=lbl_font, fill=(140, 140, 180))
+
+            return np.array(img)
+
+        return VideoClip(make_frame, duration=duration).set_fps(24)
+
+    def _render_kinetic_text_overlay_clip(self, base_image_path: str,
+                                          kinetic_stat: dict, duration: float):
+        """
+        Returns a CompositeVideoClip: base image (Ken Burns) + lower-third
+        animated stat overlay.  Falls back to full-screen stat if no image.
+        """
+        from moviepy.editor import ImageClip, CompositeVideoClip, VideoClip
+
+        value = kinetic_stat.get("value", 0) if kinetic_stat else None
+        unit  = kinetic_stat.get("unit", "") if kinetic_stat else ""
+        label = kinetic_stat.get("label", "") if kinetic_stat else ""
+        w, h  = self.size
+
+        # ── Base image with Ken Burns ─────────────────────────────────────────
+        try:
+            with Image.open(base_image_path) as img:
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                base_clip = ImageClip(np.array(img)).set_duration(duration)
+            iw, ih = base_clip.size
+            ratio  = w / h
+            if iw / ih > ratio: base_clip = base_clip.resize(height=h)
+            else:               base_clip = base_clip.resize(width=w)
+            base_clip = base_clip.set_position("center")
+            base_clip = base_clip.resize(lambda t: 1.0 + 0.04 * (t / duration))
+        except Exception as e:
+            print(f"[VideoLong] Overlay base image error: {e}. Using full-screen stat.")
+            return self._render_kinetic_stat_clip(kinetic_stat or {}, duration)
+
+        # ── Lower-third count-up bar ──────────────────────────────────────────
+        bar_h = 140
+        lbl_font  = self._load_best_font(fsize=52)
+        val_font  = self._load_best_font(fsize=80)
+
+        def make_bar_frame(t):
+            progress = min(t / max(duration * 0.80, 0.01), 1.0)
+            ease     = 1.0 - (1.0 - progress) ** 3
+            current  = int(ease * value) if value is not None else 0
+
+            bar = Image.new("RGBA", (w, bar_h), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(bar)
+            # Semi-transparent dark band
+            draw.rectangle([(0, 0), (w, bar_h)], fill=(5, 5, 18, 210))
+            # Left accent stripe
+            draw.rectangle([(0, 0), (8, bar_h)], fill=(245, 195, 50, 255))
+
+            val_str = f"{current:,} {unit}" if value is not None else label
+            lbl_str = label.upper()
+
+            draw.text((32, 12),       lbl_str, font=lbl_font, fill=(160, 160, 200, 255))
+            draw.text((32, 12 + 52 + 8), val_str, font=val_font,  fill=(245, 195, 50, 255))
+            return np.array(bar.convert("RGB"))
+
+        bar_clip = VideoClip(make_bar_frame, duration=duration).set_fps(24)
+        bar_clip = bar_clip.set_position((0, h - bar_h))
+
+        return CompositeVideoClip([base_clip, bar_clip], size=self.size)
+
+    def create_daily_summary(self, segments: list, audio_path: str, output_path: str, word_offsets: list, durations: list = None, template_mode: bool = False, branding: dict = None, media_paths: list = None, burn_captions: bool = False, asset_manifest: dict = None):
         audio = AudioFileClip(audio_path)
         total_duration = audio.duration
         
@@ -108,6 +223,79 @@ class VideoLongGenerator:
                 bg_clips.append(bg.set_start(cumulative_dur))
                 cumulative_dur += seg_duration
         
+        elif asset_manifest and asset_manifest.get("scenes"):
+            # ── Manifest-driven: routes each scene to correct visual type ──────
+            scenes       = asset_manifest["scenes"]
+            num_scenes   = max(len(scenes), 1)
+            scene_dur    = total_duration / num_scenes
+            sfx_dir      = "automation/media/sfx"
+            if not hasattr(self, "sfx_events"): self.sfx_events = []
+
+            for i, scene in enumerate(scenes):
+                start_t   = i * scene_dur
+                if start_t >= total_duration: break
+                dur       = min(scene_dur, total_duration - start_t)
+                atype     = scene.get("asset_type", "none")
+                apath     = scene.get("asset_path")
+                kstat     = scene.get("kinetic_stat")
+                overlay   = scene.get("kinetic_overlay", False)
+
+                # SFX on every scene transition (skip first)
+                if i > 0:
+                    sfx_file = "dong.mp3" if "kinetic" in atype else "whoosh.mp3"
+                    sfx_path = os.path.join(sfx_dir, sfx_file)
+                    if os.path.exists(sfx_path):
+                        self.sfx_events.append({"time": start_t, "file": sfx_file})
+
+                try:
+                    if atype == "ai_video" and apath and os.path.exists(apath):
+                        # AI video clip: loop if shorter than dur, trim if longer
+                        clip = VideoFileClip(apath).without_audio()
+                        if clip.duration < dur:
+                            from moviepy.video.fx.all import loop as vfx_loop
+                            clip = vfx_loop(clip, duration=dur)
+                        else:
+                            clip = clip.subclip(0, dur)
+                        clip = clip.resize(self.size).set_start(start_t)
+                        bg_clips.append(clip)
+
+                    elif atype == "kinetic_text_overlay" and kstat and apath and os.path.exists(apath):
+                        # Lower-third stat overlay on a real image
+                        ov_clip = self._render_kinetic_text_overlay_clip(apath, kstat, dur)
+                        bg_clips.append(ov_clip.set_start(start_t))
+
+                    elif atype == "kinetic_text" and kstat:
+                        # Full-screen count-up stat slide
+                        stat_clip = self._render_kinetic_stat_clip(kstat, dur)
+                        bg_clips.append(stat_clip.set_start(start_t))
+
+                    elif atype in ("image", "kinetic_text_overlay") and apath and os.path.exists(apath):
+                        # Regular image with Ken Burns
+                        with Image.open(apath) as img:
+                            if img.mode != "RGB": img = img.convert("RGB")
+                            clip = ImageClip(np.array(img)).set_duration(dur)
+                        iw, ih = clip.size
+                        if iw / ih > self.size[0] / self.size[1]: clip = clip.resize(height=self.size[1])
+                        else: clip = clip.resize(width=self.size[0])
+                        clip = clip.set_position("center")
+                        clip = clip.resize(lambda t: 1.0 + 0.04 * (t / dur))
+                        if i > 0: clip = clip.crossfadein(0.4)
+                        bg_clips.append(clip.set_start(start_t))
+
+                    else:
+                        # Fallback: dark color card
+                        bg_clips.append(
+                            ColorClip(size=self.size, color=(10, 10, 25), duration=dur)
+                            .set_start(start_t)
+                        )
+
+                except Exception as e:
+                    print(f"[VideoLong] Scene {i} render error ({atype}): {e}")
+                    bg_clips.append(
+                        ColorClip(size=self.size, color=(10, 10, 25), duration=dur)
+                        .set_start(start_t)
+                    )
+
         elif media_paths and len(media_paths) > 0:
             # Multi-media background (e.g. Science long form)
             transition_time = total_duration / len(media_paths)

@@ -219,6 +219,91 @@ class ScriptWriter:
             print(f"Keyword Gen Error: {e}")
             return [f"{extra_context} science background"] * 10
 
+    def generate_visual_scenes(self, topic: str, script: str) -> List[Dict]:
+        """
+        Generates a scene-by-scene structured JSON list for the visual pipeline.
+        Each scene has: narration, visual_type, image_cue, ai_video_prompt,
+        kinetic_stat, kinetic_overlay.
+
+        Called separately from expand_science_script() — the plain-text TTS
+        script is kept intact. This call only produces the visual routing data.
+
+        Returns a List[Dict] with the schema below, or [] on failure.
+        """
+        prompt = f"""
+You are a visual director for a science YouTube channel called "Daily Deep Space".
+You will be given a narration script about "{topic}".
+Break the script into 7-10 visual SCENES. For each scene assign:
+
+1. "narration"      — verbatim sentence(s) from the script for this scene
+2. "visual_type"    — one of: "ai_video", "image", "kinetic_text"
+   Rules:
+   - "ai_video"     — abstract phenomena: nebulae, crystal growth, chemical reactions,
+                       atmospheric effects, space travel. NEVER for real people or places.
+   - "image"        — real named places, historical events, specific objects/missions.
+   - "kinetic_text" — when the narration contains a KEY STATISTIC, number, or short quote.
+   HARD LIMIT: Maximum 3 scenes may be "ai_video". All others MUST be "image" or "kinetic_text".
+3. "image_cue"      — a 4-8 word search term for an image (always fill this, even for ai_video)
+4. "ai_video_prompt"— a cinematic text-to-video prompt for CogVideoX-2B
+                       (only required for ai_video scenes; leave "" for others)
+   Example: "extreme macro bismuth crystal surface, rainbow iridescent reflections,
+              slow camera drift, cinematic 4K, photorealistic"
+5. "kinetic_stat"   — object with "value" (number), "unit" (string), "label" (string)
+                       ONLY for kinetic_text scenes that have a measurable quantity.
+                       Set to null if the scene is a quote or text-only.
+6. "kinetic_overlay"— true if the kinetic_text should appear as a lower-third overlay
+                       on top of the image_cue image. false for full-screen stat slide.
+                       Use true when a good base image exists for context.
+
+Script:
+\"\"\"{script[:4000]}\"\"\"
+
+Return ONLY a valid JSON array. No markdown. No explanation. No trailing commas.
+Example output:
+[
+  {{
+    "narration": "The solar wind travels at over 1,100 kilometres per second.",
+    "visual_type": "kinetic_text",
+    "image_cue": "solar wind aurora borealis space",
+    "ai_video_prompt": "",
+    "kinetic_stat": {{"value": 1100, "unit": "km/s", "label": "Solar Wind Speed"}},
+    "kinetic_overlay": true
+  }},
+  {{
+    "narration": "Deep inside a neutron star, matter is compressed beyond imagination.",
+    "visual_type": "ai_video",
+    "image_cue": "neutron star pulsar deep space",
+    "ai_video_prompt": "extreme close-up neutron star surface, glowing plasma jets, slow rotation, cinematic 4K, photorealistic, no text",
+    "kinetic_stat": null,
+    "kinetic_overlay": false
+  }}
+]
+"""
+        raw = self._call_with_retry(prompt)
+        try:
+            cleaned = self.clean_json_response(raw)
+            scenes = json.loads(cleaned)
+            if not isinstance(scenes, list):
+                raise ValueError("Expected a JSON list")
+            # Enforce hard cap: downgrade excess ai_video to image
+            ai_count = 0
+            for s in scenes:
+                if s.get("visual_type") == "ai_video":
+                    if ai_count >= 3:
+                        print(f"[ScriptWriter] Downgrading scene to 'image' (ai_video cap reached)")
+                        s["visual_type"] = "image"
+                    else:
+                        ai_count += 1
+            print(f"[ScriptWriter] Generated {len(scenes)} visual scenes "
+                  f"({ai_count} ai_video, "
+                  f"{sum(1 for s in scenes if s.get('visual_type')=='image')} image, "
+                  f"{sum(1 for s in scenes if s.get('visual_type')=='kinetic_text')} kinetic_text).")
+            return scenes
+        except Exception as e:
+            print(f"[ScriptWriter] ERROR parsing visual scenes JSON: {e}")
+            print(f"Raw response: {raw[:500]}")
+            return []
+
     def generate_thumbnail_info(self, topic: str, script: str) -> Dict[str, str]:
         """Generates a catchy thumbnail text and a specific background image prompt."""
         prompt = f"""
