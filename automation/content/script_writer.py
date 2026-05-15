@@ -133,35 +133,6 @@ class ScriptWriter:
         script = self._call_with_retry(prompt)
         return self.clean_script(script)
 
-    def summarize_for_daily(self, news_items: List[Dict], channel_name: str = "Nepal Now") -> List[Dict]:
-        news_text = "\n\n".join([f"Headline: {item['headline']}\nContent: {item['content']}" for item in news_items])
-        prompt = f"""
-        Summarize today's major news into a structured YouTube video script in Nepali for the channel "{channel_name}".
-        
-        News items:
-        {news_text}
-
-        Output Format: JSON list of objects.
-        Structure sample:
-        [
-          {{"type": "intro", "text": "नमस्कार, {channel_name}मा हजुरलाइ स्वागत छ | आजको मुख्य समाचार यसप्रकार छन्", "gender": "female"}},
-          {{"type": "news", "headline": "...", "text": "...", "gender": "male"}},
-          {{"type": "outro", "text": "...", "gender": "male"}}
-        ]
-
-        Rules:
-        - Alternate gender (male/female) for each news item.
-        - Professional reporting style.
-        - RETURN ONLY THE JSON LIST.
-        """
-        response = self._call_with_retry(prompt)
-        try:
-            cleaned_json = self.clean_json_response(response)
-            return json.loads(cleaned_json)
-        except Exception as e:
-            print(f"Error parsing daily summary JSON: {e}")
-            return [{"type": "intro", "text": f"नमस्कार, {channel_name}मा हजुरलाइ स्वागत छ | आजको मुख्य समाचार यसप्रकार छन्", "gender": "female"}]
-
     def clean_script(self, text: str) -> str:
         text = re.sub(r'\[.*?\]', '', text)
         text = re.sub(r'\(.*?\)', '', text)

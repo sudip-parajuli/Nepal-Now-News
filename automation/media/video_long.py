@@ -209,16 +209,7 @@ class VideoLongGenerator:
                         logo = logo.set_position(('center', 80))
                         bg = CompositeVideoClip([bg, logo], size=self.size)
                 
-                if seg.get("type") == "news" and seg.get("headline"):
-                    try:
-                        # CENTERED HEADLINE: Use a slightly larger size and center middle
-                        head_txt = self.get_pillow_text_clip(seg['headline'][:80], 85, 'yellow', bg=(0,0,0,200), stroke_width=3)
-                        if head_txt:
-                            # Position in dead center
-                            head_txt = head_txt.set_duration(seg_duration).set_position('center')
-                            bg = CompositeVideoClip([bg, head_txt], size=self.size)
-                    except Exception as e:
-                        print(f"Header Render Error: {e}")
+
                 
                 bg_clips.append(bg.set_start(cumulative_dur))
                 cumulative_dur += seg_duration

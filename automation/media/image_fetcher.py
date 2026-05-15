@@ -25,7 +25,7 @@ class ImageFetcher:
         # --- Tier 1: DDG (try up to 5 queries, not just 3) ---
         ddg_failed_count = 0
         for i, q in enumerate(unique_queries[:5]):
-            refined_q = (q if "photo" in q.lower() else f"{q} news photo") + " -watermark -stock"
+            refined_q = (q if "photo" in q.lower() else f"{q} science photo") + " -watermark -stock"
             print(f"Searching images for: {refined_q}...")
             results = self._search_ddg_only(refined_q, max_results=15)
 
@@ -97,7 +97,7 @@ class ImageFetcher:
     def _simplify_query(self, query: str, topic_context: str = None) -> str:
         """Strip down a verbose query to 2-3 core keywords for Wikimedia/NASA searches."""
         # Remove quality modifiers and news-speak
-        noise = ["4k", "cinematic", "close up", "macro", "news photo", "photo",
+        noise = ["4k", "cinematic", "close up", "macro", "science photo", "photo",
                  "hd", "ultra", "high quality", "4 k", "detailed", "stunning"]
         q = query.lower()
         for n in noise:

@@ -10,6 +10,15 @@ class CommentHandler:
         self.gemini_client = genai.Client(api_key=gemini_api_key)
         self.model_id = "gemini-2.0-flash"
         self.groq_api_key = os.getenv("GROQ_API_KEY")
+        
+        # Keep track of viewers we've already replied to
+        self.replied_viewers_file = os.path.join(os.path.dirname(__file__), 'replied_viewers.txt')
+        self.replied_viewers = set()
+        if os.path.exists(self.replied_viewers_file):
+            with open(self.replied_viewers_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    self.replied_viewers.add(line.strip())
+
         if self.groq_api_key:
             try:
                 from groq import Groq
@@ -49,7 +58,7 @@ class CommentHandler:
                     print(f"AI Generation Error: {e}")
         return None
 
-    def handle_comments(self, max_videos=5, channel_id=None):
+    def handle_comments(self, max_videos=25, channel_id=None):
         """Fetches recent videos and replies to new comments."""
         print(f"Scanning last {max_videos} videos for new comments...")
         
@@ -124,7 +133,12 @@ class CommentHandler:
                 comment = thread['snippet']['topLevelComment']
                 comment_id = comment['id']
                 author = comment['snippet']['authorDisplayName']
+                author_id = comment['snippet'].get('authorChannelId', {}).get('value', author)
                 text = comment['snippet']['textDisplay']
+                
+                # We need to reply to each unique viewer for one time only
+                if author_id in self.replied_viewers:
+                    continue
                 
                 # Check if we've already replied
                 if self._should_reply(thread):
@@ -132,6 +146,12 @@ class CommentHandler:
                     reply_text = self._generate_reply(text, video_title)
                     if reply_text:
                         self._post_reply(comment_id, reply_text)
+                        
+                        # Add to our tracked viewers
+                        self.replied_viewers.add(author_id)
+                        with open(self.replied_viewers_file, 'a', encoding='utf-8') as f:
+                            f.write(author_id + '\n')
+                            
                         time.sleep(2) # Avoid hitting quotas too fast
                 else:
                     # print(f"  (Skipping {author})")

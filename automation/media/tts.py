@@ -30,8 +30,6 @@ class TTSEngine:
             voice = self.voice_map.get(seg.get("gender"), self.voice_map.get("female"))
             
             text_to_speak = seg.get("text", "")
-            if seg.get("type") == "news" and seg.get("headline"):
-                text_to_speak = f"{seg['headline']}। {text_to_speak}"
             
             _, offsets = await self.generate_audio(text_to_speak, temp_path, voice)
             

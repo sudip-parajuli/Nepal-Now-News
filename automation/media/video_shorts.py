@@ -26,7 +26,7 @@ class VideoShortsGenerator:
         # Branding defaults
         accent = (branding or {}).get('accent_color', 'yellow')
         bg_overlay_color = (branding or {}).get('bg_color', (0,0,0))
-        # Default for news if not specified
+        # Default background music volume
         music_vol = (branding or {}).get('music_volume', 0.03)
         logo_path = (branding or {}).get('logo_path', "automation/media/assets/nepal_now_logo.png")
         channel_name = (branding or {}).get('channel_name', "Nepal Now")
@@ -177,12 +177,12 @@ class VideoShortsGenerator:
             # OPTIMIZED GEOMETRY (65pt for margins, smaller but cleaner)
             # MOVED TO BOTTOM (roughly 1450 for standard 1920 height)
             FONT_SIZE, LINE_HEIGHT, MAX_CHARS_PER_LINE = 65, 100, 25
-            # Layout: If template_mode (News), move to BOTTOM. Otherwise (Science), stay in CENTER.
+            # Layout: If template_mode, move to BOTTOM. Otherwise, stay in CENTER.
             default_y = (self.size[1] - 470) if template_mode else ((self.size[1] // 2) - 100)
             START_Y = (branding or {}).get('caption_y', default_y)
             HIGHLIGHT_TEXT, NORMAL_TEXT = 'yellow', 'white'
             
-            # Layout: If template_mode (News), move to BOTTOM. Otherwise (Science), stay in CENTER.
+            # Check content language
             line_text_sample = " ".join([w['word'] for w in word_offsets[:10]])
             is_nepali_content = any(ord(c) > 127 for c in line_text_sample)
             
@@ -540,7 +540,6 @@ class VideoShortsGenerator:
             # 2. Transition SFX (Whoosh/Kick) for other clips
             elif index > 0:
                 # Science: ALWAYS Whoosh/Slide for fast pace
-                # News: Random
                 
                 # We'll default to high frequency for now as Shorts are fast
                 whoosh_path = os.path.join(sfx_dir, "whoosh.mp3")
