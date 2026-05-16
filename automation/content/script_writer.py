@@ -163,8 +163,8 @@ class ScriptWriter:
         Context: {extra_context}
 
         Requirements:
-        1. Terms must be ready-to-search queries (e.g. "glowing bioluminescent jellyfish 4k", "Hubble telescope nebula deep space", "time lapse plant growth").
-        2. STRICTLY NO HUMANS, NO FACES, NO PEOPLE, NO CHARACTERS, NO TEXT.
+        1. Terms must be ready-to-search queries (e.g. "Hubble telescope nebula deep space", "close up macro leaf cells").
+        2. STRICTLY NO HUMANS, NO FACES, NO PEOPLE, NO CHARACTERS, NO TEXT, NO CARTOONS, NO ANIMATION, NO ANIMALS, NO MOVIES. ONLY PURE SCIENCE.
         3. For each segment of the script (Intro, Body sections, Conclusion), provide diverse queries.
         4. Prioritize cinematic, 4k, macro, or animation styles.
         5. Return ONLY the search terms, one per line. No numbers or bullet points.
@@ -214,7 +214,7 @@ Break the script into 7-10 visual SCENES. For each scene assign:
    - "image"        — real named places, historical events, specific objects/missions.
    - "kinetic_text" — when the narration contains a KEY STATISTIC, number, or short quote.
    HARD LIMIT: Maximum 3 scenes may be "ai_video". All others MUST be "image" or "kinetic_text".
-3. "image_cue"      — a 4-8 word search term for an image (always fill this, even for ai_video)
+3. "image_cue"      — a 4-8 word search term for an image (always fill this, even for ai_video). STRICTLY NO HUMANS, NO CARTOONS, NO ANIMALS, NO MOVIES. Only pure science visuals.
 4. "ai_video_prompt"— a cinematic text-to-video prompt for CogVideoX-2B
                        (only required for ai_video scenes; leave "" for others)
    Example: "extreme macro bismuth crystal surface, rainbow iridescent reflections,

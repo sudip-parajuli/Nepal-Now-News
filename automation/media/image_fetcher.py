@@ -113,7 +113,7 @@ class ImageFetcher:
 
     def _search_ddg_only(self, query: str, max_results: int = 20) -> list:
         """DDG-only search (no Wikimedia fallback here — handled by caller tier logic)."""
-        negative_filters = "-person -face -human -man -woman -portrait -interview -talking -host -adult -child -people -character -characters -diagram -chart -graph -map -vector -text -logo"
+        negative_filters = "-person -face -human -man -woman -portrait -interview -talking -host -adult -child -people -character -characters -diagram -chart -graph -map -vector -text -logo -cartoon -animation -anime -movie -animal -horse -dog -cat -pet"
         search_query = f"{query} {negative_filters}"
 
         for attempt in range(3):
@@ -130,7 +130,9 @@ class ImageFetcher:
                         forbidden = ["diagram", "chart", "graph", "vector", "drawing",
                                      "illustration", "map", "infographic", "logo",
                                      "person", "face", "human", "man", "woman",
-                                     "interview", "talking", "portrait"]
+                                     "interview", "talking", "portrait", "cartoon",
+                                     "animation", "anime", "animated", "movie",
+                                     "horse", "animal", "pet", "creature", "character"]
                         filtered = []
                         for r in results:
                             url = r['image'].lower()
@@ -229,7 +231,7 @@ class ImageFetcher:
                 "format": "json",
                 "generator": "search",
                 "gsrnamespace": 6,  # File namespace
-                "gsrsearch": f"filetype:bitmap -person -portrait {clean_query}",
+                "gsrsearch": f"filetype:bitmap -person -portrait -cartoon -animal -movie {clean_query}",
                 "gsrlimit": max_results * 2,
                 "prop": "imageinfo",
                 "iiprop": "url|extmetadata",
