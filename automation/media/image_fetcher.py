@@ -112,12 +112,16 @@ class ImageFetcher:
         return " ".join(words[:3])
 
     def _search_ddg_only(self, query: str, max_results: int = 20) -> list:
-        """DDG-only search (no Wikimedia fallback here — handled by caller tier logic)."""
-        negative_filters = "-person -face -human -man -woman -portrait -interview -talking -host -adult -child -people -character -characters -diagram -chart -graph -map -vector -text -logo -cartoon -animation -anime -movie -animal -horse -dog -cat -pet"
-        search_query = f"{query} {negative_filters}"
+        """DDG-only search with clean short query, client-side filtering and score-based sorting."""
+        # Clean and truncate query to 60 characters max, removing negative keyword suffix
+        search_query = query[:60]
 
         for attempt in range(3):
             try:
+                # Add 2-second sleep between retries
+                if attempt > 0:
+                    time.sleep(2)
+
                 with DDGS() as ddgs:
                     results = ddgs.images(
                         keywords=search_query,
@@ -133,22 +137,42 @@ class ImageFetcher:
                                      "interview", "talking", "portrait", "cartoon",
                                      "animation", "anime", "animated", "movie",
                                      "horse", "animal", "pet", "creature", "character"]
-                        filtered = []
+                        scored_results = []
                         for r in results:
-                            url = r['image'].lower()
+                            url = r.get('image', '').lower()
                             title = r.get('title', '').lower()
+                            
+                            # Filter client-side
                             if any(f in url for f in forbidden) or any(f in title for f in forbidden):
                                 continue
-                            if url.split('.')[-1].split('?')[0] in ['jpg', 'jpeg', 'png', 'webp']:
-                                filtered.append(r['image'])
-                        random.shuffle(filtered)
+                            
+                            # Reject images under 400x300
+                            try:
+                                w = int(r.get('width', 0))
+                                h = int(r.get('height', 0))
+                                if w > 0 and h > 0 and (w < 400 or h < 300):
+                                    continue
+                            except ValueError:
+                                pass
+                                
+                            ext = url.split('.')[-1].split('?')[0]
+                            if ext in ['jpg', 'jpeg', 'png', 'webp']:
+                                # Score-based prioritizing
+                                score = 0
+                                prefer_keywords = ['nasa', 'esa', 'wikimedia', 'noaa', 'space', 'astronomy']
+                                if any(pk in url for pk in prefer_keywords):
+                                    score += 10
+                                scored_results.append((score, r['image']))
+                        
+                        # Sort by score descending, keeping highest scored first
+                        scored_results.sort(key=lambda x: x[0], reverse=True)
+                        filtered = [item[1] for item in scored_results]
                         return filtered[:max_results]
                     return []
             except Exception as e:
                 err_str = str(e)
                 print(f"DDG Search error for '{query}' (Attempt {attempt+1}/3): {err_str[:200]}")
                 if "403" in err_str or "Ratelimit" in err_str:
-                    # Rate-limited — wait longer and give up sooner
                     time.sleep(10 * (attempt + 1))
                 else:
                     time.sleep(5 * (attempt + 1))

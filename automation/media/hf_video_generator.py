@@ -5,7 +5,8 @@ import datetime
 import subprocess
 import requests
 
-HF_API_URL = "https://api-inference.huggingface.co/models/THUDM/CogVideoX-2b"
+HF_API_URL = "https://api-inference.huggingface.co/v1/inference/THUDM/CogVideoX-2b"
+HF_FALLBACK_URL = "https://api-inference.huggingface.co/v1/inference/THUDM/CogVideoX1.5-5B-SAT"
 HF_USAGE_FILE = "automation/storage/hf_usage.json"
 HF_MONTHLY_LIMIT = 900  # Hard stop at 900 to leave 100 as buffer
 
@@ -125,13 +126,17 @@ def generate_hf_video(prompt: str, output_dir: str, scene_idx: int, hf_token: st
         fallback = _fallback_pollinations_image(prompt, output_dir, scene_idx)
         return {"asset_type": "image" if fallback else "none", "asset_path": fallback}
 
-    headers = {"Authorization": f"Bearer {hf_token}"}
+    headers = {
+        "Authorization": f"Bearer {hf_token}",
+        "Content-Type": "application/json",
+        "Accept": "video/mp4"
+    }
     payload = {
         "inputs": prompt,
         "parameters": {
-            "num_frames": 48,
+            "num_frames": 49,
+            "fps": 8,
             "guidance_scale": 6.0,
-            "num_inference_steps": 50,
         },
     }
     video_path = os.path.join(output_dir, f"scene_{scene_idx}_aivideo.mp4")
@@ -141,7 +146,15 @@ def generate_hf_video(prompt: str, output_dir: str, scene_idx: int, hf_token: st
     for attempt in range(1, max_retries + 1):
         print(f"[HFVideoGen] Scene {scene_idx}: HF API attempt {attempt}/{max_retries} ...")
         try:
-            resp = requests.post(HF_API_URL, headers=headers, json=payload, timeout=120)
+            url = HF_API_URL
+            print(f"[HFVideoGen] Requesting CogVideoX-2B...")
+            resp = requests.post(url, headers=headers, json=payload, timeout=120)
+
+            # If 404, fall back to secondary model CogVideoX1.5-5B-SAT
+            if resp.status_code == 404:
+                print(f"[HFVideoGen] Scene {scene_idx}: Primary endpoint 404. Trying secondary fallback (CogVideoX1.5-5B-SAT)...")
+                url = HF_FALLBACK_URL
+                resp = requests.post(url, headers=headers, json=payload, timeout=120)
 
             if resp.status_code == 200:
                 with open(video_path, "wb") as f:

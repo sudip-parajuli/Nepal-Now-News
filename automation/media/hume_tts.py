@@ -123,7 +123,7 @@ class HumeTTS:
                     f"{len(audio_bytes):,} bytes → {output_path}"
                 )
 
-                word_offsets = self._extract_word_offsets(gen)
+                word_offsets = self._extract_word_offsets(gen, text)
                 print(f"HumeTTS: Extracted {len(word_offsets)} word timestamps.")
                 return output_path, word_offsets
 
@@ -135,11 +135,15 @@ class HumeTTS:
         print("HumeTTS: All API keys exhausted — falling back to next TTS engine.")
         return None, []
 
-    def _extract_word_offsets(self, generation: dict) -> list:
+    def _extract_word_offsets(self, generation: dict, text: str = "") -> list:
         """
         Extract word-level timing from Hume generation response.
         Handles multiple known response formats gracefully.
+        Falls back to WPM-based estimation if real timestamps are empty.
         """
+        import logging
+        logger = logging.getLogger("HumeTTS")
+        
         offsets = []
 
         # Format 1: snippets[].timestamps (dict with begin/end)
@@ -173,15 +177,30 @@ class HumeTTS:
                     except Exception:
                         pass
 
-        if offsets:
-            return offsets
+        if not offsets:
+            # Format 2: word_timestamps[] (alternative)
+            for wt in generation.get("word_timestamps", []):
+                word = wt.get("word", "").strip()
+                begin = float(wt.get("begin", wt.get("start", 0.0)))
+                end = float(wt.get("end", begin + 0.3))
+                if word:
+                    offsets.append({"word": word, "start": begin, "duration": end - begin})
 
-        # Format 2: word_timestamps[] (alternative)
-        for wt in generation.get("word_timestamps", []):
-            word = wt.get("word", "").strip()
-            begin = float(wt.get("begin", wt.get("start", 0.0)))
-            end = float(wt.get("end", begin + 0.3))
-            if word:
-                offsets.append({"word": word, "start": begin, "duration": end - begin})
+        # Fallback timestamp estimation if real timestamps are empty/0
+        if not offsets:
+            logger.debug(f"Raw TTS response keys: {list(generation.keys())}")
+            logger.debug(f"Raw TTS response (first 500 chars): {str(generation)[:500]}")
+            print(f"HumeTTS WARNING: Real timestamps are 0! Raw response keys: {list(generation.keys())}")
+            print(f"HumeTTS WARNING: Raw response (first 500 chars): {str(generation)[:500]}")
+            
+            # WPM Fallback
+            words_text = text or generation.get("text", "")
+            words = words_text.split()
+            if words:
+                print(f"HumeTTS WARNING: Generating fallback timestamps for {len(words)} words at 140 WPM...")
+                for i, w in enumerate(words):
+                    start_time = (i / 140.0) * 60.0
+                    duration = (1.0 / 140.0) * 60.0
+                    offsets.append({"word": w, "start": start_time, "duration": duration})
 
         return offsets

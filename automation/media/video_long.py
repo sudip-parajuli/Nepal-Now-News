@@ -6,6 +6,111 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip
 
+from .scene_renderer import SceneRenderer
+
+def calculate_adjusted_durations(scenes, fps=30) -> list[float]:
+    """
+    Correction 2 standalone function:
+    Calculates adjusted visual scene durations accounting for transitions.
+    Formula:
+    - Each flash adds 2/fps = 0.0667s to total duration
+    - Each fade removes fade_overlap_seconds (0.5s)
+    """
+    durations = []
+    transitions = []
+    for i in range(len(scenes) - 1):
+        next_type = scenes[i+1].get("visual_type")
+        curr_type = scenes[i].get("visual_type")
+        if next_type in ("hook_question", "kinetic_stat"):
+            transitions.append("flash")
+        elif (curr_type == "image" and next_type == "ai_video") or (curr_type == "ai_video" and next_type == "image"):
+            transitions.append("fade")
+        else:
+            transitions.append("cut")
+            
+    for i, scene in enumerate(scenes):
+        base_dur = 5.0 # default base visual duration if none specified
+        before_t = transitions[i-1] if i > 0 else None
+        after_t = transitions[i] if i < len(transitions) else None
+        
+        adj_dur = base_dur
+        if before_t == "fade":
+            adj_dur += 0.5
+        if after_t == "flash":
+            adj_dur += 0.0667
+        durations.append(adj_dur)
+    return durations
+
+def match_scenes_to_timestamps(scenes, word_offsets, total_duration):
+    """
+    Sequentially matches each scene's narration words to the continuous list of word_offsets.
+    Returns a list of dicts: {"start": float, "end": float, "duration": float, "word_times": list[float]}.
+    """
+    def clean_word(w):
+        return re.sub(r'[^a-zA-Z0-9]', '', w).lower()
+        
+    cleaned_offsets = [clean_word(w["word"]) for w in word_offsets]
+    current_offset_idx = 0
+    num_offsets = len(word_offsets)
+    scene_timings = []
+    
+    for idx, scene in enumerate(scenes):
+        narration = scene.get("narration", "")
+        scene_words = [clean_word(w) for w in narration.split() if clean_word(w)]
+        if not scene_words or not word_offsets:
+            scene_timings.append({
+                "start": idx * (total_duration / len(scenes)),
+                "end": (idx + 1) * (total_duration / len(scenes)),
+                "word_times": [0.0]
+            })
+            continue
+            
+        start_time = None
+        matched_offsets_indices = []
+        for sw in scene_words:
+            found = False
+            for j in range(current_offset_idx, min(current_offset_idx + 100, num_offsets)):
+                if cleaned_offsets[j] == sw:
+                    matched_offsets_indices.append(j)
+                    current_offset_idx = j + 1
+                    found = True
+                    break
+            if not found:
+                if current_offset_idx < num_offsets:
+                    matched_offsets_indices.append(current_offset_idx)
+                    current_offset_idx += 1
+                    
+        if matched_offsets_indices:
+            start_time = word_offsets[matched_offsets_indices[0]]["start"]
+            last_w = word_offsets[matched_offsets_indices[-1]]
+            end_time = last_w["start"] + last_w["duration"]
+            word_times = [word_offsets[idx]["start"] - start_time for idx in matched_offsets_indices]
+        else:
+            start_time = current_offset_idx / max(1, num_offsets) * total_duration
+            end_time = (current_offset_idx + len(scene_words)) / max(1, num_offsets) * total_duration
+            word_times = [0.0] * len(scene_words)
+            
+        scene_timings.append({
+            "start": start_time,
+            "end": end_time,
+            "word_times": word_times
+        })
+        
+    # Calibrate starts/ends sequentially to guarantee absolute coverage
+    if scene_timings:
+        scene_timings[0]["start"] = 0.0
+        for i in range(1, len(scene_timings)):
+            prev_end = scene_timings[i-1]["end"]
+            scene_timings[i]["start"] = prev_end
+            if scene_timings[i]["end"] <= prev_end:
+                scene_timings[i]["end"] = prev_end + 3.0
+        scene_timings[-1]["end"] = total_duration
+        
+    for item in scene_timings:
+        item["duration"] = max(0.1, item["end"] - item["start"])
+        
+    return scene_timings
+
 class VideoLongGenerator:
     def __init__(self, size=(1920, 1080)):
         self.size = size
@@ -215,77 +320,104 @@ class VideoLongGenerator:
                 cumulative_dur += seg_duration
         
         elif asset_manifest and asset_manifest.get("scenes"):
-            # ── Manifest-driven: routes each scene to correct visual type ──────
+            # ── Manifest-driven: routes each scene to correct premium visual type ──────
             scenes       = asset_manifest["scenes"]
-            num_scenes   = max(len(scenes), 1)
-            scene_dur    = total_duration / num_scenes
             sfx_dir      = "automation/media/sfx"
             if not hasattr(self, "sfx_events"): self.sfx_events = []
+            
+            # Map global word offsets to each scene sequentially for perfect audio-sync
+            scene_timings = match_scenes_to_timestamps(scenes, word_offsets, total_duration)
+            
+            # Rule-based transition assignment
+            transitions = []
+            for i in range(len(scenes) - 1):
+                curr_type = scenes[i].get("visual_type", "image")
+                next_type = scenes[i+1].get("visual_type", "image")
+                
+                if next_type in ("hook_question", "kinetic_stat"):
+                    transitions.append("flash")
+                elif (curr_type == "image" and next_type == "ai_video") or (curr_type == "ai_video" and next_type == "image"):
+                    transitions.append("fade")
+                else:
+                    transitions.append("cut")
 
             for i, scene in enumerate(scenes):
-                start_t   = i * scene_dur
-                if start_t >= total_duration: break
-                dur       = min(scene_dur, total_duration - start_t)
-                atype     = scene.get("asset_type", "none")
-                apath     = scene.get("asset_path")
-                kstat     = scene.get("kinetic_stat")
-                overlay   = scene.get("kinetic_overlay", False)
-
-                # SFX on every scene transition (skip first)
-                if i > 0:
-                    sfx_file = "dong.mp3" if "kinetic" in atype else "whoosh.mp3"
-                    sfx_path = os.path.join(sfx_dir, sfx_file)
-                    if os.path.exists(sfx_path):
-                        self.sfx_events.append({"time": start_t, "file": sfx_file})
-
+                timing = scene_timings[i]
+                start_t = timing["start"]
+                end_t = timing["end"]
+                dur = timing["duration"]
+                
+                # Crossfade transition before this scene requires 0.5s overlap
+                overlap = 0.0
+                if i > 0 and transitions[i-1] == "fade":
+                    overlap = 0.5
+                    
+                clip_start = max(0.0, start_t - overlap)
+                clip_duration = dur + overlap
+                
+                atype = scene.get("asset_type", "none")
+                apath = scene.get("asset_path")
+                vtype = scene.get("visual_type", "image")
+                
+                print(f"[VideoLong] Scene {i} visual timing: start={clip_start:.3f}s, dur={clip_duration:.3f}s, type='{vtype}'")
+                
                 try:
-                    if atype == "ai_video" and apath and os.path.exists(apath):
-                        # AI video clip: loop if shorter than dur, trim if longer
-                        clip = VideoFileClip(apath).without_audio()
-                        if clip.duration < dur:
-                            from moviepy.video.fx.all import loop as vfx_loop
-                            clip = vfx_loop(clip, duration=dur)
+                    if vtype == "typewriter_text" and apath and os.path.exists(apath):
+                        words = scene.get("typewriter_words")
+                        clip = SceneRenderer.render_typewriter(apath, scene.get("narration", ""), clip_duration, typewriter_words=words)
+                    elif vtype == "kinetic_stat" and apath and os.path.exists(apath):
+                        sdata = scene.get("stat_data") or {"value": 0, "unit": "", "label": ""}
+                        clip = SceneRenderer.render_kinetic_stat(apath, scene.get("narration", ""), clip_duration, sdata)
+                    elif vtype == "image" and apath and os.path.exists(apath):
+                        clip = SceneRenderer.render_image(apath, scene.get("narration", ""), clip_duration, named_entity=scene.get("named_entity"))
+                    elif vtype == "ai_video" and apath and os.path.exists(apath):
+                        if apath.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".webm")):
+                            clip = SceneRenderer.render_ai_video(apath, clip_duration)
                         else:
-                            clip = clip.subclip(0, dur)
-                        clip = clip.resize(self.size).set_start(start_t)
-                        bg_clips.append(clip)
-
-                    elif atype == "kinetic_text_overlay" and kstat and apath and os.path.exists(apath):
-                        # Lower-third stat overlay on a real image
-                        ov_clip = self._render_kinetic_text_overlay_clip(apath, kstat, dur)
-                        bg_clips.append(ov_clip.set_start(start_t))
-
-                    elif atype == "kinetic_text" and kstat:
-                        # Full-screen count-up stat slide
-                        stat_clip = self._render_kinetic_stat_clip(kstat, dur)
-                        bg_clips.append(stat_clip.set_start(start_t))
-
-                    elif atype in ("image", "kinetic_text_overlay") and apath and os.path.exists(apath):
-                        # Regular image with Ken Burns
-                        with Image.open(apath) as img:
-                            if img.mode != "RGB": img = img.convert("RGB")
-                            clip = ImageClip(np.array(img)).set_duration(dur)
-                        iw, ih = clip.size
-                        if iw / ih > self.size[0] / self.size[1]: clip = clip.resize(height=self.size[1])
-                        else: clip = clip.resize(width=self.size[0])
-                        clip = clip.set_position("center")
-                        clip = clip.resize(lambda t: 1.0 + 0.04 * (t / dur))
-                        if i > 0: clip = clip.crossfadein(0.4)
-                        bg_clips.append(clip.set_start(start_t))
-
+                            clip = SceneRenderer.render_image(apath, scene.get("narration", ""), clip_duration)
+                    elif vtype == "hook_question" and apath and os.path.exists(apath):
+                        qtext = scene.get("question_text") or scene.get("narration", "")
+                        emp = scene.get("emphasis_phrase")
+                        clip = SceneRenderer.render_hook_question(apath, scene.get("narration", ""), clip_duration, qtext, emphasis_phrase=emp)
+                    elif vtype == "data_bars" and apath and os.path.exists(apath):
+                        bdata = scene.get("bar_data")
+                        clip = SceneRenderer.render_data_bars(apath, scene.get("narration", ""), clip_duration, bdata)
                     else:
-                        # Fallback: dark color card
-                        bg_clips.append(
-                            ColorClip(size=self.size, color=(10, 10, 25), duration=dur)
-                            .set_start(start_t)
-                        )
-
+                        # Standard Image Ken Burns fallback
+                        if apath and os.path.exists(apath):
+                            clip = SceneRenderer.render_image(apath, scene.get("narration", ""), clip_duration)
+                        else:
+                            clip = ColorClip(size=self.size, color=(10, 10, 25), duration=clip_duration)
+                            
+                    clip = clip.set_start(clip_start).set_position("center")
+                    
+                    if i > 0 and transitions[i-1] == "fade":
+                        clip = clip.crossfadein(0.5)
+                        
+                    bg_clips.append(clip)
+                    
                 except Exception as e:
-                    print(f"[VideoLong] Scene {i} render error ({atype}): {e}")
+                    print(f"[VideoLong] Scene {i} render error ({vtype}): {e}")
                     bg_clips.append(
-                        ColorClip(size=self.size, color=(10, 10, 25), duration=dur)
-                        .set_start(start_t)
+                        ColorClip(size=self.size, color=(10, 10, 25), duration=clip_duration)
+                        .set_start(clip_start)
                     )
+                
+                # Apply transition effects & SFX at boundaries
+                if i > 0:
+                    trans = transitions[i-1]
+                    if trans == "flash":
+                        flash = ColorClip(size=self.size, color=(255, 255, 255), duration=0.0667)
+                        flash = flash.set_start(start_t - 0.0333).set_position("center")
+                        bg_clips.append(flash)
+                        
+                        sfx_path = os.path.join(sfx_dir, "whoosh.mp3")
+                        if os.path.exists(sfx_path):
+                            self.sfx_events.append({"time": start_t - 0.0333, "file": "whoosh.mp3"})
+                    elif trans == "fade":
+                        sfx_path = os.path.join(sfx_dir, "dong.mp3")
+                        if os.path.exists(sfx_path):
+                            self.sfx_events.append({"time": start_t, "file": "dong.mp3"})
 
         elif media_paths and len(media_paths) > 0:
             # Multi-media background (e.g. Science long form)

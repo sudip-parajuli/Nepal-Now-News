@@ -8,8 +8,22 @@ import re
 from typing import List, Dict
 
 class ScriptWriter:
-    def __init__(self, api_key: str):
-        self.client = genai.Client(api_key=api_key)
+    def __init__(self, api_key: str = None):
+        # Gather all Gemini keys from env
+        self.api_keys = [
+            os.getenv("GEMINI_API_KEY"),
+            os.getenv("GEMINI_API_KEY2"),
+            os.getenv("GEMINI_API_KEY3")
+        ]
+        # Filter out empty/None keys
+        self.api_keys = [k for k in self.api_keys if k]
+        
+        # If no key found in env, but one was passed to init, use it
+        if not self.api_keys and api_key:
+            self.api_keys = [api_key]
+            
+        self.clients = [genai.Client(api_key=k) for k in self.api_keys]
+        self.client = self.clients[0] if self.clients else None
         self.model_id = 'gemini-2.0-flash'
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         if self.groq_api_key:
@@ -22,38 +36,54 @@ class ScriptWriter:
             self.groq_client = None
 
     def _call_with_retry(self, prompt: str, max_retries: int = 5) -> str:
-        """Calls Gemini with exponential backoff, falling back to Groq if available."""
-        for attempt in range(max_retries):
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_id,
-                    contents=prompt
-                )
-                return response.text.strip()
-            except Exception as e:
-                err_msg = str(e).lower()
-                is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
-                
-                if is_quota_error and self.groq_client:
-                    print(f"Gemini Quota Exceeded. Trying Groq fallback (Attempt {attempt+1})...")
-                    try:
-                        chat_completion = self.groq_client.chat.completions.create(
-                            messages=[{"role": "user", "content": prompt}],
-                            model="llama-3.3-70b-versatile",
-                        )
-                        result = chat_completion.choices[0].message.content.strip()
-                        if result: return result
-                    except Exception as groq_err:
-                        print(f"Groq fallback failed: {groq_err}")
-                
-                if attempt < max_retries - 1:
-                    wait_time = (2 ** attempt) + random.uniform(0, 1)
-                    print(f"LLM Error: {e}. Retrying in {wait_time:.2f} seconds... (Attempt {attempt+1}/{max_retries})")
-                    time.sleep(wait_time)
-                else:
-                    print(f"CRITICAL: LLM failed after {max_retries} attempts. Last error: {e}")
+        """Calls Gemini rotating through keys, falling back to Groq only if all fail or hit quota."""
+        if not self.clients:
+            print("WARNING: No Gemini clients available. Trying Groq immediately...")
         
-        return "Error: Maximum retries reached for LLM generation."
+        # Try each Gemini client sequentially
+        for client_idx, client in enumerate(self.clients):
+            for attempt in range(max_retries):
+                try:
+                    response = client.models.generate_content(
+                        model=self.model_id,
+                        contents=prompt
+                    )
+                    return response.text.strip()
+                except Exception as e:
+                    err_msg = str(e).lower()
+                    is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
+                    
+                    if is_quota_error:
+                        print(f"Gemini Key {client_idx+1} Quota Exceeded/429. Trying next key...")
+                        break  # Break out of attempts loop for this key, move to next key
+                    
+                    # For non-quota errors, retry with exponential backoff on the current key
+                    if attempt < max_retries - 1:
+                        wait_time = (2 ** attempt) + random.uniform(0, 1)
+                        print(f"LLM Error on Key {client_idx+1}: {e}. Retrying in {wait_time:.2f} seconds... (Attempt {attempt+1}/{max_retries})")
+                        time.sleep(wait_time)
+                    else:
+                        print(f"LLM Key {client_idx+1} failed after {max_retries} attempts. Trying next key...")
+                        break
+        
+        # If all Gemini keys fail or are exhausted, try Groq fallback
+        if self.groq_client:
+            print("All Gemini keys exhausted. Trying Groq fallback...")
+            for attempt in range(max_retries):
+                try:
+                    chat_completion = self.groq_client.chat.completions.create(
+                        messages=[{"role": "user", "content": prompt}],
+                        model="llama-3.3-70b-versatile",
+                    )
+                    result = chat_completion.choices[0].message.content.strip()
+                    if result:
+                        return result
+                except Exception as groq_err:
+                    print(f"Groq fallback attempt {attempt+1} failed: {groq_err}")
+                    if attempt < max_retries - 1:
+                        time.sleep((2 ** attempt) + 1)
+                        
+        return "Error: Maximum retries reached for all LLM keys and fallbacks."
 
     def _dummy_placeholder(self):
         pass
@@ -193,109 +223,201 @@ class ScriptWriter:
     def generate_visual_scenes(self, topic: str, script: str) -> List[Dict]:
         """
         Generates a scene-by-scene structured JSON list for the visual pipeline.
-        Each scene has: narration, visual_type, image_cue, ai_video_prompt,
-        kinetic_stat, kinetic_overlay.
-
-        Called separately from expand_science_script() — the plain-text TTS
-        script is kept intact. This call only produces the visual routing data.
-
-        Returns a List[Dict] with the schema below, or [] on failure.
+        Enforces 6 visual types, max 3 ai_videos, and parses thumbnail_data.
         """
+        # Initialize default fallback thumbnail data
+        self.last_thumbnail_data = {
+            "hook_phrase": topic[:25].upper(),
+            "supporting_fact": "A scientific discovery.",
+            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "thumbnail_subject_query": ""
+        }
+
+        # First try: Rich, detailed prompt
         prompt = f"""
 You are a visual director for a science YouTube channel called "Daily Deep Space".
 You will be given a narration script about "{topic}".
-Break the script into 7-10 visual SCENES. For each scene assign:
+Break the script into 15-20 visual SCENES. For each scene assign one of the 6 visual types:
 
-1. "narration"      — verbatim sentence(s) from the script for this scene
-2. "visual_type"    — one of: "ai_video", "image", "kinetic_text"
-   Rules:
-   - "ai_video"     — abstract phenomena: nebulae, crystal growth, chemical reactions,
-                       atmospheric effects, space travel. NEVER for real people or places.
-   - "image"        — real named places, historical events, specific objects/missions.
-   - "kinetic_text" — when the narration contains a KEY STATISTIC, number, or short quote.
-   HARD LIMIT: Maximum 3 scenes may be "ai_video". All others MUST be "image" or "kinetic_text".
-3. "image_cue"      — a 4-8 word search term for an image (always fill this, even for ai_video). STRICTLY NO HUMANS, NO CARTOONS, NO ANIMALS, NO MOVIES. Only pure science visuals.
-4. "ai_video_prompt"— a cinematic text-to-video prompt for CogVideoX-2B
-                       (only required for ai_video scenes; leave "" for others)
-   Example: "extreme macro bismuth crystal surface, rainbow iridescent reflections,
-              slow camera drift, cinematic 4K, photorealistic"
-5. "kinetic_stat"   — object with "value" (number), "unit" (string), "label" (string)
-                       ONLY for kinetic_text scenes that have a measurable quantity.
-                       Set to null if the scene is a quote or text-only.
-6. "kinetic_overlay"— true if the kinetic_text should appear as a lower-third overlay
-                       on top of the image_cue image. false for full-screen stat slide.
-                       Use true when a good base image exists for context.
+1. `typewriter_text` - Use for opening hooks, key revelations, named discoveries.
+   Fields: "typewriter_words": a list of words to type out sequentially.
+2. `kinetic_stat`    - Use for a single overwhelming number.
+   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string).
+3. `image`           - Use for real places, scientists, historical events.
+   Fields: "named_entity": string (optional, to display as lower third).
+4. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
+   Fields: "ai_video_prompt": text-to-video prompt. Max 3 scenes of this type!
+5. `hook_question`   - Use for chapter openings, rhetorical questions.
+   Fields: "question_text": string, "emphasis_phrase": string (key words in ALL CAPS).
+6. `data_bars`       - Use for comparing 3+ values.
+   Fields: "bar_data": list of 3-4 objects, each with "label" (string) and "value" (number).
+
+Additionally, generate metadata for the YouTube THUMBNAIL:
+- `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
+- `supporting_fact`: Short supporting fact/stat in 5-8 words.
+- `thumbnail_bg_query`: DDG search term for a space/science background.
+- `thumbnail_subject_query`: DDG search term for a main subject image to composite.
+
+Return ONLY a valid JSON object of this structure:
+{{
+  "scenes": [
+    {{
+      "narration": "Verbatim narration from script",
+      "visual_type": "typewriter_text",
+      "image_cue": "search term for backup image",
+      "typewriter_words": ["word1", "word2"],
+      "stat_data": null,
+      "named_entity": null,
+      "ai_video_prompt": "",
+      "question_text": null,
+      "emphasis_phrase": null,
+      "bar_data": null
+    }}
+  ],
+  "thumbnail_data": {{
+    "hook_phrase": "ALL CAPS HOOK",
+    "supporting_fact": "supporting fact",
+    "thumbnail_bg_query": "nebula space",
+    "thumbnail_subject_query": "bismuth crystal"
+  }}
+}}
 
 Script:
 \"\"\"{script[:4000]}\"\"\"
-
-Return ONLY a valid JSON array. No markdown. No explanation. No trailing commas.
-Example output:
-[
-  {{
-    "narration": "The solar wind travels at over 1,100 kilometres per second.",
-    "visual_type": "kinetic_text",
-    "image_cue": "solar wind aurora borealis space",
-    "ai_video_prompt": "",
-    "kinetic_stat": {{"value": 1100, "unit": "km/s", "label": "Solar Wind Speed"}},
-    "kinetic_overlay": true
-  }},
-  {{
-    "narration": "Deep inside a neutron star, matter is compressed beyond imagination.",
-    "visual_type": "ai_video",
-    "image_cue": "neutron star pulsar deep space",
-    "ai_video_prompt": "extreme close-up neutron star surface, glowing plasma jets, slow rotation, cinematic 4K, photorealistic, no text",
-    "kinetic_stat": null,
-    "kinetic_overlay": false
-  }}
-]
 """
         raw = self._call_with_retry(prompt)
+        scenes = []
+        parsed_ok = False
+
         try:
             cleaned = self.clean_json_response(raw)
-            scenes = json.loads(cleaned)
-            if not isinstance(scenes, list):
-                raise ValueError("Expected a JSON list")
-            # Enforce hard cap: downgrade excess ai_video to image
-            ai_count = 0
-            for s in scenes:
-                if s.get("visual_type") == "ai_video":
-                    if ai_count >= 3:
-                        print(f"[ScriptWriter] Downgrading scene to 'image' (ai_video cap reached)")
-                        s["visual_type"] = "image"
-                    else:
-                        ai_count += 1
-            print(f"[ScriptWriter] Generated {len(scenes)} visual scenes "
-                  f"({ai_count} ai_video, "
-                  f"{sum(1 for s in scenes if s.get('visual_type')=='image')} image, "
-                  f"{sum(1 for s in scenes if s.get('visual_type')=='kinetic_text')} kinetic_text).")
-            return scenes
+            data = json.loads(cleaned)
+            if isinstance(data, dict) and "scenes" in data:
+                scenes = data["scenes"]
+                if len(scenes) >= 5:
+                    self.last_thumbnail_data = data.get("thumbnail_data", self.last_thumbnail_data)
+                    parsed_ok = True
         except Exception as e:
-            print(f"[ScriptWriter] ERROR parsing visual scenes JSON: {e}")
-            print(f"Raw response: {raw[:500]}")
-            return []
+            print(f"[ScriptWriter] Primary visual scenes JSON parse error: {e}")
+
+        # If primary prompt fails or returns less than 5 scenes, try simplified prompt retry
+        if not parsed_ok:
+            print("[ScriptWriter] Retrying visual scenes generation with simplified prompt...")
+            simple_prompt = f"""
+Analyze this science script about "{topic}" and generate a JSON list of 15-20 visual scenes.
+For each scene, output ONLY:
+- "narration": verbatim sentence(s)
+- "visual_type": one of: "typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"
+- "image_cue": 4-8 word search term
+
+Also include:
+- "thumbnail_data": {{
+    "hook_phrase": "MAX 4 WORDS ALL CAPS",
+    "supporting_fact": "Short fact",
+    "thumbnail_bg_query": "bg search term",
+    "thumbnail_subject_query": "subject search term"
+  }}
+
+Return ONLY a valid JSON object:
+{{
+  "scenes": [
+    {{ "narration": "...", "visual_type": "...", "image_cue": "..." }}
+  ],
+  "thumbnail_data": {{ ... }}
+}}
+
+Script:
+\"\"\"{script[:3000]}\"\"\"
+"""
+            raw_retry = self._call_with_retry(simple_prompt)
+            try:
+                cleaned_retry = self.clean_json_response(raw_retry)
+                data_retry = json.loads(cleaned_retry)
+                if isinstance(data_retry, dict) and "scenes" in data_retry:
+                    scenes = data_retry["scenes"]
+                    self.last_thumbnail_data = data_retry.get("thumbnail_data", self.last_thumbnail_data)
+            except Exception as retry_err:
+                print(f"[ScriptWriter] Secondary retry parsing failed: {retry_err}")
+
+        # If still no scenes, create bare basic scenes to let the pipeline run
+        if not scenes:
+            print("[ScriptWriter] WARNING: Visual scenes completely empty, creating fallback default scenes...")
+            sentences = [s.strip() for s in script.split('.') if s.strip()]
+            for s in sentences[:8]:
+                scenes.append({
+                    "narration": s + ".",
+                    "visual_type": "image",
+                    "image_cue": f"{topic} space background",
+                    "typewriter_words": None,
+                    "stat_data": None,
+                    "named_entity": None,
+                    "ai_video_prompt": "",
+                    "question_text": None,
+                    "emphasis_phrase": None,
+                    "bar_data": None
+                })
+
+        # Sanitize and upgrade scenes to meet fields and budget rules
+        ai_count = 0
+        final_scenes = []
+        for s in scenes:
+            if not isinstance(s, dict):
+                continue
+            vtype = s.get("visual_type", "image")
+            if vtype not in ["typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"]:
+                vtype = "image"
+            
+            # Enforce hard cap of 3 ai_videos
+            if vtype == "ai_video":
+                if ai_count >= 3:
+                    print("[ScriptWriter] Enforcing ai_video cap — downgrading scene to image")
+                    vtype = "image"
+                else:
+                    ai_count += 1
+            
+            s["visual_type"] = vtype
+            
+            # Ensure all required fields exist to prevent KeyErrors later
+            s.setdefault("narration", "")
+            s.setdefault("image_cue", f"{topic} science background")
+            s.setdefault("typewriter_words", None)
+            s.setdefault("stat_data", None)
+            s.setdefault("named_entity", None)
+            s.setdefault("ai_video_prompt", "")
+            s.setdefault("question_text", None)
+            s.setdefault("emphasis_phrase", None)
+            s.setdefault("bar_data", None)
+
+            final_scenes.append(s)
+
+        print(f"[ScriptWriter] Final Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
+        return final_scenes
 
     def generate_thumbnail_info(self, topic: str, script: str) -> Dict[str, str]:
-        """Generates a catchy thumbnail text and a specific background image prompt."""
-        prompt = f"""
-        Based on this science script about "{topic}", generate two things for a YouTube thumbnail:
-        1. A catchy, curiosity-driven short phrase (max 4-5 words). It should NOT just repeat the title. It should create intrigue (e.g. "The Hidden Truth", "It Shouldn't Exist", "Physics Broken?").
-        2. A vivid image generation prompt for the background (no people, high contrast, cinematic, scientific).
-
-        Script: "{script[:1500]}..."
-
-        Return ONLY a JSON object:
-        {{
-          "text": " Catchy Phrase Here",
-          "image_prompt": "Image prompt here"
-        }}
-        """
-        response = self._call_with_retry(prompt)
-        try:
-            cleaned = self.clean_json_response(response)
-            return json.loads(cleaned)
-        except:
+        """Generates catchy thumbnail metadata, leveraging cached last_thumbnail_data from generate_visual_scenes."""
+        if hasattr(self, 'last_thumbnail_data') and self.last_thumbnail_data:
+            thumb = self.last_thumbnail_data
+            # Enforce hook phrase formatting: max 4 words, ALL CAPS
+            hook = str(thumb.get("hook_phrase", "")).strip().upper()
+            words = hook.split()
+            if len(words) > 4:
+                hook = " ".join(words[:4])
+            
             return {
-                "text": topic[:25],
-                "image_prompt": f"cinematic 4k photo of {topic}, scientific, deep space"
+                "text": hook or topic[:25].upper(),
+                "image_prompt": thumb.get("thumbnail_bg_query", f"cinematic 4k photo of {topic}, scientific, deep space"),
+                "hook_phrase": hook or topic[:25].upper(),
+                "supporting_fact": thumb.get("supporting_fact", "A scientific revelation."),
+                "thumbnail_bg_query": thumb.get("thumbnail_bg_query", f"cinematic 4k photo of {topic}, scientific, deep space"),
+                "thumbnail_subject_query": thumb.get("thumbnail_subject_query", "")
             }
+        
+        # Generic fallback
+        return {
+            "text": topic[:25].upper(),
+            "image_prompt": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "hook_phrase": topic[:25].upper(),
+            "supporting_fact": "A scientific revelation.",
+            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "thumbnail_subject_query": ""
+        }

@@ -27,23 +27,7 @@ class AssetOrchestrator:
 
     def fetch_all(self, scenes: List[Dict], topic: str) -> dict:
         """
-        Process all scenes and return the full job manifest dict:
-        {
-          "job_id":   "...",
-          "job_dir":  "automation/storage/temp_videos/{job_id}",
-          "topic":    "...",
-          "date":     "YYYY-MM-DD",
-          "scenes":   [
-              {
-                "scene_idx":    0,
-                "asset_type":   "ai_video" | "image" | "kinetic_text" | "none",
-                "asset_path":   "path/to/file" or None,
-                "kinetic_stat": {...} or None,
-                "narration":    "..."
-              },
-              ...
-          ]
-        }
+        Process all scenes and return the full job manifest dict with all 6 visual types.
         """
         today = datetime.date.today().isoformat()
 
@@ -71,19 +55,24 @@ class AssetOrchestrator:
         for idx, scene in enumerate(scenes):
             visual_type = scene.get("visual_type", "image")
             narration = scene.get("narration", "")
-            kinetic_stat = scene.get("kinetic_stat")  # May be None
             image_cue = scene.get("image_cue", topic)
             ai_video_prompt = scene.get("ai_video_prompt", "")
-            kinetic_overlay = scene.get("kinetic_overlay", False)  # ADD: overlay mode
 
             scene_entry = {
                 "scene_idx": idx,
+                "visual_type": visual_type,
                 "asset_type": "none",
                 "asset_path": None,
-                "kinetic_stat": kinetic_stat,
-                "kinetic_overlay": kinetic_overlay,
                 "narration": narration,
                 "image_cue": image_cue,
+                # Store all custom fields for the 6 styles
+                "typewriter_words": scene.get("typewriter_words"),
+                "stat_data": scene.get("stat_data"),
+                "named_entity": scene.get("named_entity"),
+                "ai_video_prompt": ai_video_prompt,
+                "question_text": scene.get("question_text"),
+                "emphasis_phrase": scene.get("emphasis_phrase"),
+                "bar_data": scene.get("bar_data")
             }
 
             # ── Route by visual_type ─────────────────────────────────────────
@@ -93,7 +82,7 @@ class AssetOrchestrator:
                           f"({MAX_AI_VIDEO_PER_JOB}/job). Downgrading to image.")
                     visual_type = "image"  # fall through to image fetch below
                 else:
-                    print(f"[AssetOrchestrator] Scene {idx}: ai_video → HF CogVideoX-2B "
+                    print(f"[AssetOrchestrator] Scene {idx}: ai_video -> HF CogVideoX-2B "
                           f"({ai_video_count+1}/{MAX_AI_VIDEO_PER_JOB})")
                     result = generate_hf_video(
                         prompt=ai_video_prompt or image_cue,
@@ -105,56 +94,36 @@ class AssetOrchestrator:
                     scene_entry["asset_path"] = result["asset_path"]
                     if result["asset_type"] == "ai_video":
                         ai_video_count += 1
-                    manifest["scenes"].append(scene_entry)
-                    self._save_manifest(manifest)
-                    continue
+                        manifest["scenes"].append(scene_entry)
+                        self._save_manifest(manifest)
+                        continue
+                    else:
+                        visual_type = "image"  # If video failed, treat as image
 
-            if visual_type == "image" or visual_type == "ai_video":  # ai_video downgraded
-                print(f"[AssetOrchestrator] Scene {idx}: image → fetching from ImageFetcher...")
-                # For overlay kinetic_text we also need an image
-                queries = [
-                    f"{image_cue} cinematic 4k",
-                    f"{image_cue} space astronomy",
-                ]
-                paths = self.image_fetcher.fetch_multi_images(
-                    queries,
-                    base_filename=f"job_{job_id}_scene{idx}",
-                    topic_context=topic,
-                )
-                if paths:
-                    scene_entry["asset_type"] = "image"
-                    scene_entry["asset_path"] = paths[0]
-                else:
-                    scene_entry["asset_type"] = "none"
-                    scene_entry["asset_path"] = None
-
-            elif visual_type == "kinetic_text":
-                # If kinetic_text has an image_cue AND kinetic_overlay is True,
-                # fetch a base image to composite the text on top of.
-                if kinetic_overlay and image_cue:
-                    print(f"[AssetOrchestrator] Scene {idx}: kinetic_text (overlay) → "
-                          f"fetching base image...")
-                    queries = [f"{image_cue} cinematic 4k", f"{image_cue} space"]
-                    paths = self.image_fetcher.fetch_multi_images(
-                        queries,
-                        base_filename=f"job_{job_id}_scene{idx}_base",
-                        topic_context=topic,
-                    )
-                    scene_entry["asset_type"] = "kinetic_text_overlay"
-                    scene_entry["asset_path"] = paths[0] if paths else None
-                else:
-                    print(f"[AssetOrchestrator] Scene {idx}: kinetic_text (full-screen) → "
-                          f"no asset needed.")
-                    scene_entry["asset_type"] = "kinetic_text"
-                    scene_entry["asset_path"] = None
+            # Fetch background image for all other scene types to draw overlay styles on top of
+            print(f"[AssetOrchestrator] Scene {idx}: fetching background image for type '{visual_type}'...")
+            queries = [
+                f"{image_cue} cinematic 4k",
+                f"{image_cue} space astronomy",
+            ]
+            paths = self.image_fetcher.fetch_multi_images(
+                queries,
+                base_filename=f"job_{job_id}_scene{idx}",
+                topic_context=topic,
+            )
+            if paths:
+                scene_entry["asset_type"] = "image"
+                scene_entry["asset_path"] = paths[0]
+            else:
+                scene_entry["asset_type"] = "none"
+                scene_entry["asset_path"] = None
 
             manifest["scenes"].append(scene_entry)
             self._save_manifest(manifest)
 
         print(f"[AssetOrchestrator] Job {job_id} complete. "
               f"{ai_video_count} AI video clip(s), "
-              f"{sum(1 for s in manifest['scenes'] if s['asset_type']=='image')} image(s), "
-              f"{sum(1 for s in manifest['scenes'] if 'kinetic' in s['asset_type'])} kinetic slide(s).")
+              f"{sum(1 for s in manifest['scenes'] if s['asset_type']=='image')} image background(s).")
         return manifest
 
     def cleanup(self, manifest: dict):

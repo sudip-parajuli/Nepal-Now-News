@@ -160,7 +160,7 @@ class SciencePipeline(BasePipeline):
         print("Generating automated thumbnail...")
         from ..media.thumbnail_generator import ThumbnailGenerator
         thumb_gen = ThumbnailGenerator()
-        thumb_info = self.script_writer.generate_thumbnail_info(topic, script)
+        thumb_info = scenes_data if scenes_data and 'thumbnail_data' in scenes_data else self.script_writer.generate_thumbnail_info(topic, script)
         thumb_path = thumb_gen.generate_thumbnail(thumb_info)
 
         # 11. Upload
