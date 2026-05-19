@@ -54,7 +54,6 @@ class SciencePipeline(BasePipeline):
 
     async def _run_shorts(self, topic: str, is_test: bool):
         # 2. Generate Script
-        # Categories: General, Did You Know, What If
         categories = ["General", "Did You Know?", "What If?"]
         category = random.choice(categories)
         print(f"Selected Category: {category}")
@@ -67,27 +66,48 @@ class SciencePipeline(BasePipeline):
             
         script = self.script_writer.generate_science_facts(prompt_topic)
         print(f"Short Script generated ({category}).")
-        
-        # 3. Fetch Media
-        media_paths = await self._fetch_media(prompt_topic, script)
-            
-        # 4. Generate Audio
+
+        # 3. Generate Visual Scene Manifest for Shorts
+        print("Generating Shorts visual scene manifest...")
+        visual_scenes = self.script_writer.generate_shorts_visual_scenes(prompt_topic, script)
+        if not isinstance(visual_scenes, list):
+            visual_scenes = []
+        print(f"Visual scenes: {len(visual_scenes)} scenes generated.")
+
+        # 4. Fetch fallback media (used only when no scene manifest)
+        media_paths = []
+        if not visual_scenes:
+            print("WARNING: No visual scenes — falling back to legacy image-based rendering.")
+            media_paths = await self._fetch_media(prompt_topic, script)
+
+        # 5. Generate Audio
         male_voice = self.config.get('tts_voice', {}).get('male', "en-US-GuyNeural")
         audio_path = "automation/storage/science_shorts_temp.mp3"
         _, word_offsets = await self.tts.generate_audio(script, audio_path, voice=male_voice)
-        
-        # 5. Create Video
+
+        # 6. Create Video
         video_path = "automation/storage/science_shorts_final.mp4"
         try:
-            print(f"DEBUG: calling val.create_shorts with {len(media_paths)} media items.")
-            self.vgen.create_shorts(
-                script, 
-                audio_path, 
-                video_path, 
-                word_offsets=word_offsets, 
-                media_paths=media_paths,
-                branding=self.config.get('branding')
-            )
+            if visual_scenes:
+                print(f"DEBUG: Rendering Shorts via visual scene manifest ({len(visual_scenes)} scenes).")
+                self.vgen.create_shorts_from_scenes(
+                    visual_scenes,
+                    audio_path,
+                    video_path,
+                    word_offsets=word_offsets,
+                    branding=self.config.get('branding'),
+                )
+            else:
+                print(f"DEBUG: Rendering Shorts via legacy path with {len(media_paths)} media items.")
+                self.vgen.create_shorts(
+                    script,
+                    audio_path,
+                    video_path,
+                    word_offsets=word_offsets,
+                    media_paths=media_paths,
+                    branding=self.config.get('branding'),
+                )
+
             if os.path.exists(video_path):
                 print(f"DEBUG: Science Shorts created successfully at {video_path}")
             else:
@@ -97,10 +117,31 @@ class SciencePipeline(BasePipeline):
             import traceback
             traceback.print_exc()
             raise e
-        
-        # 6. Upload
-        if True: # Always call _upload, it handles is_test internally
-            await self._upload(video_path, f"{topic} #Shorts", script, topic, is_test=is_test)
+
+        # 7. Generate Portrait Thumbnail
+        print("Generating portrait (1080×1920) thumbnail for Shorts...")
+        thumb_path = None
+        try:
+            from ..media.thumbnail_generator import ThumbnailGenerator
+            thumb_gen = ThumbnailGenerator(size=(1080, 1920))
+            # generate_thumbnail_info reads self.last_thumbnail_data cached by generate_shorts_visual_scenes
+            thumb_info = self.script_writer.generate_thumbnail_info(prompt_topic, script)
+            thumb_path = thumb_gen.generate_thumbnail(thumb_info)
+            print(f"Portrait thumbnail generated: {thumb_path}")
+        except Exception as te:
+            print(f"WARNING: Thumbnail generation failed: {te}")
+
+        # 8. Upload
+        video_id = await self._upload(video_path, f"{topic} #Shorts", script, topic, is_test=is_test)
+
+        # 9. Upload Thumbnail
+        if video_id and thumb_path and os.path.exists(thumb_path) and not is_test:
+            print(f"Uploading portrait thumbnail for video {video_id}...")
+            try:
+                self.uploader.upload_thumbnail(video_id, thumb_path)
+            except Exception as ute:
+                print(f"WARNING: Thumbnail upload failed: {ute}")
+
 
     async def _run_daily(self, topic: str, is_test: bool):
         # 2. Generate Expanded Script (plain text for TTS — unchanged)
@@ -203,6 +244,11 @@ class SciencePipeline(BasePipeline):
         return media_paths
 
     async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True, srt_path=None):
+        if is_test:
+            print(f"TEST MODE: Skipping upload for {title}")
+            print(f"--- Science Pipeline Completed ---")
+            return "test_video_id"
+
         print("Initializing YouTube service...")
         youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
         self.uploader = YouTubeUploader(youtube_service)
@@ -213,21 +259,17 @@ class SciencePipeline(BasePipeline):
         if is_shorts: tags.append("shorts")
         
         video_id = None
-        if not is_test:
-            print(f"Uploading: {title}")
-            video_id = self.uploader.upload_video(video_path, title, description, tags)
-            
-            # If we have an SRT file, upload it as captions
-            if video_id and srt_path and os.path.exists(srt_path):
-                print(f"Uploading captions from {srt_path}...")
-                try:
-                    self.uploader.upload_caption(video_id, srt_path)
-                except Exception as e:
-                    print(f"WARNING: Caption upload failed: {e}")
-                    print("This might be due to insufficient authentication scopes (youtube.force-ssl required).")
-        else:
-            print(f"TEST MODE: Skipping upload for {title}")
-            video_id = "test_video_id"
+        print(f"Uploading: {title}")
+        video_id = self.uploader.upload_video(video_path, title, description, tags)
+        
+        # If we have an SRT file, upload it as captions
+        if video_id and srt_path and os.path.exists(srt_path):
+            print(f"Uploading captions from {srt_path}...")
+            try:
+                self.uploader.upload_caption(video_id, srt_path)
+            except Exception as e:
+                print(f"WARNING: Caption upload failed: {e}")
+                print("This might be due to insufficient authentication scopes (youtube.force-ssl required).")
         
         print(f"--- Science Pipeline Completed ---")
         return video_id

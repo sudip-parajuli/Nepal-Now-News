@@ -495,6 +495,276 @@ class VideoShortsGenerator:
 
             raise e
 
+    def create_shorts_from_scenes(
+        self,
+        scenes: list,
+        audio_path: str,
+        output_path: str,
+        word_offsets: list = None,
+        branding: dict = None,
+    ):
+        """
+        Renders a Shorts video using the premium visual scene manifest.
+
+        Each scene dict must have at minimum:
+            {
+                "type": "typewriter" | "kinetic_stat" | "hook_question" | "data_bars" | "image" | "ai_video",
+                "narration": str,            # also used as text
+                "duration": float,           # in seconds
+                "bg_query": str,             # image search query for background
+                # type-specific keys: stat_data, question_text, emphasis_phrase, bar_data, named_entity
+            }
+        """
+        import glob
+        from moviepy.editor import (
+            concatenate_videoclips, AudioFileClip, CompositeVideoClip,
+            ImageClip, afx
+        )
+        from . import scene_renderer as sr_module
+        from .scene_renderer import SceneRenderer
+        from ..media.image_fetcher import ImageFetcher
+
+        # ── 1. Override module-level constants to portrait ─────────────────────
+        original_w, original_h = sr_module.WIDTH, sr_module.HEIGHT
+        sr_module.WIDTH = 1080
+        sr_module.HEIGHT = 1920
+
+        music_vol = (branding or {}).get('music_volume', 0.04)
+
+        try:
+            audio = AudioFileClip(audio_path)
+            total_duration = audio.duration
+
+            # ── 2. Normalize scene durations to match audio length ─────────────
+            raw_durations = [float(s.get("duration", 4.0)) for s in scenes]
+            raw_total = sum(raw_durations)
+            if raw_total > 0:
+                scale = total_duration / raw_total
+                durations = [max(1.5, d * scale) for d in raw_durations]
+            else:
+                per = total_duration / max(len(scenes), 1)
+                durations = [per] * len(scenes)
+
+            # ── 3. Fetch backgrounds for all scenes ───────────────────────────
+            fetcher = ImageFetcher()
+            scene_clips = []
+
+            for idx, (scene, dur) in enumerate(zip(scenes, durations)):
+                scene_type = str(scene.get("type", "typewriter")).lower()
+                narration = str(scene.get("narration", scene.get("text", "")))
+                bg_query = str(scene.get("bg_query", "cinematic science background"))
+
+                # Fetch one background image per scene
+                bg_paths = fetcher.fetch_multi_images(
+                    [f"{bg_query} cinematic 4k science"],
+                    f"shorts_bg_{idx}",
+                    topic_context=bg_query
+                )
+                bg_path = bg_paths[0] if bg_paths else None
+
+                # Fallback: generate a dark gradient image if no background found
+                if not bg_path or not os.path.exists(bg_path):
+                    from PIL import Image as PilImage
+                    fb = PilImage.new("RGB", (1080, 1920), (10, 18, 30))
+                    bg_path = f"automation/storage/shorts_fallback_bg_{idx}.jpg"
+                    fb.save(bg_path)
+
+                try:
+                    if scene_type == "typewriter":
+                        clip = SceneRenderer.render_typewriter(bg_path, narration, dur)
+                    elif scene_type == "kinetic_stat":
+                        stat_data = scene.get("stat_data", {"value": "0", "unit": "", "label": "Key Statistic"})
+                        clip = SceneRenderer.render_kinetic_stat(bg_path, narration, dur, stat_data)
+                    elif scene_type == "hook_question":
+                        question_text = str(scene.get("question_text", narration))
+                        emphasis_phrase = scene.get("emphasis_phrase", "")
+                        clip = SceneRenderer.render_hook_question(bg_path, narration, dur, question_text, emphasis_phrase)
+                    elif scene_type == "data_bars":
+                        bar_data = scene.get("bar_data", [])
+                        clip = SceneRenderer.render_data_bars(bg_path, narration, dur, bar_data)
+                    elif scene_type in ("image", "ken_burns"):
+                        named_entity = scene.get("named_entity", "")
+                        clip = SceneRenderer.render_image(bg_path, narration, dur, named_entity)
+                    else:
+                        # Generic fallback: typewriter
+                        clip = SceneRenderer.render_typewriter(bg_path, narration, dur)
+
+                    scene_clips.append(clip)
+                    print(f"[Shorts Scene {idx+1}/{len(scenes)}] type={scene_type} dur={dur:.1f}s OK")
+
+                except Exception as e:
+                    print(f"[Shorts Scene {idx+1}] RENDER ERROR ({scene_type}): {e}. Using fallback.")
+                    from moviepy.editor import ColorClip
+                    scene_clips.append(ColorClip(size=(1080, 1920), color=(10, 18, 30), duration=dur))
+
+            # ── 4. Add white flash transitions between clips ──────────────────
+            from moviepy.editor import ColorClip
+            flash_dur = 0.08
+            final_clips = []
+            for i, c in enumerate(scene_clips):
+                final_clips.append(c)
+                if i < len(scene_clips) - 1:
+                    flash = ColorClip(size=(1080, 1920), color=(255, 255, 255), duration=flash_dur)
+                    final_clips.append(flash)
+
+            combined = concatenate_videoclips(final_clips, method="compose")
+
+            # Trim or pad to match audio
+            if combined.duration > total_duration:
+                combined = combined.subclip(0, total_duration)
+            elif combined.duration < total_duration - 0.1:
+                from moviepy.editor import ColorClip as CC
+                pad = CC(size=(1080, 1920), color=(10, 18, 30), duration=total_duration - combined.duration)
+                combined = concatenate_videoclips([combined, pad], method="compose")
+
+            clips = [combined]
+
+            # ── 5. Overlay pop-up captions (reuse existing logic) ─────────────
+            if word_offsets:
+                try:
+                    from PIL import ImageFont, ImageDraw, Image as PilImage
+                    import re
+
+                    POP_FONT_SIZE = 88
+                    pop_font = None
+                    pop_font_paths = [
+                        "automation/media/assets/Montserrat-Black.ttf",
+                        "automation/media/assets/Montserrat-ExtraBold.ttf",
+                        "C:\\Windows\\Fonts\\ariblk.ttf",
+                        "C:\\Windows\\Fonts\\impact.ttf",
+                        "C:\\Windows\\Fonts\\arialbd.ttf",
+                    ]
+                    for _fp in pop_font_paths:
+                        if os.path.exists(_fp):
+                            try:
+                                pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
+                                break
+                            except Exception:
+                                continue
+                    if not pop_font:
+                        pop_font = ImageFont.load_default()
+
+                    _STOP = {
+                        'the','a','an','is','are','was','were','of','in','on',
+                        'at','to','for','and','or','but','it','this','with','from',
+                        'by','as','do','not','have','will','can','if','than','they',
+                        'we','he','she','you','i','my','your',
+                    }
+
+                    def _is_kw(w):
+                        c = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
+                        if not c or c in _STOP: return False
+                        return '*' in w or len(c) >= 6
+
+                    def _render_pop(words_list, hi_mask):
+                        MAX_W, STROKE, SHADOW, HP, VP = 900, 3, 4, 28, 22
+                        dummy = PilImage.new('RGB', (1, 1))
+                        dd = ImageDraw.Draw(dummy)
+                        sp_w = max(dd.textbbox((0,0)," ",font=pop_font)[2]-dd.textbbox((0,0)," ",font=pop_font)[0], 12)
+                        lines, cur_l, cur_w, max_h = [], [], 0, 0
+                        for i2, wrd in enumerate(words_list):
+                            bb = dd.textbbox((0,0),wrd,font=pop_font)
+                            ww, wh = bb[2]-bb[0], bb[3]-bb[1]
+                            max_h = max(max_h, wh)
+                            if cur_l and cur_w + ww + sp_w > MAX_W:
+                                lines.append(cur_l); cur_l=[]; cur_w=0
+                            cur_l.append((i2, wrd, ww, wh))
+                            cur_w += ww + (sp_w if cur_l else 0)
+                        if cur_l: lines.append(cur_l)
+                        lws = [sum(x[2] for x in ln)+sp_w*max(len(ln)-1,0) for ln in lines]
+                        tw = max(lws) if lws else 0
+                        th = len(lines)*max_h + max(len(lines)-1,0)*10
+                        iw = int(tw+HP*2+STROKE*2+SHADOW+4)
+                        ih = int(th+VP*2+STROKE*2+SHADOW+4)
+                        img = PilImage.new('RGBA',(iw,ih),(0,0,0,0))
+                        d = ImageDraw.Draw(img)
+                        y2 = VP+STROKE
+                        for li, ln in enumerate(lines):
+                            lx = (iw-lws[li])//2
+                            for i2, wrd, ww, _ in ln:
+                                clr='#FFD700' if hi_mask[i2] else 'white'
+                                d.text((lx+SHADOW,y2+SHADOW),wrd,font=pop_font,fill=(0,0,0,160))
+                                for dx2 in range(-STROKE,STROKE+1):
+                                    for dy2 in range(-STROKE,STROKE+1):
+                                        if dx2==0 and dy2==0: continue
+                                        d.text((lx+dx2,y2+dy2),wrd,font=pop_font,fill='black')
+                                d.text((lx,y2),wrd,font=pop_font,fill=clr)
+                                lx += ww+sp_w
+                            y2 += max_h+10
+                        return img
+
+                    pop_chunks, cur_c, cur_n = [], [], 0
+                    for w in word_offsets:
+                        wc = re.sub(r'\[.*?\]', '', w['word'].replace('*','')).strip()
+                        if not wc: continue
+                        if cur_n >= 3 or (cur_n >= 2 and wc.endswith(('.','?','!',','))):
+                            pop_chunks.append(cur_c); cur_c=[]; cur_n=0
+                        cur_c.append({**w, 'display': wc}); cur_n += 1
+                        if wc.endswith(('.','?','!')):
+                            pop_chunks.append(cur_c); cur_c=[]; cur_n=0
+                    if cur_c: pop_chunks.append(cur_c)
+
+                    caption_y = 1920 - 480  # bottom quarter of portrait frame
+                    for i, chunk in enumerate(pop_chunks):
+                        if not chunk: continue
+                        cs = chunk[0]['start']
+                        if i < len(pop_chunks)-1 and pop_chunks[i+1]:
+                            cd = max(pop_chunks[i+1][0]['start'] - cs, 0.1)
+                        else:
+                            cd = max(chunk[-1]['start']+chunk[-1]['duration']-cs, 0.35)
+                        wds = [c['display'].upper() for c in chunk]
+                        hi  = [_is_kw(c['word']) for c in chunk]
+                        try:
+                            pil_img = _render_pop(wds, hi)
+                            pop_clip = ImageClip(np.array(pil_img))
+                            ad = min(0.18, cd*0.35)
+                            pop_clip = pop_clip.resize(lambda t, a=ad: min(1.0, 0.80+0.20*(t/a)))
+                            pop_clip = pop_clip.set_start(cs).set_duration(cd).set_position(('center', caption_y))
+                            clips.append(pop_clip)
+                        except Exception as cap_e:
+                            print(f"Caption chunk error: {cap_e}")
+
+                except Exception as cap_err:
+                    print(f"[Shorts] Caption overlay failed: {cap_err}")
+
+            # ── 6. Background music ───────────────────────────────────────────
+            music_files = []
+            for mdir in ["automation/music/science"]:
+                if os.path.exists(mdir):
+                    music_files.extend(glob.glob(os.path.join(mdir, "*.mp3")))
+
+            if music_files:
+                try:
+                    import random as _rand
+                    bg_music = AudioFileClip(_rand.choice(music_files)).volumex(music_vol)
+                    if bg_music.duration < total_duration:
+                        bg_music = bg_music.fx(afx.audio_loop, duration=total_duration)
+                    else:
+                        bg_music = bg_music.subclip(0, total_duration)
+                    if bg_music.duration > 4:
+                        bg_music = bg_music.audio_fadein(2).audio_fadeout(2)
+                    from moviepy.audio.AudioClip import CompositeAudioClip
+                    final_audio = CompositeAudioClip([audio.volumex(1.4), bg_music])
+                except Exception as me:
+                    print(f"[Shorts] BG music error: {me}")
+                    final_audio = audio
+            else:
+                final_audio = audio
+
+            # ── 7. Composite + export ─────────────────────────────────────────
+            final = CompositeVideoClip(clips, size=(1080, 1920)).set_audio(final_audio).set_duration(total_duration)
+            print(f"[Shorts] Writing visual-scene video -> {output_path}")
+            final.write_videofile(
+                output_path, fps=30, codec="libx264",
+                audio_codec="aac", threads=4, preset="ultrafast", logger=None
+            )
+            print(f"[Shorts] Visual-scene video written successfully.")
+
+        finally:
+            # ── 8. Restore module-level constants ─────────────────────────────
+            sr_module.WIDTH = original_w
+            sr_module.HEIGHT = original_h
+
     def _wrap_text(self, text, width):
         words, lines, curr = text.split(), [], []
         for w in words:

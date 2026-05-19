@@ -65,7 +65,13 @@ class ThumbnailGenerator:
                                 continue
                             return url
             except Exception as e:
-                print(f"DDG Search error in ThumbnailGenerator for '{query}': {e}")
+                err_str = str(e)
+                clean_q = query.encode('ascii', 'ignore').decode('ascii')
+                clean_err = err_str.encode('ascii', 'ignore').decode('ascii')
+                print(f"DDG Search error in ThumbnailGenerator for '{clean_q}': {clean_err[:200]}")
+                if "403" in err_str or "429" in err_str or "forbidden" in err_str.lower() or "ratelimit" in err_str.lower():
+                    print("[Thumbnail] DDG search rate limited. Skipping retries.")
+                    break
                 time.sleep(1)
         return None
 
@@ -84,7 +90,7 @@ class ThumbnailGenerator:
 
     def generate_science_thumbnail(self, info: dict, output_path: str = None) -> str:
         """
-        Generates a premium science channel YouTube thumbnail.
+        Generates a premium science channel YouTube thumbnail (supports both landscape and portrait).
         """
         tdata = info.get('thumbnail_data', {})
         if not tdata:
@@ -101,6 +107,9 @@ class ThumbnailGenerator:
             
         print(f"[Thumbnail] Generating premium science thumbnail. Hook: '{hook_phrase}'")
         
+        width, height = self.size
+        is_portrait = width < height
+
         # 1. Fetch Background Image via DDG
         bg_url = self._search_image_url(bg_query)
         bg_file = None
@@ -123,10 +132,19 @@ class ThumbnailGenerator:
         if sub_url:
             sub_file = self._download_url(sub_url, "temp_thumb_subject.jpg")
             
+        if not sub_file or not os.path.exists(sub_file):
+            print("[Thumbnail] Subject search failed, using Pollinations.ai fallback for subject.")
+            fallback_sub = self._fetch_ai_subject(subject_query)
+            if fallback_sub and os.path.exists(fallback_sub):
+                sub_file = fallback_sub
+                
         if sub_file and os.path.exists(sub_file):
             try:
                 sub_img = Image.open(sub_file)
-                sub_size = (550, 550)
+                if is_portrait:
+                    sub_size = (650, 650)
+                else:
+                    sub_size = (550, 550)
                 sub_img = sub_img.resize(sub_size, Image.Resampling.LANCZOS)
                 
                 # Create radial gradient alpha mask using numpy
@@ -148,38 +166,66 @@ class ThumbnailGenerator:
                 sub_rgba = sub_img.convert("RGBA")
                 sub_rgba.putalpha(mask_img)
                 
-                # Paste floating subject onto right side of canvas
+                # Paste floating subject onto right side of canvas (landscape) or center-lower (portrait)
                 canvas_rgba = canvas.convert("RGBA")
-                paste_x = 1280 - 580
-                paste_y = (720 - 550) // 2
+                if is_portrait:
+                    paste_x = (width - 650) // 2
+                    paste_y = height // 2 - 50
+                else:
+                    paste_x = 1280 - 580
+                    paste_y = (720 - 550) // 2
                 canvas_rgba.paste(sub_rgba, (paste_x, paste_y), sub_rgba)
                 canvas = canvas_rgba.convert("RGB")
-                print("[Thumbnail] Successfully composited floating subject image with radial gradient mask.")
+                print("[Thumbnail] Successfully composited floating subject image.")
             except Exception as e:
                 print(f"[Thumbnail] Subject composting failed: {e}")
                 
-        # 3. Draw Dark left-third gradient overlay
+        # 3. Draw Dark left-third gradient overlay (landscape) or top dark gradient (portrait)
         overlay = Image.new("RGBA", self.size, (0, 0, 0, 0))
         o_draw = ImageDraw.Draw(overlay)
-        for x_coord in range(600):
-            alpha = int(230 * (1.0 - x_coord / 600.0))
-            o_draw.line([(x_coord, 0), (x_coord, 720)], fill=(5, 11, 20, alpha))
+        if is_portrait:
+            gradient_height = 800
+            for y_coord in range(gradient_height):
+                alpha = int(240 * (1.0 - y_coord / float(gradient_height)))
+                o_draw.line([(0, y_coord), (width, y_coord)], fill=(5, 11, 20, alpha))
+        else:
+            for x_coord in range(600):
+                alpha = int(230 * (1.0 - x_coord / 600.0))
+                o_draw.line([(x_coord, 0), (x_coord, 720)], fill=(5, 11, 20, alpha))
             
         canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
         draw = ImageDraw.Draw(canvas)
         
-        # 4. Draw Left-Side Cyber Cyan Vertical Accent Bar
-        accent_x = 55
-        accent_y1 = 150
-        accent_y2 = 480
-        draw.rectangle([(accent_x, accent_y1), (accent_x + 8, accent_y2)], fill=(0, 240, 255))
+        # 4. Draw Left-Side Cyber Cyan Accent Bar
+        if is_portrait:
+            accent_x = 70
+            accent_y1 = 200
+            accent_y2 = 700
+            bar_thickness = 10
+        else:
+            accent_x = 55
+            accent_y1 = 150
+            accent_y2 = 480
+            bar_thickness = 8
+        draw.rectangle([(accent_x, accent_y1), (accent_x + bar_thickness, accent_y2)], fill=(0, 240, 255))
         
         # 5. Draw Hook Phrase Text (large, bold, left-aligned)
         font_path = "automation/fonts/Barlow-CondensedBold.ttf"
-        if not os.path.exists(font_path):
-            font = self._load_font(80)
+        if is_portrait:
+            hook_font_size = 95
+            line_spacing = 130
+            text_x = 110
+            text_y = 230
         else:
-            font = ImageFont.truetype(font_path, 80)
+            hook_font_size = 80
+            line_spacing = 110
+            text_x = 85
+            text_y = 170
+            
+        if not os.path.exists(font_path):
+            font = self._load_font(hook_font_size)
+        else:
+            font = ImageFont.truetype(font_path, hook_font_size)
         
         words = hook_phrase.split()
         if len(words) >= 3:
@@ -190,9 +236,6 @@ class ThumbnailGenerator:
             line1 = hook_phrase
             line2 = ""
             
-        text_x = 85
-        text_y = 170
-        
         def draw_stroke_text(d, t, pos, fn, text_color):
             tx, ty = pos
             stroke = 5
@@ -204,37 +247,44 @@ class ThumbnailGenerator:
             
         draw_stroke_text(draw, line1, (text_x, text_y), font, (255, 255, 255))
         if line2:
-            draw_stroke_text(draw, line2, (text_x, text_y + 110), font, (0, 240, 255))
+            draw_stroke_text(draw, line2, (text_x, text_y + line_spacing), font, (0, 240, 255))
             
         # 6. Draw Bottom Supporting Fact Strip
-        strip_h = 75
-        strip_y = 720 - strip_h
+        if is_portrait:
+            strip_h = 110
+            strip_y = height - strip_h
+            fact_font_size = 32
+        else:
+            strip_h = 75
+            strip_y = 720 - strip_h
+            fact_font_size = 22
         
         strip_overlay = Image.new("RGBA", self.size, (0, 0, 0, 0))
         s_draw = ImageDraw.Draw(strip_overlay)
-        s_draw.rectangle([(0, strip_y), (1280, 720)], fill=(10, 22, 40, 255))
-        s_draw.rectangle([(0, strip_y), (1280, strip_y + 4)], fill=(0, 240, 255, 255))
+        s_draw.rectangle([(0, strip_y), (width, height)], fill=(10, 22, 40, 255))
+        s_draw.rectangle([(0, strip_y), (width, strip_y + (5 if is_portrait else 4))], fill=(0, 240, 255, 255))
         
         canvas = Image.alpha_composite(canvas.convert("RGBA"), strip_overlay).convert("RGB")
         draw = ImageDraw.Draw(canvas)
         
         reg_font_path = "automation/fonts/Barlow-Regular.ttf"
         if not os.path.exists(reg_font_path):
-            reg_font = self._load_font(22)
+            reg_font = self._load_font(fact_font_size)
         else:
-            reg_font = ImageFont.truetype(reg_font_path, 22)
+            reg_font = ImageFont.truetype(reg_font_path, fact_font_size)
             
         fact_text = supporting_fact
-        if len(fact_text) > 95:
-            fact_text = fact_text[:92] + "..."
+        max_len = 65 if is_portrait else 95
+        if len(fact_text) > max_len:
+            fact_text = fact_text[:max_len-3] + "..."
             
         try:
             fw = reg_font.getbbox(fact_text)[2] - reg_font.getbbox(fact_text)[0]
         except AttributeError:
             fw = reg_font.getsize(fact_text)[0]
             
-        fx = (1280 - fw) // 2
-        fy = strip_y + (strip_h - 22) // 2
+        fx = (width - fw) // 2
+        fy = strip_y + (strip_h - fact_font_size) // 2
         
         draw.text((fx + 1, fy + 1), fact_text, font=reg_font, fill=(0, 0, 0, 200))
         draw.text((fx, fy), fact_text, font=reg_font, fill=(230, 245, 255))
@@ -260,6 +310,25 @@ class ThumbnailGenerator:
                 return save_path
         except Exception as e:
             print(f"Error fetching thumbnail background: {e}")
+        return None
+
+    def _fetch_ai_subject(self, prompt: str) -> str:
+        """Fetches a high-quality subject image from Pollinations.ai centered on a black background."""
+        clean_prompt = re.sub(r'[^a-zA-Z0-9 ]', ' ', prompt).strip()
+        full_prompt = f"cinematic 4k macro shot of {clean_prompt}, deep black background, centered, photorealistic, no watermark, no text"
+        encoded = requests.utils.quote(full_prompt)
+        seed = random.randint(1000, 999999)
+        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&seed={seed}&nologo=true"
+        
+        save_path = os.path.join(self.output_dir, "temp_thumb_subject.jpg")
+        try:
+            response = requests.get(url, timeout=60)
+            if response.status_code == 200:
+                with open(save_path, 'wb') as f:
+                    f.write(response.content)
+                return save_path
+        except Exception as e:
+            print(f"Error fetching thumbnail subject: {e}")
         return None
 
     def _load_font(self, fsize=120):

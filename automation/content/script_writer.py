@@ -393,6 +393,179 @@ Script:
         print(f"[ScriptWriter] Final Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
         return final_scenes
 
+    def generate_shorts_visual_scenes(self, topic: str, script: str) -> List[Dict]:
+        """
+        Generates a scene-by-scene structured JSON list for the shorts visual pipeline.
+        Enforces 6 visual types, max 2 ai_videos, and parses thumbnail_data.
+        """
+        # Initialize default fallback thumbnail data
+        self.last_thumbnail_data = {
+            "hook_phrase": topic[:25].upper(),
+            "supporting_fact": "A scientific discovery.",
+            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "thumbnail_subject_query": ""
+        }
+
+        # First try: Rich, detailed prompt
+        prompt = f"""
+You are a visual director for a science YouTube channel called "Daily Deep Space".
+You will be given a narration script about "{topic}".
+Break the script into 6-10 visual SCENES. For each scene assign one of the 6 visual types:
+
+1. `typewriter_text` - Use for opening hooks, key revelations, named discoveries.
+   Fields: "typewriter_words": a list of words to type out sequentially.
+2. `kinetic_stat`    - Use for a single overwhelming number.
+   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string).
+3. `image`           - Use for real places, scientists, historical events.
+   Fields: "named_entity": string (optional, to display as lower third).
+4. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
+   Fields: "ai_video_prompt": text-to-video prompt. Max 2 scenes of this type!
+5. `hook_question`   - Use for chapter openings, rhetorical questions.
+   Fields: "question_text": string, "emphasis_phrase": string (key words in ALL CAPS).
+6. `data_bars`       - Use for comparing 3+ values.
+   Fields: "bar_data": list of 3-4 objects, each with "label" (string) and "value" (number).
+
+Additionally, generate metadata for the YouTube THUMBNAIL (portrait format):
+- `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
+- `supporting_fact`: Short supporting fact/stat in 5-8 words.
+- `thumbnail_bg_query`: DDG search term for a space/science background.
+- `thumbnail_subject_query`: DDG search term for a main subject image to composite.
+
+Return ONLY a valid JSON object of this structure:
+{{
+  "scenes": [
+    {{
+      "narration": "Verbatim narration from script",
+      "visual_type": "typewriter_text",
+      "image_cue": "search term for backup image",
+      "typewriter_words": ["word1", "word2"],
+      "stat_data": null,
+      "named_entity": null,
+      "ai_video_prompt": "",
+      "question_text": null,
+      "emphasis_phrase": null,
+      "bar_data": null
+    }}
+  ],
+  "thumbnail_data": {{
+    "hook_phrase": "ALL CAPS HOOK",
+    "supporting_fact": "supporting fact",
+    "thumbnail_bg_query": "nebula space",
+    "thumbnail_subject_query": "bismuth crystal"
+  }}
+}}
+
+Script:
+\"\"\"{script[:4000]}\"\"\"
+"""
+        raw = self._call_with_retry(prompt)
+        scenes = []
+        parsed_ok = False
+
+        try:
+            cleaned = self.clean_json_response(raw)
+            data = json.loads(cleaned)
+            if isinstance(data, dict) and "scenes" in data:
+                scenes = data["scenes"]
+                if len(scenes) >= 3:
+                    self.last_thumbnail_data = data.get("thumbnail_data", self.last_thumbnail_data)
+                    parsed_ok = True
+        except Exception as e:
+            print(f"[ScriptWriter] Primary shorts visual scenes JSON parse error: {e}")
+
+        # If primary prompt fails, try simplified prompt retry
+        if not parsed_ok:
+            print("[ScriptWriter] Retrying shorts visual scenes generation with simplified prompt...")
+            simple_prompt = f"""
+Analyze this science script about "{topic}" and generate a JSON list of 6-10 visual scenes.
+For each scene, output ONLY:
+- "narration": verbatim sentence(s)
+- "visual_type": one of: "typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"
+- "image_cue": 4-8 word search term
+
+Also include:
+- "thumbnail_data": {{
+    "hook_phrase": "MAX 4 WORDS ALL CAPS",
+    "supporting_fact": "Short fact",
+    "thumbnail_bg_query": "bg search term",
+    "thumbnail_subject_query": "subject search term"
+  }}
+
+Return ONLY a valid JSON object:
+{{
+  "scenes": [
+    {{ "narration": "...", "visual_type": "...", "image_cue": "..." }}
+  ],
+  "thumbnail_data": {{ ... }}
+}}
+
+Script:
+\"\"\"{script[:3000]}\"\"\"
+"""
+            raw_retry = self._call_with_retry(simple_prompt)
+            try:
+                cleaned_retry = self.clean_json_response(raw_retry)
+                data_retry = json.loads(cleaned_retry)
+                if isinstance(data_retry, dict) and "scenes" in data_retry:
+                    scenes = data_retry["scenes"]
+                    self.last_thumbnail_data = data_retry.get("thumbnail_data", self.last_thumbnail_data)
+            except Exception as retry_err:
+                print(f"[ScriptWriter] Secondary shorts retry parsing failed: {retry_err}")
+
+        # If still no scenes, create bare basic scenes to let the pipeline run
+        if not scenes:
+            print("[ScriptWriter] WARNING: Shorts visual scenes completely empty, creating fallback default scenes...")
+            sentences = [s.strip() for s in script.split('.') if s.strip()]
+            for s in sentences[:8]:
+                scenes.append({
+                    "narration": s + ".",
+                    "visual_type": "image",
+                    "image_cue": f"{topic} space background",
+                    "typewriter_words": None,
+                    "stat_data": None,
+                    "named_entity": None,
+                    "ai_video_prompt": "",
+                    "question_text": None,
+                    "emphasis_phrase": None,
+                    "bar_data": None
+                })
+
+        # Sanitize and upgrade scenes to meet fields and budget rules
+        ai_count = 0
+        final_scenes = []
+        for s in scenes:
+            if not isinstance(s, dict):
+                continue
+            vtype = s.get("visual_type", "image")
+            if vtype not in ["typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"]:
+                vtype = "image"
+            
+            # Enforce hard cap of 2 ai_videos for shorts
+            if vtype == "ai_video":
+                if ai_count >= 2:
+                    print("[ScriptWriter] Enforcing ai_video cap — downgrading scene to image")
+                    vtype = "image"
+                else:
+                    ai_count += 1
+            
+            s["visual_type"] = vtype
+            
+            # Ensure all required fields exist to prevent KeyErrors later
+            s.setdefault("narration", "")
+            s.setdefault("image_cue", f"{topic} science background")
+            s.setdefault("typewriter_words", None)
+            s.setdefault("stat_data", None)
+            s.setdefault("named_entity", None)
+            s.setdefault("ai_video_prompt", "")
+            s.setdefault("question_text", None)
+            s.setdefault("emphasis_phrase", None)
+            s.setdefault("bar_data", None)
+
+            final_scenes.append(s)
+
+        print(f"[ScriptWriter] Final Shorts Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
+        return final_scenes
+
     def generate_thumbnail_info(self, topic: str, script: str) -> Dict[str, str]:
         """Generates catchy thumbnail metadata, leveraging cached last_thumbnail_data from generate_visual_scenes."""
         if hasattr(self, 'last_thumbnail_data') and self.last_thumbnail_data:
