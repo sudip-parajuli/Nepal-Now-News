@@ -4,6 +4,14 @@ import os
 import sys
 from dotenv import load_dotenv
 
+# Patch PIL.Image.ANTIALIAS for compatibility between modern Pillow (10+) and MoviePy 1.x
+try:
+    import PIL.Image
+    if not hasattr(PIL.Image, 'ANTIALIAS'):
+        PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
+except ImportError:
+    pass
+
 # Add the current directory to sys.path to allow absolute imports within the automation package
 sys.path.append(os.getcwd())
 
