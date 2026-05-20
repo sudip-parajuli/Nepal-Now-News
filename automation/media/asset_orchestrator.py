@@ -56,8 +56,24 @@ class AssetOrchestrator:
         for idx, scene in enumerate(scenes):
             visual_type = scene.get("visual_type", "image")
             narration = scene.get("narration", "")
-            image_cue = scene.get("image_cue", topic)
+            image_cue = scene.get("image_cue")
+            if not image_cue or image_cue == "None":
+                image_cue = f"{topic} space astronomy"
+            
             ai_video_prompt = scene.get("ai_video_prompt", "")
+
+            # ── Schema Defaults & Downgrades ──────────────────────────────────
+            if visual_type == "kinetic_stat" and not scene.get("stat_data"):
+                print(f"[AssetOrchestrator] Scene {idx}: Downgrading kinetic_stat to typewriter_text due to missing stat_data")
+                visual_type = "typewriter_text"
+
+            emphasis_phrase = scene.get("emphasis_phrase")
+            if not emphasis_phrase or emphasis_phrase == "None":
+                emphasis_phrase = scene.get("question_text", "")[:20] if scene.get("question_text") else ""
+
+            typewriter_words = scene.get("typewriter_words")
+            if not typewriter_words:
+                typewriter_words = [{"word": w, "weight": "md"} for w in narration.split()]
 
             scene_entry = {
                 "scene_idx": idx,
@@ -67,12 +83,12 @@ class AssetOrchestrator:
                 "narration": narration,
                 "image_cue": image_cue,
                 # Store all custom fields for the 6 styles
-                "typewriter_words": scene.get("typewriter_words"),
+                "typewriter_words": typewriter_words,
                 "stat_data": scene.get("stat_data"),
                 "named_entity": scene.get("named_entity"),
                 "ai_video_prompt": ai_video_prompt,
                 "question_text": scene.get("question_text"),
-                "emphasis_phrase": scene.get("emphasis_phrase"),
+                "emphasis_phrase": emphasis_phrase,
                 "bar_data": scene.get("bar_data")
             }
 

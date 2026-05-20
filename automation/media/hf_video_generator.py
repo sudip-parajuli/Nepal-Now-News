@@ -121,6 +121,15 @@ def generate_hf_video(prompt: str, output_dir: str, scene_idx: int, hf_token: st
     """
     os.makedirs(output_dir, exist_ok=True)
 
+    # ── Pre-flight DNS check ──────────────────────────────────────────────────
+    import socket
+    try:
+        socket.getaddrinfo('api-inference.huggingface.co', 443)
+    except Exception as dns_err:
+        print(f"[HFVideoGen] HF unreachable in this network environment: {dns_err}")
+        fallback = _fallback_pollinations_image(prompt, output_dir, scene_idx)
+        return {"asset_type": "image" if fallback else "none", "asset_path": fallback}
+
     # ── Quota guard ───────────────────────────────────────────────────────────
     if not hf_token or not _quota_ok():
         fallback = _fallback_pollinations_image(prompt, output_dir, scene_idx)

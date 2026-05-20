@@ -3,6 +3,42 @@ import base64
 import requests
 
 
+def get_audio_duration(filepath: str) -> float:
+    """
+    Get the duration of an audio file in seconds.
+    Uses ffprobe first, and falls back to MoviePy if ffprobe fails or is not found.
+    """
+    import subprocess
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                filepath,
+            ],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            val = result.stdout.strip()
+            if val:
+                return float(val)
+    except Exception as e:
+        print(f"[HumeTTS] ffprobe duration check failed: {e}")
+
+    # Fallback to MoviePy
+    try:
+        from moviepy.editor import AudioFileClip
+        clip = AudioFileClip(filepath)
+        duration = clip.duration
+        clip.close()
+        return float(duration)
+    except Exception as e:
+        print(f"[HumeTTS] MoviePy duration check failed: {e}")
+
+    return 0.0
+
+
 class HumeTTS:
     """
     Hume AI Octave TTS integration (free tier).
@@ -123,7 +159,7 @@ class HumeTTS:
                     f"{len(audio_bytes):,} bytes → {output_path}"
                 )
 
-                word_offsets = self._extract_word_offsets(gen, text)
+                word_offsets = self._extract_word_offsets(gen, text, output_path)
                 print(f"HumeTTS: Extracted {len(word_offsets)} word timestamps.")
                 return output_path, word_offsets
 
@@ -135,7 +171,7 @@ class HumeTTS:
         print("HumeTTS: All API keys exhausted — falling back to next TTS engine.")
         return None, []
 
-    def _extract_word_offsets(self, generation: dict, text: str = "") -> list:
+    def _extract_word_offsets(self, generation: dict, text: str = "", mp3_path: str = None) -> list:
         """
         Extract word-level timing from Hume generation response.
         Handles multiple known response formats gracefully.
@@ -197,10 +233,22 @@ class HumeTTS:
             words_text = text or generation.get("text", "")
             words = words_text.split()
             if words:
-                print(f"HumeTTS WARNING: Generating fallback timestamps for {len(words)} words at 140 WPM...")
+                wpm = 165.0
+                print(f"HumeTTS WARNING: Generating fallback timestamps for {len(words)} words at {wpm} WPM...")
+                estimated_total = (len(words) / wpm) * 60.0
+                
+                # Check actual audio duration for calibration
+                scale = 1.0
+                actual_duration = 0.0
+                if mp3_path and os.path.exists(mp3_path):
+                    actual_duration = get_audio_duration(mp3_path)
+                    if actual_duration > 0 and estimated_total > 0:
+                        scale = actual_duration / estimated_total
+                        print(f"HumeTTS: Calibrating fallback timestamps. Estimated: {estimated_total:.2f}s, Actual: {actual_duration:.2f}s, Scale: {scale:.4f}")
+                
                 for i, w in enumerate(words):
-                    start_time = (i / 140.0) * 60.0
-                    duration = (1.0 / 140.0) * 60.0
+                    start_time = ((i / wpm) * 60.0) * scale
+                    duration = ((1.0 / wpm) * 60.0) * scale
                     offsets.append({"word": w, "start": start_time, "duration": duration})
 
         return offsets

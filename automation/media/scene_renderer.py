@@ -136,7 +136,18 @@ class SceneRenderer:
         # Determine display text: use typewriter_words if provided, or cap narration
         max_words = 4 if self.mode == 'portrait' else 8
         if typewriter_words and isinstance(typewriter_words, list):
-            display_text = " ".join(str(w) for w in typewriter_words)
+            processed_words = []
+            for w in typewriter_words:
+                if isinstance(w, dict):
+                    word_str = str(w.get("word", "")).strip()
+                    weight = str(w.get("weight", "")).strip().lower()
+                    if weight in ("bold", "lg", "large", "highlight"):
+                        processed_words.append(f"*{word_str}*")
+                    else:
+                        processed_words.append(word_str)
+                else:
+                    processed_words.append(str(w).strip())
+            display_text = " ".join(processed_words)
         else:
             words_list = text.split()
             display_text = " ".join(words_list[:max_words])
@@ -496,14 +507,18 @@ class SceneRenderer:
             "STARS", "STAR", "SPACE", "LIGHT", "WAVELENGTH"
         ]
         # Features/Action (Cyan)
-        features = [
+        features = []
+        emp_clean = (emphasis_phrase or "").strip().upper().replace('*', '')
+        if emp_clean:
+            features.append(emp_clean)
+        features.extend([
             "RAINBOW-COLORED APPEARANCE",
             "RAINBOW-COLORED", "RAINBOW COLORED",
             "GEOMETRY AND SYMMETRY", "GEOMETRY", "SYMMETRY",
             "DEFYS THE RULES OF", "DEFIES THE RULES OF", "DEFYS", "DEFIES",
             "SPIN HUNDREDS OF TIMES", "SPIN HUNDREDS", "SPINNING", "SPIN",
             "GLOWING", "GLOW", "SHINING", "SHINE", "UNLIKE ANY OTHER"
-        ]
+        ])
         
         # Enforce exact user request hook matching
         normalized = raw_text_source
@@ -586,7 +601,7 @@ class SceneRenderer:
                     l["font"] = font_main_subj
                     l["type"] = "main_subject"
                     l["color"] = COLOR_GOLD
-                elif t_type == "feature" or "GEOMETRY" in txt_upper or "SYMMETRY" in txt_upper:
+                elif t_type == "feature" or "GEOMETRY" in txt_upper or "SYMMETRY" in txt_upper or (emp_clean and emp_clean in txt_upper):
                     l["font"] = font_huge
                     l["type"] = "feature"
                     l["color"] = COLOR_CYAN

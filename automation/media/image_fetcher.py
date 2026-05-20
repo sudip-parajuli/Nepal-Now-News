@@ -104,6 +104,12 @@ class ImageFetcher:
             q = q.replace(n, "")
         # Keep only meaningful words (length > 3)
         words = [w for w in q.split() if len(w) > 3]
+        # Reject literal 'none' keyword
+        words = [w for w in words if w != "none"]
+        if not words:
+            fallback_src = topic_context or "science astronomy"
+            words = [w for w in fallback_src.lower().split() if len(w) > 3]
+
         # Prioritize topic_context words if provided
         if topic_context:
             topic_words = [w for w in topic_context.lower().split() if len(w) > 3][:2]

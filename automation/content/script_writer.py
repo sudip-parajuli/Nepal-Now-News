@@ -240,17 +240,23 @@ You will be given a narration script about "{topic}".
 Break the script into 15-20 visual SCENES. For each scene assign one of the 6 visual types:
 
 1. `typewriter_text` - Use for opening hooks, key revelations, named discoveries.
-   Fields: "typewriter_words": a list of words to type out sequentially.
+   Fields: "typewriter_words": list of dicts: [{{"word": "word1", "weight": "bold"}}, {{"word": "word2", "weight": "md"}}]. Give important emphasis words a weight of "bold", and regular words a weight of "md".
 2. `kinetic_stat`    - Use for a single overwhelming number.
-   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string).
+   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string). Do not use unless you actually have statistical data for this scene.
 3. `image`           - Use for real places, scientists, historical events.
    Fields: "named_entity": string (optional, to display as lower third).
 4. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
    Fields: "ai_video_prompt": text-to-video prompt. Max 3 scenes of this type!
 5. `hook_question`   - Use for chapter openings, rhetorical questions.
-   Fields: "question_text": string, "emphasis_phrase": string (key words in ALL CAPS).
+   Fields: "question_text": string, "emphasis_phrase": string (key words/phrase in ALL CAPS, never null).
 6. `data_bars`       - Use for comparing 3+ values.
    Fields: "bar_data": list of 3-4 objects, each with "label" (string) and "value" (number).
+
+STRICT RULES FOR FIELDS:
+1. `image_cue` MUST be a specific, descriptive, non-empty search query (never null, never the word 'None' or empty string).
+2. For `hook_question` scenes, you MUST provide `question_text` and a non-empty `emphasis_phrase` string (key words/phrase in ALL CAPS).
+3. For `typewriter_text` scenes, `typewriter_words` MUST be a list of dictionaries where each dictionary contains {{"word": "example", "weight": "bold"}} or {{"word": "example", "weight": "md"}}. Give important emphasis words a weight of "bold", and regular words a weight of "md".
+4. For `kinetic_stat` scenes, you MUST provide non-null `stat_data` containing "value", "unit", and "label". If a scene does not have statistical data, do not use `kinetic_stat`.
 
 Additionally, generate metadata for the YouTube THUMBNAIL:
 - `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
@@ -265,7 +271,7 @@ Return ONLY a valid JSON object of this structure:
       "narration": "Verbatim narration from script",
       "visual_type": "typewriter_text",
       "image_cue": "search term for backup image",
-      "typewriter_words": ["word1", "word2"],
+      "typewriter_words": [{{"word": "word1", "weight": "bold"}}, {{"word": "word2", "weight": "md"}}],
       "stat_data": null,
       "named_entity": null,
       "ai_video_prompt": "",
@@ -419,15 +425,21 @@ For each scene assign one of these 5 visual types following this STRICT mix:
 DO NOT use data_bars.
 
 1. `hook_question`   - Use for chapter openings, rhetorical questions.
-   Fields: "question_text": string, "emphasis_phrase": string (key words in ALL CAPS).
+   Fields: "question_text": string, "emphasis_phrase": string (key words/phrase in ALL CAPS, never null).
 2. `typewriter_text` - Use for opening hooks, key revelations, named discoveries.
-   Fields: "typewriter_words": a list of words to type out sequentially.
+   Fields: "typewriter_words": list of dicts: [{{"word": "word1", "weight": "bold"}}, {{"word": "word2", "weight": "md"}}]. Give important emphasis words a weight of "bold", and regular words a weight of "md".
 3. `kinetic_stat`    - Use for a single overwhelming number.
-   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string).
+   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string). Do not use unless you actually have statistical data for this scene.
 4. `image`           - Use for real places, scientists, historical events.
    Fields: "named_entity": string (optional, to display as lower third).
 5. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
    Fields: "ai_video_prompt": text-to-video prompt. Max 1 scenes of this type!
+
+STRICT RULES FOR FIELDS:
+1. `image_cue` MUST be a specific, descriptive, non-empty search query (never null, never the word 'None' or empty string).
+2. For `hook_question` scenes, you MUST provide `question_text` and a non-empty `emphasis_phrase` string (key words/phrase in ALL CAPS).
+3. For `typewriter_text` scenes, `typewriter_words` MUST be a list of dictionaries where each dictionary contains {{"word": "example", "weight": "bold"}} or {{"word": "example", "weight": "md"}}. Give important emphasis words a weight of "bold", and regular words a weight of "md".
+4. For `kinetic_stat` scenes, you MUST provide non-null `stat_data` containing "value", "unit", and "label". If a scene does not have statistical data, do not use `kinetic_stat`.
 
 Additionally, generate metadata for the YouTube THUMBNAIL (portrait format):
 - `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
@@ -442,7 +454,7 @@ Return ONLY a valid JSON object of this structure:
       "narration": "Verbatim narration from script",
       "visual_type": "typewriter_text",
       "image_cue": "search term for backup image",
-      "typewriter_words": ["word1", "word2"],
+      "typewriter_words": [{{"word": "word1", "weight": "bold"}}, {{"word": "word2", "weight": "md"}}],
       "stat_data": null,
       "named_entity": null,
       "ai_video_prompt": "",
