@@ -7,109 +7,8 @@ from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, AudioFileClip, ImageClip, VideoFileClip
 
 from .scene_renderer import SceneRenderer
+from .timing_utils import calculate_adjusted_durations, match_scenes_to_timestamps
 
-def calculate_adjusted_durations(scenes, fps=30) -> list[float]:
-    """
-    Correction 2 standalone function:
-    Calculates adjusted visual scene durations accounting for transitions.
-    Formula:
-    - Each flash adds 2/fps = 0.0667s to total duration
-    - Each fade removes fade_overlap_seconds (0.5s)
-    """
-    durations = []
-    transitions = []
-    for i in range(len(scenes) - 1):
-        next_type = scenes[i+1].get("visual_type")
-        curr_type = scenes[i].get("visual_type")
-        if next_type in ("hook_question", "kinetic_stat"):
-            transitions.append("flash")
-        elif (curr_type == "image" and next_type == "ai_video") or (curr_type == "ai_video" and next_type == "image"):
-            transitions.append("fade")
-        else:
-            transitions.append("cut")
-            
-    for i, scene in enumerate(scenes):
-        base_dur = 5.0 # default base visual duration if none specified
-        before_t = transitions[i-1] if i > 0 else None
-        after_t = transitions[i] if i < len(transitions) else None
-        
-        adj_dur = base_dur
-        if before_t == "fade":
-            adj_dur += 0.5
-        if after_t == "flash":
-            adj_dur += 0.0667
-        durations.append(adj_dur)
-    return durations
-
-def match_scenes_to_timestamps(scenes, word_offsets, total_duration):
-    """
-    Sequentially matches each scene's narration words to the continuous list of word_offsets.
-    Returns a list of dicts: {"start": float, "end": float, "duration": float, "word_times": list[float]}.
-    """
-    def clean_word(w):
-        return re.sub(r'[^a-zA-Z0-9]', '', w).lower()
-        
-    cleaned_offsets = [clean_word(w["word"]) for w in word_offsets]
-    current_offset_idx = 0
-    num_offsets = len(word_offsets)
-    scene_timings = []
-    
-    for idx, scene in enumerate(scenes):
-        narration = scene.get("narration", "")
-        scene_words = [clean_word(w) for w in narration.split() if clean_word(w)]
-        if not scene_words or not word_offsets:
-            scene_timings.append({
-                "start": idx * (total_duration / len(scenes)),
-                "end": (idx + 1) * (total_duration / len(scenes)),
-                "word_times": [0.0]
-            })
-            continue
-            
-        start_time = None
-        matched_offsets_indices = []
-        for sw in scene_words:
-            found = False
-            for j in range(current_offset_idx, min(current_offset_idx + 100, num_offsets)):
-                if cleaned_offsets[j] == sw:
-                    matched_offsets_indices.append(j)
-                    current_offset_idx = j + 1
-                    found = True
-                    break
-            if not found:
-                if current_offset_idx < num_offsets:
-                    matched_offsets_indices.append(current_offset_idx)
-                    current_offset_idx += 1
-                    
-        if matched_offsets_indices:
-            start_time = word_offsets[matched_offsets_indices[0]]["start"]
-            last_w = word_offsets[matched_offsets_indices[-1]]
-            end_time = last_w["start"] + last_w["duration"]
-            word_times = [word_offsets[idx]["start"] - start_time for idx in matched_offsets_indices]
-        else:
-            start_time = current_offset_idx / max(1, num_offsets) * total_duration
-            end_time = (current_offset_idx + len(scene_words)) / max(1, num_offsets) * total_duration
-            word_times = [0.0] * len(scene_words)
-            
-        scene_timings.append({
-            "start": start_time,
-            "end": end_time,
-            "word_times": word_times
-        })
-        
-    # Calibrate starts/ends sequentially to guarantee absolute coverage
-    if scene_timings:
-        scene_timings[0]["start"] = 0.0
-        for i in range(1, len(scene_timings)):
-            prev_end = scene_timings[i-1]["end"]
-            scene_timings[i]["start"] = prev_end
-            if scene_timings[i]["end"] <= prev_end:
-                scene_timings[i]["end"] = prev_end + 3.0
-        scene_timings[-1]["end"] = total_duration
-        
-    for item in scene_timings:
-        item["duration"] = max(0.1, item["end"] - item["start"])
-        
-    return scene_timings
 
 class VideoLongGenerator:
     def __init__(self, size=(1920, 1080)):
@@ -121,6 +20,12 @@ class VideoLongGenerator:
         is_nepali = any(ord(c) > 127 for c in text) if text else True
         
         font_paths = []
+        if not is_nepali:
+            font_paths += [
+                "automation/fonts/Barlow-CondensedBold.ttf",
+                "automation/fonts/Barlow-Bold.ttf",
+            ]
+
         if not is_nepali and text:
              # Prioritize English-friendly fonts for Science
             if os.name == 'nt':
@@ -325,8 +230,12 @@ class VideoLongGenerator:
             sfx_dir      = "automation/media/sfx"
             if not hasattr(self, "sfx_events"): self.sfx_events = []
             
+            topic = segments[0].get('topic', '') if segments else ""
+            
             # Map global word offsets to each scene sequentially for perfect audio-sync
             scene_timings = match_scenes_to_timestamps(scenes, word_offsets, total_duration)
+            self.scene_timings = scene_timings
+            self.scenes = scenes
             
             # Rule-based transition assignment
             transitions = []
@@ -340,7 +249,9 @@ class VideoLongGenerator:
                     transitions.append("fade")
                 else:
                     transitions.append("cut")
-
+ 
+            renderer = SceneRenderer(mode='landscape')
+            
             for i, scene in enumerate(scenes):
                 timing = scene_timings[i]
                 start_t = timing["start"]
@@ -364,28 +275,34 @@ class VideoLongGenerator:
                 try:
                     if vtype == "typewriter_text" and apath and os.path.exists(apath):
                         words = scene.get("typewriter_words")
-                        clip = SceneRenderer.render_typewriter(apath, scene.get("narration", ""), clip_duration, typewriter_words=words)
+                        clip = renderer.render_typewriter(
+                            apath, scene.get("narration", ""), clip_duration,
+                            typewriter_words=words, word_offsets=word_offsets, start_time=start_t
+                        )
                     elif vtype == "kinetic_stat" and apath and os.path.exists(apath):
                         sdata = scene.get("stat_data") or {"value": 0, "unit": "", "label": ""}
-                        clip = SceneRenderer.render_kinetic_stat(apath, scene.get("narration", ""), clip_duration, sdata)
+                        clip = renderer.render_kinetic_stat(apath, scene.get("narration", ""), clip_duration, sdata)
                     elif vtype == "image" and apath and os.path.exists(apath):
-                        clip = SceneRenderer.render_image(apath, scene.get("narration", ""), clip_duration, named_entity=scene.get("named_entity"))
+                        clip = renderer.render_image(apath, scene.get("narration", ""), clip_duration, named_entity=scene.get("named_entity"))
                     elif vtype == "ai_video" and apath and os.path.exists(apath):
                         if apath.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".webm")):
-                            clip = SceneRenderer.render_ai_video(apath, clip_duration)
+                            clip = renderer.render_ai_video(apath, clip_duration)
                         else:
-                            clip = SceneRenderer.render_image(apath, scene.get("narration", ""), clip_duration)
+                            clip = renderer.render_image(apath, scene.get("narration", ""), clip_duration)
                     elif vtype == "hook_question" and apath and os.path.exists(apath):
                         qtext = scene.get("question_text") or scene.get("narration", "")
                         emp = scene.get("emphasis_phrase")
-                        clip = SceneRenderer.render_hook_question(apath, scene.get("narration", ""), clip_duration, qtext, emphasis_phrase=emp)
+                        clip = renderer.render_hook_question(
+                            apath, scene.get("narration", ""), clip_duration, qtext,
+                            emphasis_phrase=emp, word_offsets=word_offsets, start_time=start_t, topic=topic
+                        )
                     elif vtype == "data_bars" and apath and os.path.exists(apath):
                         bdata = scene.get("bar_data")
-                        clip = SceneRenderer.render_data_bars(apath, scene.get("narration", ""), clip_duration, bdata)
+                        clip = renderer.render_data_bars(apath, scene.get("narration", ""), clip_duration, bdata)
                     else:
                         # Standard Image Ken Burns fallback
                         if apath and os.path.exists(apath):
-                            clip = SceneRenderer.render_image(apath, scene.get("narration", ""), clip_duration)
+                            clip = renderer.render_image(apath, scene.get("narration", ""), clip_duration)
                         else:
                             clip = ColorClip(size=self.size, color=(10, 10, 25), duration=clip_duration)
                             
@@ -501,6 +418,8 @@ class VideoLongGenerator:
         POP_FONT_SIZE = 95
         pop_font = None
         pop_font_paths = [
+            "automation/fonts/Barlow-CondensedBold.ttf",
+            "automation/fonts/Barlow-Bold.ttf",
             "automation/media/assets/Montserrat-Black.ttf",
             "automation/media/assets/Montserrat-ExtraBold.ttf",
             "C:\\Windows\\Fonts\\ariblk.ttf",
@@ -628,6 +547,16 @@ class VideoLongGenerator:
                 if not chunk: continue
                 chunk_start = chunk[0]['start']
                 
+                # Suppress captions if the scene types are hook_question or typewriter_text
+                if hasattr(self, "scene_timings") and hasattr(self, "scenes"):
+                    active_type = "image"
+                    for s_idx, timing in enumerate(self.scene_timings):
+                        if timing["start"] <= chunk_start <= timing["end"]:
+                            active_type = self.scenes[s_idx].get("visual_type", "image")
+                            break
+                    if active_type in ("hook_question", "typewriter_text", "kinetic_stat"):
+                        continue
+                
                 if i < len(pop_chunks) - 1 and pop_chunks[i+1]:
                     next_start = pop_chunks[i+1][0]['start']
                     chunk_dur = max(next_start - chunk_start, 0.1)
@@ -695,4 +624,4 @@ class VideoLongGenerator:
             except Exception as e:
                 print(f"Music Loop Error: {e}")
                 final_video = final_video.set_audio(audio)
-        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, logger=None)
+        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=1, logger=None)

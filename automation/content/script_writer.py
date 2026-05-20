@@ -410,20 +410,24 @@ Script:
         prompt = f"""
 You are a visual director for a science YouTube channel called "Daily Deep Space".
 You will be given a narration script about "{topic}".
-Break the script into 6-10 visual SCENES. For each scene assign one of the 6 visual types:
+Break the script into EXACTLY 5 visual SCENES total for a YouTube Short.
+For each scene assign one of these 5 visual types following this STRICT mix:
+- 1 `hook_question` (must be the opening scene 1)
+- 1-2 `typewriter_text`
+- 1-2 `image` or `ai_video` (max 1 `ai_video` total)
+- 0-1 `kinetic_stat`
+DO NOT use data_bars.
 
-1. `typewriter_text` - Use for opening hooks, key revelations, named discoveries.
-   Fields: "typewriter_words": a list of words to type out sequentially.
-2. `kinetic_stat`    - Use for a single overwhelming number.
-   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string).
-3. `image`           - Use for real places, scientists, historical events.
-   Fields: "named_entity": string (optional, to display as lower third).
-4. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
-   Fields: "ai_video_prompt": text-to-video prompt. Max 2 scenes of this type!
-5. `hook_question`   - Use for chapter openings, rhetorical questions.
+1. `hook_question`   - Use for chapter openings, rhetorical questions.
    Fields: "question_text": string, "emphasis_phrase": string (key words in ALL CAPS).
-6. `data_bars`       - Use for comparing 3+ values.
-   Fields: "bar_data": list of 3-4 objects, each with "label" (string) and "value" (number).
+2. `typewriter_text` - Use for opening hooks, key revelations, named discoveries.
+   Fields: "typewriter_words": a list of words to type out sequentially.
+3. `kinetic_stat`    - Use for a single overwhelming number.
+   Fields: "stat_data": object with "value" (number/string), "unit" (string), "label" (string).
+4. `image`           - Use for real places, scientists, historical events.
+   Fields: "named_entity": string (optional, to display as lower third).
+5. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
+   Fields: "ai_video_prompt": text-to-video prompt. Max 1 scenes of this type!
 
 Additionally, generate metadata for the YouTube THUMBNAIL (portrait format):
 - `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
@@ -443,8 +447,7 @@ Return ONLY a valid JSON object of this structure:
       "named_entity": null,
       "ai_video_prompt": "",
       "question_text": null,
-      "emphasis_phrase": null,
-      "bar_data": null
+      "emphasis_phrase": null
     }}
   ],
   "thumbnail_data": {{
@@ -477,10 +480,10 @@ Script:
         if not parsed_ok:
             print("[ScriptWriter] Retrying shorts visual scenes generation with simplified prompt...")
             simple_prompt = f"""
-Analyze this science script about "{topic}" and generate a JSON list of 6-10 visual scenes.
+Analyze this science script about "{topic}" and generate a JSON list of EXACTLY 5 visual scenes.
 For each scene, output ONLY:
 - "narration": verbatim sentence(s)
-- "visual_type": one of: "typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"
+- "visual_type": one of: "typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question"
 - "image_cue": 4-8 word search term
 
 Also include:
@@ -526,8 +529,7 @@ Script:
                     "named_entity": None,
                     "ai_video_prompt": "",
                     "question_text": None,
-                    "emphasis_phrase": None,
-                    "bar_data": None
+                    "emphasis_phrase": None
                 })
 
         # Sanitize and upgrade scenes to meet fields and budget rules
@@ -537,12 +539,11 @@ Script:
             if not isinstance(s, dict):
                 continue
             vtype = s.get("visual_type", "image")
-            if vtype not in ["typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"]:
+            if vtype not in ["typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question"]:
                 vtype = "image"
             
-            # Enforce hard cap of 2 ai_videos for shorts
             if vtype == "ai_video":
-                if ai_count >= 2:
+                if ai_count >= 1:
                     print("[ScriptWriter] Enforcing ai_video cap — downgrading scene to image")
                     vtype = "image"
                 else:
@@ -559,9 +560,12 @@ Script:
             s.setdefault("ai_video_prompt", "")
             s.setdefault("question_text", None)
             s.setdefault("emphasis_phrase", None)
-            s.setdefault("bar_data", None)
 
             final_scenes.append(s)
+            
+            # Enforce max 5 scenes
+            if len(final_scenes) >= 5:
+                break
 
         print(f"[ScriptWriter] Final Shorts Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
         return final_scenes

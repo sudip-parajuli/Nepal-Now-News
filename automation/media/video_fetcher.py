@@ -47,7 +47,11 @@ class VideoFetcher:
                         results.append(url)
                     if len(results) >= count * 3: break
         except Exception as e:
-            print(f"DDG Search error for videos: {e}")
+            err_str = str(e)
+            print(f"DDG Search error for videos: {err_str[:200]}")
+            if "403" in err_str or "429" in err_str or "forbidden" in err_str.lower() or "ratelimit" in err_str.lower():
+                print("DDG rate-limited. Skipping further video search.")
+                return []
 
         # Fallback Strategy: If no results, try broader cinematic terms
         if not results:
@@ -66,7 +70,12 @@ class VideoFetcher:
                             if any(x in r['href'] for x in ['pexels', 'pixabay', 'mixkit']):
                                 results.append(r['href'])
                         if results: break
-                except: continue
+                except Exception as e:
+                    err_str = str(e)
+                    if "403" in err_str or "429" in err_str or "forbidden" in err_str.lower() or "ratelimit" in err_str.lower():
+                        print("DDG rate-limited during fallback. Skipping remaining video searches.")
+                        break
+                    continue
 
         for i, url in enumerate(results):
             filename = f"vid_{int(time.time())}_{i}.mp4"

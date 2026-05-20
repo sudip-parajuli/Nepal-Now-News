@@ -5,8 +5,8 @@ import datetime
 import subprocess
 import requests
 
-HF_API_URL = "https://api-inference.huggingface.co/v1/inference/THUDM/CogVideoX-2b"
-HF_FALLBACK_URL = "https://api-inference.huggingface.co/v1/inference/THUDM/CogVideoX1.5-5B-SAT"
+HF_API_URL = "https://api-inference.huggingface.co/models/THUDM/CogVideoX-2b"
+HF_FALLBACK_URL = "https://api-inference.huggingface.co/models/THUDM/CogVideoX-5b"
 HF_USAGE_FILE = "automation/storage/hf_usage.json"
 HF_MONTHLY_LIMIT = 900  # Hard stop at 900 to leave 100 as buffer
 
@@ -150,9 +150,10 @@ def generate_hf_video(prompt: str, output_dir: str, scene_idx: int, hf_token: st
             print(f"[HFVideoGen] Requesting CogVideoX-2B...")
             resp = requests.post(url, headers=headers, json=payload, timeout=120)
 
-            # If 404, fall back to secondary model CogVideoX1.5-5B-SAT
+            # If 404, fall back to secondary model
             if resp.status_code == 404:
-                print(f"[HFVideoGen] Scene {scene_idx}: Primary endpoint 404. Trying secondary fallback (CogVideoX1.5-5B-SAT)...")
+                fallback_name = HF_FALLBACK_URL.split('/')[-1]
+                print(f"[HFVideoGen] Scene {scene_idx}: Primary endpoint 404. Trying secondary fallback ({fallback_name})...")
                 url = HF_FALLBACK_URL
                 resp = requests.post(url, headers=headers, json=payload, timeout=120)
 

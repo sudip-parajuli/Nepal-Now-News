@@ -25,7 +25,7 @@ class AssetOrchestrator:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def fetch_all(self, scenes: List[Dict], topic: str) -> dict:
+    def fetch_all(self, scenes: List[Dict], topic: str, aspect_ratio: str = '16:9') -> dict:
         """
         Process all scenes and return the full job manifest dict with all 6 visual types.
         """
@@ -33,7 +33,7 @@ class AssetOrchestrator:
 
         # ── Resume support: check for existing manifest ────────────────────────
         existing = self._find_existing_manifest(topic, today)
-        if existing:
+        if existing and existing.get("aspect_ratio") == aspect_ratio:
             print(f"[AssetOrchestrator] Resuming from existing manifest: {existing['job_id']}")
             return existing
 
@@ -47,6 +47,7 @@ class AssetOrchestrator:
             "job_dir": job_dir,
             "topic": topic,
             "date": today,
+            "aspect_ratio": aspect_ratio,
             "scenes": [],
         }
 
@@ -90,9 +91,14 @@ class AssetOrchestrator:
                         scene_idx=idx,
                         hf_token=self.hf_token,
                     )
-                    scene_entry["asset_type"] = result["asset_type"]
-                    scene_entry["asset_path"] = result["asset_path"]
+                    
                     if result["asset_type"] == "ai_video":
+                        asset_path = result["asset_path"]
+                        if aspect_ratio == "9:16":
+                            asset_path = self._crop_video_to_portrait(asset_path)
+                            
+                        scene_entry["asset_type"] = "ai_video"
+                        scene_entry["asset_path"] = asset_path
                         ai_video_count += 1
                         manifest["scenes"].append(scene_entry)
                         self._save_manifest(manifest)
@@ -112,8 +118,11 @@ class AssetOrchestrator:
                 topic_context=topic,
             )
             if paths:
+                asset_path = paths[0]
+                if aspect_ratio == "9:16":
+                    asset_path = self._crop_image_to_portrait(asset_path)
                 scene_entry["asset_type"] = "image"
-                scene_entry["asset_path"] = paths[0]
+                scene_entry["asset_path"] = asset_path
             else:
                 scene_entry["asset_type"] = "none"
                 scene_entry["asset_path"] = None
@@ -125,6 +134,41 @@ class AssetOrchestrator:
               f"{ai_video_count} AI video clip(s), "
               f"{sum(1 for s in manifest['scenes'] if s['asset_type']=='image')} image background(s).")
         return manifest
+
+    def _crop_image_to_portrait(self, img_path: str) -> str:
+        try:
+            from PIL import Image
+            img = Image.open(img_path).convert("RGB")
+            w, h = img.size
+            target_w = int(h * 9 / 16)
+            if target_w < w:
+                x_offset = (w - target_w) // 2
+                img = img.crop((x_offset, 0, x_offset + target_w, h))
+            img = img.resize((1080, 1920), Image.Resampling.LANCZOS)
+            img.save(img_path)
+            return img_path
+        except Exception as e:
+            print(f"[AssetOrchestrator] Error cropping image {img_path}: {e}")
+            return img_path
+
+    def _crop_video_to_portrait(self, vid_path: str) -> str:
+        try:
+            from moviepy.editor import VideoFileClip
+            clip = VideoFileClip(vid_path)
+            w, h = clip.size
+            target_w = int(h * 9 / 16)
+            if target_w < w:
+                x1 = (w - target_w) // 2
+                clip = clip.crop(x1=x1, y1=0, x2=x1+target_w, y2=h)
+                clip = clip.resize(newsize=(1080, 1920))
+                new_path = vid_path.replace(".mp4", "_portrait.mp4")
+                clip.write_videofile(new_path, codec="libx264", audio=False, logger=None)
+                clip.close()
+                return new_path
+            return vid_path
+        except Exception as e:
+            print(f"[AssetOrchestrator] Error cropping video {vid_path}: {e}")
+            return vid_path
 
     def cleanup(self, manifest: dict):
         """Delete the entire temp/{job_id}/ directory after a successful render."""

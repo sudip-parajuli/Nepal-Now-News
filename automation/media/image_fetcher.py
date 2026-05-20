@@ -172,10 +172,10 @@ class ImageFetcher:
             except Exception as e:
                 err_str = str(e)
                 print(f"DDG Search error for '{query}' (Attempt {attempt+1}/3): {err_str[:200]}")
-                if "403" in err_str or "Ratelimit" in err_str:
-                    time.sleep(10 * (attempt + 1))
-                else:
-                    time.sleep(5 * (attempt + 1))
+                if "403" in err_str or "429" in err_str or "ratelimit" in err_str.lower() or "forbidden" in err_str.lower():
+                    print("DDG rate-limited. Skipping remaining retries for this query.")
+                    return []
+                time.sleep(3 * (attempt + 1))
                 continue
         return []
 
@@ -299,11 +299,15 @@ class ImageFetcher:
                         img.verify() # Check for corruption
                     return save_path
                 except Exception as e:
-                    print(f"Invalid image downloaded ({url}): {e}")
+                    clean_url = url.encode('ascii', 'ignore').decode('ascii')
+                    clean_e = str(e).encode('ascii', 'ignore').decode('ascii')
+                    print(f"Invalid image downloaded ({clean_url}): {clean_e}")
                     os.remove(save_path)
                     return None
         except Exception as e:
-            print(f"Download Error ({url}): {e}")
+            clean_url = url.encode('ascii', 'ignore').decode('ascii')
+            clean_e = str(e).encode('ascii', 'ignore').decode('ascii')
+            print(f"Download Error ({clean_url}): {clean_e}")
         return None
 
     def fetch_image(self, query: str, filename: str) -> str:

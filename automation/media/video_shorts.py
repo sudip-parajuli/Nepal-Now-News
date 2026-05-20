@@ -474,7 +474,7 @@ class VideoShortsGenerator:
                 fps=24, 
                 codec="libx264", 
                 audio_codec="aac", 
-                threads=4, 
+                threads=1, 
                 preset='ultrafast', 
                 logger=None 
             )
@@ -497,37 +497,23 @@ class VideoShortsGenerator:
 
     def create_shorts_from_scenes(
         self,
-        scenes: list,
+        asset_manifest: dict,
         audio_path: str,
         output_path: str,
         word_offsets: list = None,
         branding: dict = None,
+        topic: str = "",
     ):
         """
-        Renders a Shorts video using the premium visual scene manifest.
-
-        Each scene dict must have at minimum:
-            {
-                "type": "typewriter" | "kinetic_stat" | "hook_question" | "data_bars" | "image" | "ai_video",
-                "narration": str,            # also used as text
-                "duration": float,           # in seconds
-                "bg_query": str,             # image search query for background
-                # type-specific keys: stat_data, question_text, emphasis_phrase, bar_data, named_entity
-            }
+        Renders a Shorts video using the premium visual scene manifest from AssetOrchestrator.
         """
         import glob
         from moviepy.editor import (
             concatenate_videoclips, AudioFileClip, CompositeVideoClip,
-            ImageClip, afx
+            ImageClip, ColorClip, afx
         )
-        from . import scene_renderer as sr_module
         from .scene_renderer import SceneRenderer
-        from ..media.image_fetcher import ImageFetcher
-
-        # ── 1. Override module-level constants to portrait ─────────────────────
-        original_w, original_h = sr_module.WIDTH, sr_module.HEIGHT
-        sr_module.WIDTH = 1080
-        sr_module.HEIGHT = 1920
+        from .timing_utils import match_scenes_to_timestamps
 
         music_vol = (branding or {}).get('music_volume', 0.04)
 
@@ -535,77 +521,101 @@ class VideoShortsGenerator:
             audio = AudioFileClip(audio_path)
             total_duration = audio.duration
 
-            # ── 2. Normalize scene durations to match audio length ─────────────
-            raw_durations = [float(s.get("duration", 4.0)) for s in scenes]
-            raw_total = sum(raw_durations)
-            if raw_total > 0:
-                scale = total_duration / raw_total
-                durations = [max(1.5, d * scale) for d in raw_durations]
-            else:
-                per = total_duration / max(len(scenes), 1)
-                durations = [per] * len(scenes)
+            scenes = asset_manifest.get("scenes", [])
+            if not scenes:
+                raise ValueError("Asset manifest contains no scenes.")
 
-            # ── 3. Fetch backgrounds for all scenes ───────────────────────────
-            fetcher = ImageFetcher()
+            # ── 1. Calculate Timings ─────────────────────────────
+            scene_timings = match_scenes_to_timestamps(scenes, word_offsets or [], total_duration)
+
+            # ── 2. Initialize Portrait Renderer ───────────────────────────
+            renderer = SceneRenderer(mode='portrait')
             scene_clips = []
 
-            for idx, (scene, dur) in enumerate(zip(scenes, durations)):
-                scene_type = str(scene.get("type", "typewriter")).lower()
-                narration = str(scene.get("narration", scene.get("text", "")))
-                bg_query = str(scene.get("bg_query", "cinematic science background"))
+            # ── 3. Render Scenes ───────────────────────────
+            for i, scene in enumerate(scenes):
+                timing = scene_timings[i]
+                dur = timing["duration"]
+                
+                scene_type = scene.get("visual_type", "image")
+                narration = scene.get("narration", "")
+                asset_path = scene.get("asset_path")
 
-                # Fetch one background image per scene
-                bg_paths = fetcher.fetch_multi_images(
-                    [f"{bg_query} cinematic 4k science"],
-                    f"shorts_bg_{idx}",
-                    topic_context=bg_query
-                )
-                bg_path = bg_paths[0] if bg_paths else None
-
-                # Fallback: generate a dark gradient image if no background found
-                if not bg_path or not os.path.exists(bg_path):
+                # Fallback background
+                if not asset_path or not os.path.exists(asset_path):
                     from PIL import Image as PilImage
                     fb = PilImage.new("RGB", (1080, 1920), (10, 18, 30))
-                    bg_path = f"automation/storage/shorts_fallback_bg_{idx}.jpg"
-                    fb.save(bg_path)
+                    asset_path = f"automation/storage/shorts_fallback_bg_{i}.jpg"
+                    fb.save(asset_path)
 
                 try:
-                    if scene_type == "typewriter":
-                        clip = SceneRenderer.render_typewriter(bg_path, narration, dur)
+                    if scene_type == "typewriter_text":
+                        clip = renderer.render_typewriter(
+                            asset_path, narration, dur, 
+                            typewriter_words=scene.get("typewriter_words"),
+                            word_offsets=word_offsets,
+                            start_time=timing["start"]
+                        )
                     elif scene_type == "kinetic_stat":
-                        stat_data = scene.get("stat_data", {"value": "0", "unit": "", "label": "Key Statistic"})
-                        clip = SceneRenderer.render_kinetic_stat(bg_path, narration, dur, stat_data)
+                        stat_data = scene.get("stat_data") or {"value": "0", "unit": "", "label": "Statistic"}
+                        clip = renderer.render_kinetic_stat(asset_path, narration, dur, stat_data)
                     elif scene_type == "hook_question":
-                        question_text = str(scene.get("question_text", narration))
-                        emphasis_phrase = scene.get("emphasis_phrase", "")
-                        clip = SceneRenderer.render_hook_question(bg_path, narration, dur, question_text, emphasis_phrase)
-                    elif scene_type == "data_bars":
-                        bar_data = scene.get("bar_data", [])
-                        clip = SceneRenderer.render_data_bars(bg_path, narration, dur, bar_data)
-                    elif scene_type in ("image", "ken_burns"):
-                        named_entity = scene.get("named_entity", "")
-                        clip = SceneRenderer.render_image(bg_path, narration, dur, named_entity)
+                        q_text = str(scene.get("question_text") or narration)
+                        emp_phrase = scene.get("emphasis_phrase", "")
+                        clip = renderer.render_hook_question(
+                            asset_path, narration, dur, q_text, emp_phrase,
+                            word_offsets=word_offsets,
+                            start_time=timing["start"],
+                            topic=topic
+                        )
+                    elif scene_type == "ai_video":
+                        clip = renderer.render_ai_video(asset_path, dur)
+                    elif scene_type == "image":
+                        named_ent = scene.get("named_entity", "")
+                        clip = renderer.render_image(asset_path, narration, dur, named_ent)
                     else:
-                        # Generic fallback: typewriter
-                        clip = SceneRenderer.render_typewriter(bg_path, narration, dur)
+                        clip = renderer.render_typewriter(
+                            asset_path, narration, dur,
+                            word_offsets=word_offsets,
+                            start_time=timing["start"]
+                        )
 
                     scene_clips.append(clip)
-                    print(f"[Shorts Scene {idx+1}/{len(scenes)}] type={scene_type} dur={dur:.1f}s OK")
+                    print(f"[Shorts Scene {i+1}/{len(scenes)}] type={scene_type} dur={dur:.1f}s OK")
 
                 except Exception as e:
-                    print(f"[Shorts Scene {idx+1}] RENDER ERROR ({scene_type}): {e}. Using fallback.")
-                    from moviepy.editor import ColorClip
+                    print(f"[Shorts Scene {i+1}] RENDER ERROR ({scene_type}): {e}. Using fallback.")
                     scene_clips.append(ColorClip(size=(1080, 1920), color=(10, 18, 30), duration=dur))
 
-            # ── 4. Add white flash transitions between clips ──────────────────
+            # ── 4. Apply 58s Limit ───────────────────────────
+            final_clips = []
+            cum_dur = 0
+            for i, clip in enumerate(scene_clips):
+                if cum_dur + clip.duration > 58.0:
+                    print(f"[Shorts] Scene {i+1} pushes total duration > 58s. Dropping remaining scenes.")
+                    break
+                final_clips.append(clip)
+                cum_dur += clip.duration
+
+            if not final_clips:
+                raise ValueError("No clips available after applying duration limits.")
             from moviepy.editor import ColorClip
             flash_dur = 0.08
+            
+            # Save the capped clips so we only add flashes between them
+            capped_clips = final_clips
             final_clips = []
-            for i, c in enumerate(scene_clips):
+            self.sfx_events = []
+            curr_pos = 0.0
+            
+            for i, c in enumerate(capped_clips):
                 final_clips.append(c)
-                if i < len(scene_clips) - 1:
+                curr_pos += c.duration
+                if i < len(capped_clips) - 1:
                     flash = ColorClip(size=(1080, 1920), color=(255, 255, 255), duration=flash_dur)
                     final_clips.append(flash)
+                    self.sfx_events.append({"time": curr_pos, "file": "whoosh.mp3"})
+                    curr_pos += flash_dur
 
             combined = concatenate_videoclips(final_clips, method="compose")
 
@@ -628,6 +638,8 @@ class VideoShortsGenerator:
                     POP_FONT_SIZE = 88
                     pop_font = None
                     pop_font_paths = [
+                        "automation/fonts/Barlow-CondensedBold.ttf",
+                        "automation/fonts/Barlow-Bold.ttf",
                         "automation/media/assets/Montserrat-Black.ttf",
                         "automation/media/assets/Montserrat-ExtraBold.ttf",
                         "C:\\Windows\\Fonts\\ariblk.ttf",
@@ -704,10 +716,19 @@ class VideoShortsGenerator:
                             pop_chunks.append(cur_c); cur_c=[]; cur_n=0
                     if cur_c: pop_chunks.append(cur_c)
 
-                    caption_y = 1920 - 480  # bottom quarter of portrait frame
+                    caption_y = 1920 // 2 - 100  # perfectly centered in portrait frame to avoid YT description blocking
                     for i, chunk in enumerate(pop_chunks):
                         if not chunk: continue
                         cs = chunk[0]['start']
+                        
+                        # Find matching scene type to suppress bottom captions for typewriter/hook scenes
+                        active_type = "image"
+                        for s_idx, timing in enumerate(scene_timings):
+                            if timing["start"] <= cs <= timing["end"]:
+                                active_type = scenes[s_idx].get("visual_type", "image")
+                                break
+                        if active_type in ("hook_question", "typewriter_text", "kinetic_stat"):
+                            continue
                         if i < len(pop_chunks)-1 and pop_chunks[i+1]:
                             cd = max(pop_chunks[i+1][0]['start'] - cs, 0.1)
                         else:
@@ -733,6 +754,19 @@ class VideoShortsGenerator:
                 if os.path.exists(mdir):
                     music_files.extend(glob.glob(os.path.join(mdir, "*.mp3")))
 
+            # Mix music and transition SFX
+            sfx_clips = []
+            sfx_dir = "automation/media/sfx"
+            if hasattr(self, 'sfx_events') and self.sfx_events:
+                for event in self.sfx_events:
+                    sfx_path = os.path.join(sfx_dir, event["file"])
+                    if os.path.exists(sfx_path):
+                        try:
+                            sfx_clip = AudioFileClip(sfx_path).set_start(event["time"]).volumex(0.65)
+                            sfx_clips.append(sfx_clip)
+                        except Exception as s_err:
+                            print(f"[Shorts] SFX error: {s_err}")
+                            
             if music_files:
                 try:
                     import random as _rand
@@ -744,26 +778,65 @@ class VideoShortsGenerator:
                     if bg_music.duration > 4:
                         bg_music = bg_music.audio_fadein(2).audio_fadeout(2)
                     from moviepy.audio.AudioClip import CompositeAudioClip
-                    final_audio = CompositeAudioClip([audio.volumex(1.4), bg_music])
+                    final_audio = CompositeAudioClip([audio.volumex(1.4), bg_music] + sfx_clips)
                 except Exception as me:
                     print(f"[Shorts] BG music error: {me}")
-                    final_audio = audio
+                    if sfx_clips:
+                        from moviepy.audio.AudioClip import CompositeAudioClip
+                        final_audio = CompositeAudioClip([audio.volumex(1.4)] + sfx_clips)
+                    else:
+                        final_audio = audio
             else:
-                final_audio = audio
+                if sfx_clips:
+                    from moviepy.audio.AudioClip import CompositeAudioClip
+                    final_audio = CompositeAudioClip([audio.volumex(1.4)] + sfx_clips)
+                else:
+                    final_audio = audio
 
             # ── 7. Composite + export ─────────────────────────────────────────
             final = CompositeVideoClip(clips, size=(1080, 1920)).set_audio(final_audio).set_duration(total_duration)
             print(f"[Shorts] Writing visual-scene video -> {output_path}")
+            
+            # Use distinct temp audio file to prevent Windows PermissionError (WinError 32)
+            temp_audio_path = os.path.join(os.path.dirname(output_path), "temp_shorts_audio.m4a")
+            if os.path.exists(temp_audio_path):
+                try:
+                    os.remove(temp_audio_path)
+                except:
+                    pass
+                    
             final.write_videofile(
                 output_path, fps=30, codec="libx264",
-                audio_codec="aac", threads=4, preset="ultrafast", logger=None
+                audio_codec="aac", threads=1, preset="ultrafast", logger=None,
+                temp_audiofile=temp_audio_path, remove_temp=True
             )
             print(f"[Shorts] Visual-scene video written successfully.")
-
-        finally:
-            # ── 8. Restore module-level constants ─────────────────────────────
-            sr_module.WIDTH = original_w
-            sr_module.HEIGHT = original_h
+            
+            # Explicitly close all clips to release file locks on Windows
+            try:
+                final.close()
+                for c in scene_clips:
+                    c.close()
+                audio.close()
+                if 'bg_music' in locals() and bg_music:
+                    bg_music.close()
+                for sfx in sfx_clips:
+                    sfx.close()
+            except Exception as ce:
+                print(f"[Shorts] Clip closing warning: {ce}")
+        except Exception as e:
+            # Explicitly close all clips even on exception
+            try:
+                if 'final' in locals() and final: final.close()
+                if 'scene_clips' in locals():
+                    for c in scene_clips: c.close()
+                if 'audio' in locals() and audio: audio.close()
+                if 'bg_music' in locals() and bg_music: bg_music.close()
+                if 'sfx_clips' in locals():
+                    for sfx in sfx_clips: sfx.close()
+            except:
+                pass
+            raise e
 
     def _wrap_text(self, text, width):
         words, lines, curr = text.split(), [], []

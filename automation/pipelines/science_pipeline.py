@@ -74,10 +74,17 @@ class SciencePipeline(BasePipeline):
             visual_scenes = []
         print(f"Visual scenes: {len(visual_scenes)} scenes generated.")
 
-        # 4. Fetch fallback media (used only when no scene manifest)
-        media_paths = []
-        if not visual_scenes:
-            print("WARNING: No visual scenes — falling back to legacy image-based rendering.")
+        # 4. Fetch All Assets via Orchestrator (Portrait Mode)
+        asset_manifest = None
+        if visual_scenes:
+            from ..media.asset_orchestrator import AssetOrchestrator
+            orchestrator = AssetOrchestrator(hf_token=os.getenv("HF_TOKEN", ""))
+            asset_manifest = orchestrator.fetch_all(visual_scenes, prompt_topic, aspect_ratio="9:16")
+            print(f"Asset manifest ready: job_id={asset_manifest.get('job_id')}, "
+                  f"{len(asset_manifest.get('scenes', []))} scenes.")
+        else:
+            print("WARNING: No visual scenes generated. Cannot proceed with premium Shorts render.")
+            # Fallback legacy path
             media_paths = await self._fetch_media(prompt_topic, script)
 
         # 5. Generate Audio
@@ -88,14 +95,15 @@ class SciencePipeline(BasePipeline):
         # 6. Create Video
         video_path = "automation/storage/science_shorts_final.mp4"
         try:
-            if visual_scenes:
-                print(f"DEBUG: Rendering Shorts via visual scene manifest ({len(visual_scenes)} scenes).")
+            if asset_manifest:
+                print(f"DEBUG: Rendering Shorts via visual scene manifest ({len(asset_manifest['scenes'])} scenes).")
                 self.vgen.create_shorts_from_scenes(
-                    visual_scenes,
-                    audio_path,
-                    video_path,
+                    asset_manifest=asset_manifest,
+                    audio_path=audio_path,
+                    output_path=video_path,
                     word_offsets=word_offsets,
                     branding=self.config.get('branding'),
+                    topic=prompt_topic,
                 )
             else:
                 print(f"DEBUG: Rendering Shorts via legacy path with {len(media_paths)} media items.")
@@ -126,7 +134,12 @@ class SciencePipeline(BasePipeline):
             thumb_gen = ThumbnailGenerator(size=(1080, 1920))
             # generate_thumbnail_info reads self.last_thumbnail_data cached by generate_shorts_visual_scenes
             thumb_info = self.script_writer.generate_thumbnail_info(prompt_topic, script)
-            thumb_path = thumb_gen.generate_thumbnail(thumb_info)
+            
+            first_asset_path = None
+            if asset_manifest and asset_manifest.get('scenes'):
+                first_asset_path = asset_manifest['scenes'][0].get('asset_path')
+                
+            thumb_path = thumb_gen.generate_thumbnail(thumb_info, first_asset_path=first_asset_path)
             print(f"Portrait thumbnail generated: {thumb_path}")
         except Exception as te:
             print(f"WARNING: Thumbnail generation failed: {te}")
@@ -186,6 +199,7 @@ class SciencePipeline(BasePipeline):
             word_offsets,
             media_paths=media_paths,
             asset_manifest=asset_manifest,
+            burn_captions=True,
         )
 
         # 8. Cleanup temp job assets after successful render
@@ -202,7 +216,12 @@ class SciencePipeline(BasePipeline):
         from ..media.thumbnail_generator import ThumbnailGenerator
         thumb_gen = ThumbnailGenerator()
         thumb_info = scenes_data if scenes_data and 'thumbnail_data' in scenes_data else self.script_writer.generate_thumbnail_info(topic, script)
-        thumb_path = thumb_gen.generate_thumbnail(thumb_info)
+        
+        first_asset_path = None
+        if asset_manifest and asset_manifest.get('scenes'):
+            first_asset_path = asset_manifest['scenes'][0].get('asset_path')
+            
+        thumb_path = thumb_gen.generate_thumbnail(thumb_info, first_asset_path=first_asset_path)
 
         # 11. Upload
         if True:

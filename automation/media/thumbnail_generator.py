@@ -12,12 +12,12 @@ class ThumbnailGenerator:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def generate_thumbnail(self, info: dict, output_path: str = None) -> str:
+    def generate_thumbnail(self, info: dict, output_path: str = None, first_asset_path: str = None) -> str:
         """
         Generates a thumbnail image, routing to the premium science design if data is present.
         """
         if 'thumbnail_data' in info or 'hook_phrase' in info:
-            return self.generate_science_thumbnail(info, output_path)
+            return self.generate_science_thumbnail(info, output_path, first_asset_path)
             
         text = info.get('text', 'Amazing Science').upper()
         image_prompt = info.get('image_prompt', 'cinematic science background')
@@ -27,11 +27,27 @@ class ThumbnailGenerator:
             output_path = os.path.join(self.output_dir, f"thumb_{clean_text}.jpg")
 
         # 1. Generate/Fetch Background
-        bg_path = self._fetch_ai_background(image_prompt)
-        if not bg_path:
+        bg_file = None
+        if first_asset_path and os.path.exists(first_asset_path):
+            if first_asset_path.endswith('.mp4'):
+                import moviepy.editor as mp
+                try:
+                    clip = mp.VideoFileClip(first_asset_path)
+                    bg_file = os.path.join(self.output_dir, "temp_thumb_bg.jpg")
+                    clip.save_frame(bg_file, t=0.5)
+                    clip.close()
+                except Exception as e:
+                    print(f"[Thumbnail] Error extracting frame: {e}")
+            else:
+                bg_file = first_asset_path
+
+        if not bg_file:
+            bg_file = self._fetch_ai_background(image_prompt)
+
+        if not bg_file:
             img = Image.new('RGB', self.size, color=(15, 25, 45))
         else:
-            img = Image.open(bg_path).resize(self.size, Image.Resampling.LANCZOS)
+            img = Image.open(bg_file).resize(self.size, Image.Resampling.LANCZOS)
 
         draw = ImageDraw.Draw(img)
         font = self._load_font(fsize=120)
@@ -88,7 +104,7 @@ class ThumbnailGenerator:
             print(f"Error downloading {url}: {e}")
         return None
 
-    def generate_science_thumbnail(self, info: dict, output_path: str = None) -> str:
+    def generate_science_thumbnail(self, info: dict, output_path: str = None, first_asset_path: str = None) -> str:
         """
         Generates a premium science channel YouTube thumbnail (supports both landscape and portrait).
         """
@@ -110,11 +126,25 @@ class ThumbnailGenerator:
         width, height = self.size
         is_portrait = width < height
 
-        # 1. Fetch Background Image via DDG
-        bg_url = self._search_image_url(bg_query)
+        # 1. Fetch Background Image via DDG or use first_asset_path
         bg_file = None
-        if bg_url:
-            bg_file = self._download_url(bg_url, "temp_thumb_bg.jpg")
+        if first_asset_path and os.path.exists(first_asset_path):
+            if first_asset_path.endswith('.mp4'):
+                import moviepy.editor as mp
+                try:
+                    clip = mp.VideoFileClip(first_asset_path)
+                    bg_file = os.path.join(self.output_dir, "temp_thumb_bg.jpg")
+                    clip.save_frame(bg_file, t=0.5)
+                    clip.close()
+                except Exception as e:
+                    print(f"[Thumbnail] Error extracting frame: {e}")
+            else:
+                bg_file = first_asset_path
+                
+        if not bg_file:
+            bg_url = self._search_image_url(bg_query)
+            if bg_url:
+                bg_file = self._download_url(bg_url, "temp_thumb_bg.jpg")
             
         if bg_file and os.path.exists(bg_file):
             canvas = Image.open(bg_file).resize(self.size, Image.Resampling.LANCZOS)

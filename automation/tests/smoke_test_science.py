@@ -63,12 +63,17 @@ async def run_smoke_test():
     os.makedirs("automation/storage/temp_videos", exist_ok=True)
     os.makedirs("automation/storage/temp_images", exist_ok=True)
     
-    # Override topic generation and run daily summary end-to-end in test mode
+    # Override topic generation and run both daily summary and shorts end-to-end in test mode
     topic = "Bismuth Crystals"
     try:
         await pipeline._run_daily(topic=topic, is_test=True)
         print("\n==================================================")
-        print("SMOKE TEST COMPLETE: DAILY SUMMARY RENDERED SUCCESSFULLY!")
+        print("SMOKE TEST 1 COMPLETE: DAILY SUMMARY RENDERED SUCCESSFULLY!")
+        print("==================================================")
+        
+        await pipeline._run_shorts(topic=topic, is_test=True)
+        print("\n==================================================")
+        print("SMOKE TEST 2 COMPLETE: SHORTS RENDERED SUCCESSFULLY!")
         print("==================================================")
     except Exception as e:
         print("\n==================================================")
