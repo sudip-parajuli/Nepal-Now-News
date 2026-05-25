@@ -5,12 +5,36 @@ from google import genai
 from .auth import YouTubeAuth
 
 class CommentHandler:
-    def __init__(self, youtube_service, gemini_api_key):
+    def __init__(self, youtube_service, gemini_api_key=None):
         self.youtube = youtube_service
-        self.gemini_client = genai.Client(api_key=gemini_api_key)
-        self.model_id = "gemini-2.0-flash"
-        self.groq_api_key = os.getenv("GROQ_API_KEY")
         
+        # Gather all Gemini keys from env
+        self.gemini_keys = [
+            os.getenv("GEMINI_API_KEY"),
+            os.getenv("GEMINI_API_KEY2"),
+            os.getenv("GEMINI_API_KEY3")
+        ]
+        self.gemini_keys = [k for k in self.gemini_keys if k]
+        if not self.gemini_keys and gemini_api_key:
+            self.gemini_keys = [gemini_api_key]
+            
+        self.gemini_clients = [genai.Client(api_key=k) for k in self.gemini_keys]
+        self.model_id = "gemini-2.0-flash"
+        
+        self.groq_api_keys = [
+            os.getenv("GROQ_API_KEY"),
+            os.getenv("GROQ_API_KEY2"),
+            os.getenv("GROQ_API_KEY3")
+        ]
+        self.groq_api_keys = [k for k in self.groq_api_keys if k]
+        self.groq_clients = []
+        if self.groq_api_keys:
+            try:
+                from groq import Groq
+                self.groq_clients = [Groq(api_key=k) for k in self.groq_api_keys]
+            except ImportError:
+                pass
+                
         # Keep track of viewers we've already replied to
         self.replied_viewers_file = os.path.join(os.path.dirname(__file__), 'replied_viewers.txt')
         self.replied_viewers = set()
@@ -19,43 +43,59 @@ class CommentHandler:
                 for line in f:
                     self.replied_viewers.add(line.strip())
 
-        if self.groq_api_key:
-            try:
-                from groq import Groq
-                self.groq_client = Groq(api_key=self.groq_api_key)
-            except ImportError:
-                self.groq_client = None
-        else:
-            self.groq_client = None
-
-    def _call_with_retry(self, prompt: str, max_retries: int = 3) -> str:
-        """Calls Gemini with fallback to Groq on rate limits."""
-        for attempt in range(max_retries):
-            try:
-                response = self.gemini_client.models.generate_content(
-                    model=self.model_id,
-                    contents=prompt
-                )
-                return response.text.strip()
-            except Exception as e:
-                err_msg = str(e).lower()
-                is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
-                
-                if is_quota_error and self.groq_client:
-                    print(f"Gemini Quota Exceeded. Trying Groq fallback for comment...")
+    def _call_with_retry(self, prompt: str, max_retries: int = 5) -> str:
+        """Calls Gemini rotating through keys, falling back to Groq only if all fail or hit quota."""
+        if not self.gemini_clients:
+            print("WARNING: No Gemini clients available for comments. Trying Groq immediately...")
+            
+        # Try each Gemini client sequentially
+        for client_idx, client in enumerate(self.gemini_clients):
+            for attempt in range(max_retries):
+                try:
+                    response = client.models.generate_content(
+                        model=self.model_id,
+                        contents=prompt
+                    )
+                    return response.text.strip()
+                except Exception as e:
+                    err_msg = str(e).lower()
+                    is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
+                    
+                    if is_quota_error:
+                        print(f"Gemini Comment Key {client_idx+1} Quota Exceeded/429. Trying next key...")
+                        break
+                    
+                    if attempt < max_retries - 1:
+                        time.sleep(2 + random.uniform(0, 1))
+                    else:
+                        print(f"Gemini Comment Key {client_idx+1} failed. Trying next key...")
+                        break
+                        
+        # If all Gemini keys fail or are exhausted, try Groq fallback
+        if self.groq_clients:
+            print("All Gemini comment keys exhausted. Trying Groq fallback...")
+            for client_idx, groq_client in enumerate(self.groq_clients):
+                for attempt in range(max_retries):
                     try:
-                        chat_completion = self.groq_client.chat.completions.create(
+                        chat_completion = groq_client.chat.completions.create(
                             messages=[{"role": "user", "content": prompt}],
                             model="llama-3.3-70b-versatile",
                         )
-                        return chat_completion.choices[0].message.content.strip()
+                        result = chat_completion.choices[0].message.content.strip()
+                        if result:
+                            return result
                     except Exception as groq_err:
-                        print(f"Groq fallback failed: {groq_err}")
-                
-                if attempt < max_retries - 1:
-                    time.sleep(2 + random.uniform(0, 1))
-                else:
-                    print(f"AI Generation Error: {e}")
+                        err_msg = str(groq_err).lower()
+                        is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
+                        
+                        if is_quota_error:
+                            print(f"Groq Comment Key {client_idx+1} Quota Exceeded/429. Trying next key...")
+                            break
+                        
+                        print(f"Groq Comment Key {client_idx+1} attempt {attempt+1} failed: {groq_err}")
+                        if attempt < max_retries - 1:
+                            time.sleep((2 ** attempt) + 1)
+                            
         return None
 
     def handle_comments(self, max_videos=25, channel_id=None):

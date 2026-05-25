@@ -48,10 +48,24 @@ async def main():
 
     if args.mode == "comments":
         print("--- Starting AI Comment Auto-Reply ---")
-        youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
-        handler = CommentHandler(youtube_service, os.getenv("GEMINI_API_KEY"))
-        channel_id = config.get("channel_id")
-        handler.handle_comments(max_videos=25, channel_id=channel_id)
+        
+        # 1. YouTube comment replier
+        try:
+            youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
+            handler = CommentHandler(youtube_service, os.getenv("GEMINI_API_KEY"))
+            channel_id = config.get("channel_id")
+            handler.handle_comments(max_videos=25, channel_id=channel_id)
+        except Exception as ye:
+            print(f"YouTube comments handling failed: {ye}")
+            
+        # 2. Meta (Facebook/Instagram) comment replier
+        try:
+            from automation.meta.comment_handler import MetaCommentHandler
+            meta_handler = MetaCommentHandler()
+            meta_handler.handle_comments()
+        except Exception as me:
+            print(f"Meta comments handling failed: {me}")
+            
         print("--- AI Comment Auto-Reply Completed ---")
         return
 

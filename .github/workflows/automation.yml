@@ -71,7 +71,11 @@ jobs:
           (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'science')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY2: ${{ secrets.GROQ_API_KEY2 }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
           HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
           HUME_API_KEY2: ${{ secrets.HUME_API_KEY2 }}
@@ -93,7 +97,11 @@ jobs:
           (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'science_long')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY2: ${{ secrets.GROQ_API_KEY2 }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
           HUME_API_KEY: ${{ secrets.HUME_API_KEY }}
           HUME_API_KEY2: ${{ secrets.HUME_API_KEY2 }}
@@ -115,7 +123,11 @@ jobs:
           (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'comments')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY2: ${{ secrets.GROQ_API_KEY2 }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           YOUTUBE_TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
         run: |
           python automation/main.py --mode comments

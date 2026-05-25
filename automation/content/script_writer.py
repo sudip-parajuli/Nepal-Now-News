@@ -25,15 +25,21 @@ class ScriptWriter:
         self.clients = [genai.Client(api_key=k) for k in self.api_keys]
         self.client = self.clients[0] if self.clients else None
         self.model_id = 'gemini-2.0-flash'
-        self.groq_api_key = os.getenv("GROQ_API_KEY")
-        if self.groq_api_key:
+        self.groq_api_keys = [
+            os.getenv("GROQ_API_KEY"),
+            os.getenv("GROQ_API_KEY2"),
+            os.getenv("GROQ_API_KEY3")
+        ]
+        self.groq_api_keys = [k for k in self.groq_api_keys if k]
+        self.groq_clients = []
+        if self.groq_api_keys:
             try:
                 from groq import Groq
-                self.groq_client = Groq(api_key=self.groq_api_key)
+                self.groq_clients = [Groq(api_key=k) for k in self.groq_api_keys]
             except ImportError:
-                self.groq_client = None
-        else:
-            self.groq_client = None
+                pass
+        self.groq_client = self.groq_clients[0] if self.groq_clients else None
+
 
     def _call_with_retry(self, prompt: str, max_retries: int = 5) -> str:
         """Calls Gemini rotating through keys, falling back to Groq only if all fail or hit quota."""
@@ -67,22 +73,30 @@ class ScriptWriter:
                         break
         
         # If all Gemini keys fail or are exhausted, try Groq fallback
-        if self.groq_client:
+        if self.groq_clients:
             print("All Gemini keys exhausted. Trying Groq fallback...")
-            for attempt in range(max_retries):
-                try:
-                    chat_completion = self.groq_client.chat.completions.create(
-                        messages=[{"role": "user", "content": prompt}],
-                        model="llama-3.3-70b-versatile",
-                    )
-                    result = chat_completion.choices[0].message.content.strip()
-                    if result:
-                        return result
-                except Exception as groq_err:
-                    print(f"Groq fallback attempt {attempt+1} failed: {groq_err}")
-                    if attempt < max_retries - 1:
-                        time.sleep((2 ** attempt) + 1)
+            for client_idx, groq_client in enumerate(self.groq_clients):
+                for attempt in range(max_retries):
+                    try:
+                        chat_completion = groq_client.chat.completions.create(
+                            messages=[{"role": "user", "content": prompt}],
+                            model="llama-3.3-70b-versatile",
+                        )
+                        result = chat_completion.choices[0].message.content.strip()
+                        if result:
+                            return result
+                    except Exception as groq_err:
+                        err_msg = str(groq_err).lower()
+                        is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
                         
+                        if is_quota_error:
+                            print(f"Groq Key {client_idx+1} Quota Exceeded/429. Trying next key...")
+                            break
+                        
+                        print(f"Groq fallback Key {client_idx+1} attempt {attempt+1} failed: {groq_err}")
+                        if attempt < max_retries - 1:
+                            time.sleep((2 ** attempt) + 1)
+                            
         return "Error: Maximum retries reached for all LLM keys and fallbacks."
 
     def _dummy_placeholder(self):

@@ -147,6 +147,16 @@ class SciencePipeline(BasePipeline):
         # 8. Upload
         video_id = await self._upload(video_path, f"{topic} #Shorts", script, topic, is_test=is_test)
 
+        # Meta Upload
+        if not is_test:
+            print("Triggering Meta Reels cross-posting...")
+            try:
+                from ..meta.uploader import MetaUploader
+                meta_uploader = MetaUploader()
+                meta_uploader.upload_video(video_path, f"{topic} #Shorts", script, tags=["shorts"])
+            except Exception as me:
+                print(f"WARNING: Meta Reel cross-posting failed: {me}")
+
         # 9. Upload Thumbnail
         if video_id and thumb_path and os.path.exists(thumb_path) and not is_test:
             print(f"Uploading portrait thumbnail for video {video_id}...")
@@ -231,6 +241,16 @@ class SciencePipeline(BasePipeline):
                 script, topic,
                 is_test=is_test, is_shorts=False, srt_path=srt_path
             )
+
+            # Meta Upload
+            if not is_test:
+                print("Triggering Meta video cross-posting...")
+                try:
+                    from ..meta.uploader import MetaUploader
+                    meta_uploader = MetaUploader()
+                    meta_uploader.upload_video(video_path, f"The Science of {topic}: Detailed Explanation", script, tags=["science"])
+                except Exception as me:
+                    print(f"WARNING: Meta video cross-posting failed: {me}")
 
             # 12. Upload Thumbnail if video succeeded
             if video_id and thumb_path and os.path.exists(thumb_path) and not is_test:
