@@ -96,26 +96,27 @@ class ImageFetcher:
 
     def _simplify_query(self, query: str, topic_context: str = None) -> str:
         """Strip down a verbose query to 2-3 core keywords for Wikimedia/NASA searches."""
+        # Only use topic keywords as fallback if query is None or very short (under 5 chars)
+        if not query or len(query.strip()) < 5:
+            q = topic_context if topic_context else "science astronomy"
+        else:
+            q = query
+
         # Remove quality modifiers and news-speak
         noise = ["4k", "cinematic", "close up", "macro", "science photo", "photo",
-                 "hd", "ultra", "high quality", "4 k", "detailed", "stunning"]
-        q = query.lower()
+                 "hd", "ultra", "high quality", "4 k", "detailed", "stunning", "-watermark", "-stock"]
+        q = q.lower()
         for n in noise:
             q = q.replace(n, "")
-        # Keep only meaningful words (length > 3)
-        words = [w for w in q.split() if len(w) > 3]
+        # Keep only meaningful words (length > 3 or digit)
+        words = [w for w in q.split() if len(w) > 3 or w.isdigit()]
         # Reject literal 'none' keyword
         words = [w for w in words if w != "none"]
         if not words:
             fallback_src = topic_context or "science astronomy"
-            words = [w for w in fallback_src.lower().split() if len(w) > 3]
+            words = [w for w in fallback_src.lower().split() if len(w) > 3 or w.isdigit()]
 
-        # Prioritize topic_context words if provided
-        if topic_context:
-            topic_words = [w for w in topic_context.lower().split() if len(w) > 3][:2]
-            combined = topic_words + [w for w in words if w not in topic_words]
-            return " ".join(combined[:3])
-        return " ".join(words[:3])
+        return " ".join(words[:4])
 
     def _search_ddg_only(self, query: str, max_results: int = 20) -> list:
         """DDG-only search with clean short query, client-side filtering and score-based sorting."""

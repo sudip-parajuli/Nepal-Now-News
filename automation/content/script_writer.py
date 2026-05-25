@@ -276,6 +276,14 @@ STRICT RULES FOR FIELDS:
 3. For `typewriter_text` scenes, `typewriter_words` MUST be a list of dictionaries where each dictionary contains {{"word": "example", "weight": "bold"}} or {{"word": "example", "weight": "md"}}. Give important emphasis words a weight of "bold", and regular words a weight of "md".
 4. For `kinetic_stat` scenes, you MUST provide non-null `stat_data` containing "value", "unit", and "label". If a scene does not have statistical data, do not use `kinetic_stat`.
 
+STRICT SCENE & FORMAT CONSTRAINTS:
+1. Generate MAXIMUM 12 scenes for a script under 500 words. Combine short consecutive sentences into one scene rather than making each sentence its own scene.
+2. Never generate more than 2 typewriter_text scenes in a row without an image, kinetic_stat, or data_bars scene between them.
+3. If the script contains ANY specific number (year, measurement, count, duration) -> that sentence MUST be classified as kinetic_stat.
+4. If the script contains a comparison of 3+ items or values -> MUST be data_bars.
+5. Minimum 1 kinetic_stat per video.
+6. If no data_bars opportunity exists, classify the single most dramatic comparison as data_bars anyway.
+
 Additionally, generate metadata for the YouTube THUMBNAIL:
 - `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
 - `supporting_fact`: Short supporting fact/stat in 5-8 words.
@@ -328,11 +336,19 @@ Script:
         if not parsed_ok:
             print("[ScriptWriter] Retrying visual scenes generation with simplified prompt...")
             simple_prompt = f"""
-Analyze this science script about "{topic}" and generate a JSON list of 15-20 visual scenes.
+Analyze this science script about "{topic}" and generate a JSON list of visual scenes.
 For each scene, output ONLY:
 - "narration": verbatim sentence(s)
 - "visual_type": one of: "typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"
 - "image_cue": 4-8 word search term
+
+STRICT SCENE & FORMAT CONSTRAINTS:
+1. Generate MAXIMUM 12 scenes for a script under 500 words. Combine short consecutive sentences into one scene rather than making each sentence its own scene.
+2. Never generate more than 2 typewriter_text scenes in a row without an image, kinetic_stat, or data_bars scene between them.
+3. If the script contains ANY specific number (year, measurement, count, duration) -> that sentence MUST be classified as kinetic_stat.
+4. If the script contains a comparison of 3+ items or values -> MUST be data_bars.
+5. Minimum 1 kinetic_stat per video.
+6. If no data_bars opportunity exists, classify the single most dramatic comparison as data_bars anyway.
 
 Also include:
 - "thumbnail_data": {{

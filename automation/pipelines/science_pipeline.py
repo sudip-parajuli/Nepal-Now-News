@@ -36,6 +36,40 @@ class SciencePipeline(BasePipeline):
         self.nasa_fetcher = NASAFetcher()
         self.uploader = None # Initialized in run()
 
+    def _get_punchy_title(self, hook_phrase: str, script: str, topic: str) -> str:
+        """Generates a punchy YouTube title from the hook phrase and script's opening question."""
+        import re
+        # Find all sentences in script
+        sentences = re.split(r'(?<=[.!?])\s+', script)
+        question = ""
+        for s in sentences:
+            if '?' in s:
+                question = s.strip()
+                break
+        if not question and sentences:
+            question = sentences[0].strip()
+
+        # Clean punctuation
+        question = re.sub(r'[.!?]$', '', question).strip()
+        words = question.split()
+        
+        # We need a 4-6 word hook
+        hook_words = words[:6]
+        one_sentence_hook = " ".join(hook_words)
+
+        title_hook = str(hook_phrase).strip().title()
+        title = f"{title_hook}: {one_sentence_hook}"
+
+        # Cap at 60 characters
+        if len(title) > 60:
+            # Fall back to 4 words
+            one_sentence_hook_short = " ".join(words[:4])
+            title = f"{title_hook}: {one_sentence_hook_short}"
+            if len(title) > 60:
+                # Hard truncate
+                title = title[:57] + "..."
+        return title
+
     async def run(self, mode="shorts", is_test=False):
         print(f"--- Starting Science Pipeline [{mode}] for {self.config.get('channel_id')} ---")
         
@@ -129,6 +163,7 @@ class SciencePipeline(BasePipeline):
         # 7. Generate Portrait Thumbnail
         print("Generating portrait (1080×1920) thumbnail for Shorts...")
         thumb_path = None
+        thumb_info = {}
         try:
             from ..media.thumbnail_generator import ThumbnailGenerator
             thumb_gen = ThumbnailGenerator(size=(1080, 1920))
@@ -144,8 +179,16 @@ class SciencePipeline(BasePipeline):
         except Exception as te:
             print(f"WARNING: Thumbnail generation failed: {te}")
 
-        # 8. Upload
-        video_id = await self._upload(video_path, f"{topic} #Shorts", script, topic, is_test=is_test)
+        # 8. Build punchy title from thumbnail hook phrase
+        hook_phrase = thumb_info.get('hook_phrase', '') if isinstance(thumb_info, dict) else ''
+        if hook_phrase:
+            yt_title = self._get_punchy_title(hook_phrase, script, topic)
+        else:
+            yt_title = f"{topic} #Shorts"
+        print(f"YouTube Shorts title: {yt_title}")
+
+        # 9. Upload
+        video_id = await self._upload(video_path, yt_title, script, topic, is_test=is_test)
 
         # Meta Upload
         if not is_test:
@@ -153,11 +196,11 @@ class SciencePipeline(BasePipeline):
             try:
                 from ..meta.uploader import MetaUploader
                 meta_uploader = MetaUploader()
-                meta_uploader.upload_video(video_path, f"{topic} #Shorts", script, tags=["shorts"])
+                meta_uploader.upload_video(video_path, yt_title, script, tags=["shorts"])
             except Exception as me:
                 print(f"WARNING: Meta Reel cross-posting failed: {me}")
 
-        # 9. Upload Thumbnail
+        # 10. Upload Thumbnail
         if video_id and thumb_path and os.path.exists(thumb_path) and not is_test:
             print(f"Uploading portrait thumbnail for video {video_id}...")
             try:
@@ -233,11 +276,21 @@ class SciencePipeline(BasePipeline):
             
         thumb_path = thumb_gen.generate_thumbnail(thumb_info, first_asset_path=first_asset_path)
 
-        # 11. Upload
+        # 11. Build punchy title from thumbnail hook phrase
+        daily_hook_phrase = ''
+        if isinstance(thumb_info, dict):
+            daily_hook_phrase = thumb_info.get('hook_phrase', '')
+        if daily_hook_phrase:
+            yt_title_daily = self._get_punchy_title(daily_hook_phrase, script, topic)
+        else:
+            yt_title_daily = f"The Science of {topic}: Explained"
+        print(f"YouTube Daily title: {yt_title_daily}")
+
+        # 12. Upload
         if True:
             video_id = await self._upload(
                 video_path,
-                f"The Science of {topic}: Detailed Explanation",
+                yt_title_daily,
                 script, topic,
                 is_test=is_test, is_shorts=False, srt_path=srt_path
             )
@@ -248,11 +301,11 @@ class SciencePipeline(BasePipeline):
                 try:
                     from ..meta.uploader import MetaUploader
                     meta_uploader = MetaUploader()
-                    meta_uploader.upload_video(video_path, f"The Science of {topic}: Detailed Explanation", script, tags=["science"])
+                    meta_uploader.upload_video(video_path, yt_title_daily, script, tags=["science"])
                 except Exception as me:
                     print(f"WARNING: Meta video cross-posting failed: {me}")
 
-            # 12. Upload Thumbnail if video succeeded
+            # 13. Upload Thumbnail if video succeeded
             if video_id and thumb_path and os.path.exists(thumb_path) and not is_test:
                 print(f"Uploading thumbnail for video {video_id}...")
                 self.uploader.upload_thumbnail(video_id, thumb_path)

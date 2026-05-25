@@ -41,6 +41,16 @@ media/*.mp3
 media/*.jpg
 media/*.png
 
+# Automation storage — exclude all generated/temp files, keep only JSON state
+automation/storage/temp_images/
+automation/storage/temp_videos/
+automation/storage/thumbnails/
+automation/storage/*.mp4
+automation/storage/*.mp3
+automation/storage/*.srt
+automation/storage/*.jpg
+automation/storage/*.png
+
 # Block all audio/video by default but allow music folder
 *.mp3
 *.mp4
