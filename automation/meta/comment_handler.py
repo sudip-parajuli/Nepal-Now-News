@@ -4,6 +4,7 @@ import json
 import random
 import requests
 from google import genai
+from google.genai import types
 
 class MetaCommentHandler:
     def __init__(self):
@@ -64,7 +65,15 @@ class MetaCommentHandler:
                 try:
                     response = client.models.generate_content(
                         model=self.model_id,
-                        contents=prompt
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            safety_settings=[
+                                types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_NONE'),
+                                types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_NONE'),
+                                types.SafetySetting(category='HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold='BLOCK_NONE'),
+                                types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_NONE'),
+                            ]
+                        )
                     )
                     return response.text.strip()
                 except Exception as e:
@@ -84,8 +93,15 @@ class MetaCommentHandler:
                         chat_completion = groq_client.chat.completions.create(
                             messages=[{"role": "user", "content": prompt}],
                             model="llama-3.3-70b-versatile",
+                            max_tokens=4096,
+                            user="science-automation",
                         )
-                        result = chat_completion.choices[0].message.content.strip()
+                        msg = chat_completion.choices[0].message
+                        refusal = getattr(msg, 'refusal', None)
+                        if refusal:
+                            print(f"Groq comment key {client_idx+1} refused: {refusal}")
+                            break
+                        result = (msg.content or "").strip()
                         if result:
                             return result
                     except Exception as groq_err:
