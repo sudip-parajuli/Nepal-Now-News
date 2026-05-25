@@ -197,6 +197,18 @@ class MetaUploader:
             res_data = res.json()
             if "video_id" not in res_data:
                 print(f"Facebook Reels initialization failed: {res.text}")
+                if "error" in res_data:
+                    err_msg = res_data["error"].get("message", "")
+                    if "pages_manage_posts" in err_msg or "permission" in err_msg.lower() or "OAuthException" in res_data["error"].get("type", ""):
+                        print("\n" + "!" * 80)
+                        print("CRITICAL: Meta Access Token lacks required permissions (e.g. pages_manage_posts).")
+                        print("ACTION REQUIRED TO RESOLVE:")
+                        print("1. Go to your Meta Developer App -> Graph API Explorer.")
+                        print("2. Ensure your token has 'pages_manage_posts', 'pages_read_engagement', and 'pages_show_list'.")
+                        print("3. IMPORTANT: Make sure you use a PAGE Access Token (obtained via GET /me/accounts),")
+                        print("   NOT a USER Access Token.")
+                        print("4. Update your META_ACCESS_TOKEN GitHub Secret with the new Page Access Token.")
+                        print("!" * 80 + "\n")
                 return None
                 
             video_id = res_data["video_id"]
@@ -255,6 +267,18 @@ class MetaUploader:
             if "id" in res_data:
                 return res_data["id"]
             print(f"Facebook Video upload failed: {res.text}")
+            if "error" in res_data:
+                err_msg = res_data["error"].get("message", "")
+                if "pages_manage_posts" in err_msg or "permission" in err_msg.lower() or "OAuthException" in res_data["error"].get("type", ""):
+                    print("\n" + "!" * 80)
+                    print("CRITICAL: Meta Access Token lacks required permissions (e.g. pages_manage_posts).")
+                    print("ACTION REQUIRED TO RESOLVE:")
+                    print("1. Go to your Meta Developer App -> Graph API Explorer.")
+                    print("2. Ensure your token has 'pages_manage_posts', 'pages_read_engagement', and 'pages_show_list'.")
+                    print("3. IMPORTANT: Make sure you use a PAGE Access Token (obtained via GET /me/accounts),")
+                    print("   NOT a USER Access Token.")
+                    print("4. Update your META_ACCESS_TOKEN GitHub Secret with the new Page Access Token.")
+                    print("!" * 80 + "\n")
             return None
         except Exception as e:
             print(f"Error in _upload_facebook_video: {e}")
