@@ -1,8 +1,9 @@
 import os
 import random
 import time
+import math
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 from moviepy.editor import VideoClip, ImageClip, VideoFileClip
 
 # Size constants will be handled by SceneRenderer instance
@@ -80,6 +81,91 @@ def apply_cinematic_grade(pil_img):
     
     graded = Image.alpha_composite(pil_img.convert("RGBA"), v_img)
     return graded.convert("RGB")
+
+def apply_lens_flare(pil_img, t: float = 0.0, intensity: float = 0.4):
+    """
+    Adds a subtle animated lens flare streak across the image.
+    The flare position slowly drifts over time for a premium cinematic feel.
+    """
+    w, h = pil_img.size
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+    # Flare center drifts from upper-left to upper-right over time
+    cx = int(w * (0.15 + 0.7 * (math.sin(t * 0.3 + 1.0) * 0.5 + 0.5)))
+    cy = int(h * 0.18)
+    # Main flare disc
+    r = int(min(w, h) * 0.04)
+    alpha_main = int(120 * intensity)
+    d.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill=(255, 240, 180, alpha_main))
+    # Flare halo ring
+    r2 = r * 3
+    alpha_halo = int(30 * intensity)
+    d.ellipse([(cx - r2, cy - r2), (cx + r2, cy + r2)], outline=(255, 255, 200, alpha_halo), width=2)
+    # Streak line
+    streak_alpha = int(60 * intensity)
+    d.line([(0, cy + r // 2), (w, cy - r // 2)], fill=(255, 240, 200, streak_alpha), width=2)
+    return Image.alpha_composite(pil_img.convert("RGBA"), overlay).convert("RGB")
+
+def draw_starfield_overlay(draw, width, height, t: float, star_count: int = 80,
+                           seed: int = 42, twinkle: bool = True):
+    """
+    Draws animated stars onto the given ImageDraw canvas.
+    Stars slowly drift and twinkle over time.
+    """
+    rng = random.Random(seed)
+    for _ in range(star_count):
+        sx = rng.randint(0, width)
+        sy = rng.randint(0, height)
+        # Small drift
+        sx = (sx + int(t * rng.uniform(0.1, 0.5))) % width
+        base_brightness = rng.randint(140, 255)
+        if twinkle:
+            twinkle_factor = 0.75 + 0.25 * math.sin(t * rng.uniform(1.5, 4.5) + rng.random() * 6.28)
+        else:
+            twinkle_factor = 1.0
+        brightness = int(base_brightness * twinkle_factor)
+        r = rng.randint(1, 2)
+        draw.ellipse([(sx - r, sy - r), (sx + r, sy + r)],
+                     fill=(brightness, brightness, min(255, brightness + 30), 200))
+
+def draw_scan_lines(img_array: np.ndarray, opacity: float = 0.06) -> np.ndarray:
+    """
+    Overlays subtle horizontal scan-line darkening for a sci-fi monitor effect.
+    """
+    h, w = img_array.shape[:2]
+    mask = np.ones((h, w, 3), dtype=np.float32)
+    # Darken every other 2px band
+    mask[::2, :, :] *= (1.0 - opacity)
+    result = (img_array.astype(np.float32) * mask).clip(0, 255).astype(np.uint8)
+    return result
+
+def draw_data_hud(draw, width, height, t: float, mode='landscape',
+                  color=(0, 240, 255), label: str = "SCIENCE"):
+    """
+    Draws a minimalist HUD corner decoration — corner brackets + animated blinking dot.
+    Gives images a premium futuristic science-channel look.
+    """
+    margin = 28 if mode == 'landscape' else 20
+    bar_len = 50 if mode == 'landscape' else 35
+    thick = 3
+    alpha = 200
+    c = (*color, alpha)
+    # Top-left corner bracket
+    draw.line([(margin, margin), (margin + bar_len, margin)], fill=c, width=thick)
+    draw.line([(margin, margin), (margin, margin + bar_len)], fill=c, width=thick)
+    # Top-right corner bracket
+    draw.line([(width - margin, margin), (width - margin - bar_len, margin)], fill=c, width=thick)
+    draw.line([(width - margin, margin), (width - margin, margin + bar_len)], fill=c, width=thick)
+    # Bottom-left corner bracket
+    draw.line([(margin, height - margin), (margin + bar_len, height - margin)], fill=c, width=thick)
+    draw.line([(margin, height - margin), (margin, height - margin - bar_len)], fill=c, width=thick)
+    # Bottom-right corner bracket
+    draw.line([(width - margin, height - margin), (width - margin - bar_len, height - margin)], fill=c, width=thick)
+    draw.line([(width - margin, height - margin), (width - margin, height - margin - bar_len)], fill=c, width=thick)
+    # Blinking status dot (top-left)
+    if int(t * 2) % 2 == 0:
+        dot_x, dot_y = margin + 12, margin + bar_len + 14
+        draw.ellipse([(dot_x - 5, dot_y - 5), (dot_x + 5, dot_y + 5)], fill=(*color, 230))
 
 def render_lower_third(draw, named_entity, font_bold, font_regular, width, height, mode='landscape'):
     """Draws a premium banner for named entities (top-left for portrait, bottom-left for landscape)."""
@@ -217,6 +303,9 @@ class SceneRenderer:
             img = Image.new("RGB", (self.WIDTH, self.HEIGHT), (15, 18, 22))
             draw = ImageDraw.Draw(img)
             
+            # ── Animated starfield background ────────────────────────────────
+            draw_starfield_overlay(draw, self.WIDTH, self.HEIGHT, t, star_count=60, seed=7331)
+            
             typing_duration = min(3.5, duration)
             if word_offsets and start_time is not None:
                 scene_words = [item for item in word_offsets if start_time - 0.05 <= item['start'] <= start_time + duration + 0.05]
@@ -249,6 +338,12 @@ class SceneRenderer:
                     word_len = len(word)
                     
                     if chars_drawn + word_len <= visible_chars:
+                        # Draw neon glow for highlighted words
+                        if item['highlight']:
+                            for glow_r in range(1, 4):
+                                draw.text((x, y + text_baseline_offset), word, font=font,
+                                          fill=(COLOR_HIGHLIGHT[0], COLOR_HIGHLIGHT[1], COLOR_HIGHLIGHT[2], 60 // glow_r),
+                                          stroke_width=glow_r, anchor="ls")
                         draw.text((x, y + text_baseline_offset), word, fill=color, font=font, anchor="ls")
                         chars_drawn += word_len
                         x += item['w']
@@ -273,8 +368,14 @@ class SceneRenderer:
             if not cursor_drawn and chars_drawn >= total_chars:
                 if int(t * 3.5) % 2 == 0:
                     draw.rectangle([(last_x + 8, last_y + 15), (last_x + 14, last_y + text_baseline_offset + 5)], fill=COLOR_HIGHLIGHT)
-                    
-            return np.array(img)
+
+            # ── HUD corner brackets ──────────────────────────────────────────
+            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode,
+                          color=COLOR_HIGHLIGHT, label="SCIENCE")
+            img_arr = np.array(img)
+            # Subtle scan-lines for screen aesthetic
+            img_arr = draw_scan_lines(img_arr, opacity=0.04)
+            return img_arr
 
         clip = VideoClip(make_frame, duration=duration)
         return clip.set_fps(30)
@@ -318,6 +419,10 @@ class SceneRenderer:
             overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 100))
             o_draw = ImageDraw.Draw(overlay)
             o_draw.rectangle([(80, 0), (90, self.HEIGHT)], fill=(0, 240, 255, 255))
+            
+            # ── Starfield particles overlay ──────────────────────────────────
+            draw_starfield_overlay(o_draw, self.WIDTH, self.HEIGHT, t,
+                                   star_count=50, seed=1234, twinkle=True)
             img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
             draw = ImageDraw.Draw(img)
             
@@ -339,8 +444,12 @@ class SceneRenderer:
             for line in lines:
                 draw.text((155, ny), line, fill=(200, 200, 200), font=narration_font)
                 ny += int(42 * (1.2 if self.mode == 'portrait' else 1.0))
-                
-            return np.array(img)
+            
+            # ── HUD + scan-lines ─────────────────────────────────────────────
+            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode)
+            img_arr = np.array(img)
+            img_arr = draw_scan_lines(img_arr, opacity=0.07)
+            return img_arr
 
         clip = VideoClip(make_frame, duration=duration)
         return clip.set_fps(30)
@@ -397,22 +506,51 @@ class SceneRenderer:
                     x_start = int(max_x * (t / duration))
                     y_start = (img_h - ch) // 2
             else:
-                scale = 1.0 + 0.08 * (t / duration)
-                cw, ch = int(self.WIDTH / scale), int(self.HEIGHT / scale)
-                x_start = (img_w - cw) // 2
-                y_start = (img_h - ch) // 2
+                # Landscape: alternate between 3 Ken Burns moves
+                if pan_type == 0:
+                    # Zoom in from center
+                    scale = 1.0 + 0.08 * (t / duration)
+                    cw, ch = int(self.WIDTH / scale), int(self.HEIGHT / scale)
+                    x_start = (img_w - cw) // 2
+                    y_start = (img_h - ch) // 2
+                elif pan_type == 1:
+                    # Pan right while zooming in slightly
+                    scale = 1.0 + 0.06 * (t / duration)
+                    cw, ch = int(self.WIDTH / scale), int(self.HEIGHT / scale)
+                    max_x = max(0, img_w - cw)
+                    x_start = int(max_x * (t / duration))
+                    y_start = (img_h - ch) // 2
+                else:
+                    # Zoom out (pull back)
+                    scale = 1.08 - 0.08 * (t / duration)
+                    cw, ch = int(self.WIDTH / scale), int(self.HEIGHT / scale)
+                    x_start = max(0, (img_w - cw) // 2)
+                    y_start = max(0, (img_h - ch) // 2)
 
+            x_start = max(0, min(x_start, max(0, img_w - cw)))
+            y_start = max(0, min(y_start, max(0, img_h - ch)))
             cropped = pil_img.crop((x_start, y_start, x_start + cw, y_start + ch))
             
             resized = cropped.resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
             graded = apply_cinematic_grade(resized)
             
-            # Composite named entity pill if present
+            # ── Lens flare effect (landscape only for max visual impact) ──────
+            if self.mode != 'portrait':
+                graded = apply_lens_flare(graded, t=t, intensity=0.25)
+
+            # ── HUD corner brackets overlay ──────────────────────────────────
+            graded_rgba = graded.convert("RGBA")
+            hud_overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
+            hud_draw = ImageDraw.Draw(hud_overlay)
+            draw_data_hud(hud_draw, self.WIDTH, self.HEIGHT, t, mode=self.mode,
+                          color=(0, 240, 255), label="SCIENCE")
+            graded_rgba = Image.alpha_composite(graded_rgba, hud_overlay)
+
+            # ── Composite named entity pill if present ───────────────────────
             if lt_overlay:
-                graded_rgba = Image.alpha_composite(graded.convert("RGBA"), lt_overlay)
-                return np.array(graded_rgba.convert("RGB"))
+                graded_rgba = Image.alpha_composite(graded_rgba, lt_overlay)
                 
-            return np.array(graded)
+            return np.array(graded_rgba.convert("RGB"))
 
         clip = VideoClip(make_frame, duration=duration)
         return clip.set_fps(30)

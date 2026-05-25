@@ -267,8 +267,19 @@ class ImageFetcher:
                 "iiprop": "url|extmetadata",
             }
             headers = {'User-Agent': 'ScienceFactsBot/1.0 (contact@example.com)'}
-            response = requests.get(url, params=params, headers=headers, timeout=12)
-            data = response.json()
+            response = requests.get(url, params=params, headers=headers, timeout=15)
+            
+            # Guard against empty/non-JSON response bodies
+            raw = response.text.strip()
+            if not raw:
+                print(f"Wikimedia Search Error: empty response for '{clean_query}'")
+                return []
+            
+            try:
+                data = response.json()
+            except Exception as json_err:
+                print(f"Wikimedia Search Error: non-JSON response for '{clean_query}': {json_err}")
+                return []
 
             image_urls = []
             pages = data.get("query", {}).get("pages", {})

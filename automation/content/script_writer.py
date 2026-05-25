@@ -109,6 +109,8 @@ class ScriptWriter:
         - DO NOT include music cues or labels like [Narrator].
         """
         script = self._call_with_retry(prompt)
+        if "Maximum retries" in script or not script.strip():
+            return f"Did you know that the science of *{topic}* contains mysteries that continue to challenge researchers? Across the cosmos, these phenomena push the boundaries of physics, reminding us of how much remains to be discovered."
         return self.clean_script(script)
     def expand_science_script(self, topic: str) -> str:
         """
@@ -161,6 +163,8 @@ class ScriptWriter:
         """
         
         script = self._call_with_retry(prompt)
+        if "Maximum retries" in script or not script.strip():
+            return f"The universe is full of mysteries, and *{topic}* is one of the most intriguing. For centuries, researchers have sought to understand its complex mechanisms. From molecular scales to cosmic proportions, this phenomenon continues to redefine our understanding of nature. As we look closer, we uncover secrets that challenge our conventional theories. In the end, it reminds us that our search for knowledge is an endless journey."
         return self.clean_script(script)
 
     def clean_script(self, text: str) -> str:

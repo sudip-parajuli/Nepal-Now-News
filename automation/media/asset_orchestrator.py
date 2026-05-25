@@ -128,6 +128,10 @@ class AssetOrchestrator:
                 f"{image_cue} cinematic 4k",
                 f"{image_cue} space astronomy",
             ]
+            # Sleep slightly to avoid DDG rate limits between scenes
+            if idx > 0:
+                import time
+                time.sleep(2.5)
             paths = self.image_fetcher.fetch_multi_images(
                 queries,
                 base_filename=f"job_{job_id}_scene{idx}",

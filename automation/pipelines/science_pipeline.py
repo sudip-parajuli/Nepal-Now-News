@@ -199,7 +199,7 @@ class SciencePipeline(BasePipeline):
             word_offsets,
             media_paths=media_paths,
             asset_manifest=asset_manifest,
-            burn_captions=True,
+            burn_captions=False,  # YouTube provides subtitles via uploaded SRT
         )
 
         # 8. Cleanup temp job assets after successful render
@@ -256,9 +256,6 @@ class SciencePipeline(BasePipeline):
         print(f"Fetching {len(combined_keywords)} potential images for Science content...")
         img_paths = self.image_fetcher.fetch_multi_images(combined_keywords, "science_temp", topic_context=topic)
         media_paths.extend(img_paths)
-        
-        return media_paths
-        
         
         return media_paths
 

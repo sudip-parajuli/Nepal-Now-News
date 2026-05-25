@@ -335,6 +335,10 @@ class VideoLongGenerator:
                         sfx_path = os.path.join(sfx_dir, "dong.mp3")
                         if os.path.exists(sfx_path):
                             self.sfx_events.append({"time": start_t, "file": "dong.mp3"})
+                    elif trans == "cut":
+                        sfx_path = os.path.join(sfx_dir, "sweep.mp3")
+                        if os.path.exists(sfx_path):
+                            self.sfx_events.append({"time": start_t, "file": "sweep.mp3"})
 
         elif media_paths and len(media_paths) > 0:
             # Multi-media background (e.g. Science long form)
@@ -582,6 +586,8 @@ class VideoLongGenerator:
 
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
         
+        audio_mix = [audio.volumex(1.15)]
+        
         music_files = []
         science_music_dirs = ["automation/music/science"]
         for sdir in science_music_dirs:
@@ -603,25 +609,29 @@ class VideoLongGenerator:
                     bg_music = bg_music.set_duration(total_duration)
                 
                 # Dimmer volume as requested: 0.04 instead of 0.07/0.12
-                # Dimmer volume as requested: 0.04 instead of 0.07/0.12
                 bg_music = bg_music.volumex(0.04)
-                
-                audio_mix = [audio.volumex(1.15), bg_music]
-                
-                # Add gathered SFX
-                if hasattr(self, 'sfx_events') and self.sfx_events:
-                     sfx_dir = "automation/media/sfx"
-                     for event in self.sfx_events:
-                         sfx_file = event['file']
-                         sfx_path = os.path.join(sfx_dir, sfx_file)
-                         if os.path.exists(sfx_path):
-                             sfx_clip = AudioFileClip(sfx_path).set_start(event['time']).volumex(0.5)
-                             audio_mix.append(sfx_clip)
-
-                from moviepy.audio.AudioClip import CompositeAudioClip
-                final_audio = CompositeAudioClip(audio_mix)
-                final_video = final_video.set_audio(final_audio)
+                audio_mix.append(bg_music)
             except Exception as e:
                 print(f"Music Loop Error: {e}")
-                final_video = final_video.set_audio(audio)
+
+        # Add gathered SFX
+        if hasattr(self, 'sfx_events') and self.sfx_events:
+             sfx_dir = "automation/media/sfx"
+             for event in self.sfx_events:
+                  sfx_file = event['file']
+                  sfx_path = os.path.join(sfx_dir, sfx_file)
+                  if os.path.exists(sfx_path):
+                      try:
+                          sfx_clip = AudioFileClip(sfx_path).set_start(event['time']).volumex(0.5)
+                          audio_mix.append(sfx_clip)
+                      except Exception as e:
+                          print(f"SFX load error for {sfx_file}: {e}")
+
+        try:
+            from moviepy.audio.AudioClip import CompositeAudioClip
+            final_audio = CompositeAudioClip(audio_mix)
+            final_video = final_video.set_audio(final_audio)
+        except Exception as e:
+            print(f"Audio mix composite error: {e}")
+            final_video = final_video.set_audio(audio)
         final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=1, logger=None)
