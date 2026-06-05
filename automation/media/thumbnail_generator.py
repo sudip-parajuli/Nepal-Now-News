@@ -95,13 +95,23 @@ class ThumbnailGenerator:
         """Downloads an image from a URL and saves it to storage."""
         save_path = os.path.join(self.output_dir, filename)
         try:
-            resp = requests.get(url, timeout=15)
-            if resp.status_code == 200:
+            headers = {
+                'User-Agent': (
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/124.0.0.0 Safari/537.36'
+                )
+            }
+            resp = requests.get(url, timeout=20, headers=headers)
+            if resp.status_code != 200:
+                print(f"[Thumbnail] Download HTTP {resp.status_code} for: {url[:80]}")
+                return None
+            if len(resp.content) > 500:
                 with open(save_path, 'wb') as f:
                     f.write(resp.content)
                 return save_path
         except Exception as e:
-            print(f"Error downloading {url}: {e}")
+            print(f"[Thumbnail] Download error {url[:80]}: {e}")
         return None
 
     def generate_science_thumbnail(self, info: dict, output_path: str = None, first_asset_path: str = None) -> str:
@@ -324,41 +334,55 @@ class ThumbnailGenerator:
         return output_path
 
     def _fetch_ai_background(self, prompt: str) -> str:
-        """Fetches a high-quality background from Pollinations.ai."""
+        """Fetches a high-quality background from Pollinations.ai.
+        Tries flux-schnell first, then bare default if that fails.
+        """
         clean_prompt = re.sub(r'[^a-zA-Z0-9 ]', ' ', prompt).strip()
         full_prompt = f"cinematic 4k high contrast {clean_prompt}, vibrant colors, photorealistic, no people, no text"
         encoded = requests.utils.quote(full_prompt)
         seed = random.randint(1000, 999999)
-        url = f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true"
-        
         save_path = os.path.join(self.output_dir, "temp_bg.jpg")
-        try:
-            response = requests.get(url, timeout=60)
-            if response.status_code == 200:
-                with open(save_path, 'wb') as f:
-                    f.write(response.content)
-                return save_path
-        except Exception as e:
-            print(f"Error fetching thumbnail background: {e}")
+        candidate_urls = [
+            f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true&model=flux-schnell",
+            f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true",
+        ]
+        for url in candidate_urls:
+            try:
+                response = requests.get(url, timeout=60)
+                if response.status_code == 200 and len(response.content) > 1000:
+                    with open(save_path, 'wb') as f:
+                        f.write(response.content)
+                    return save_path
+                else:
+                    print(f"[Thumbnail] Pollinations bg HTTP {response.status_code}.")
+            except Exception as e:
+                print(f"[Thumbnail] Pollinations bg error: {e}")
         return None
 
     def _fetch_ai_subject(self, prompt: str) -> str:
-        """Fetches a high-quality subject image from Pollinations.ai centered on a black background."""
+        """Fetches a subject image from Pollinations.ai centered on a black background.
+        Tries flux-schnell first, then bare default if that fails.
+        """
         clean_prompt = re.sub(r'[^a-zA-Z0-9 ]', ' ', prompt).strip()
         full_prompt = f"cinematic 4k macro shot of {clean_prompt}, deep black background, centered, photorealistic, no watermark, no text"
         encoded = requests.utils.quote(full_prompt)
         seed = random.randint(1000, 999999)
-        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&seed={seed}&nologo=true"
-        
         save_path = os.path.join(self.output_dir, "temp_thumb_subject.jpg")
-        try:
-            response = requests.get(url, timeout=60)
-            if response.status_code == 200:
-                with open(save_path, 'wb') as f:
-                    f.write(response.content)
-                return save_path
-        except Exception as e:
-            print(f"Error fetching thumbnail subject: {e}")
+        candidate_urls = [
+            f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&seed={seed}&nologo=true&model=flux-schnell",
+            f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&seed={seed}&nologo=true",
+        ]
+        for url in candidate_urls:
+            try:
+                response = requests.get(url, timeout=60)
+                if response.status_code == 200 and len(response.content) > 1000:
+                    with open(save_path, 'wb') as f:
+                        f.write(response.content)
+                    return save_path
+                else:
+                    print(f"[Thumbnail] Pollinations subject HTTP {response.status_code}.")
+            except Exception as e:
+                print(f"[Thumbnail] Pollinations subject error: {e}")
         return None
 
     def _load_font(self, fsize=120):

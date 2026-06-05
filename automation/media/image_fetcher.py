@@ -80,14 +80,19 @@ class ImageFetcher:
             )
             paths.extend(nasa_paths)
 
-        # --- Tier 4: AI Generation via Pollinations.ai (GUARANTEED fallback) ---
+        # --- Tier 4: AI Generation via Pollinations.ai ---
         if len(paths) < 3:
             needed = 4 - len(paths)
             print(f"All image sources failed. Generating {needed} AI image(s) via Pollinations.ai...")
-            # Use the topic or first query as the prompt
             ai_prompt = topic_context or (unique_queries[0] if unique_queries else "deep space cosmos")
             ai_paths = self._generate_pollinations_images(ai_prompt, base_filename, count=needed)
             paths.extend(ai_paths)
+
+        # --- Tier 5: PIL Gradient (100% reliable, no network) ---
+        if not paths:
+            print("All network image sources failed. Generating gradient backgrounds locally...")
+            gradient_paths = self._generate_gradient_backgrounds(base_filename, count=min(4, images_needed))
+            paths.extend(gradient_paths)
 
         if not paths:
             print("CRITICAL: All image fetch tiers failed. Video will use solid color background.")
@@ -227,28 +232,80 @@ class ImageFetcher:
         return paths
 
     def _generate_pollinations_images(self, prompt: str, base_filename: str, count: int = 4) -> list:
-        """Generate images via Pollinations.ai (free, no API key required)."""
+        """Generate images via Pollinations.ai (free, no API key required).
+        Tries two URL variants per image (flux-schnell model then default) to maximise
+        the chance of success when one Pollinations endpoint is rate-limited.
+        """
         paths = []
-        # Clean the prompt for URL safety
         clean_prompt = re.sub(r'[^a-zA-Z0-9 ]', ' ', prompt).strip()
-        # Make it cinematic/scientific
         full_prompt = f"cinematic 4k photo of {clean_prompt}, deep space, photorealistic, no people"
         encoded = requests.utils.quote(full_prompt)
         for i in range(count):
             seed = random.randint(1000, 999999)
-            url = f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true"
             filename = f"{base_filename}_{len(paths)}_ai.jpg"
-            try:
-                print(f"Generating AI image {i+1}/{count} via Pollinations.ai (seed={seed})...")
+            print(f"Generating AI image {i+1}/{count} via Pollinations.ai (seed={seed})...")
+            # Try two URL variants — model=flux-schnell first (faster), then bare default
+            candidate_urls = [
+                f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true&model=flux-schnell",
+                f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true",
+            ]
+            path = None
+            for url in candidate_urls:
                 path = self._download_image(url, filename)
                 if path:
-                    paths.append(path)
-                else:
-                    print(f"Pollinations.ai image {i+1} download failed.")
-                time.sleep(2)  # Be polite to the free API
-            except Exception as e:
-                print(f"Pollinations.ai error for image {i+1}: {e}")
+                    break
+                time.sleep(1)
+            if path:
+                paths.append(path)
+            else:
+                print(f"Pollinations.ai image {i+1} download failed (both variants).")
+            time.sleep(2)
         print(f"Pollinations.ai: generated {len(paths)}/{count} image(s).")
+        return paths
+
+    def _generate_gradient_backgrounds(self, base_filename: str, count: int = 4) -> list:
+        """Generate cinematic gradient images using only PIL — no network required.
+        This is the final guaranteed fallback so the video always has a real background.
+        """
+        from PIL import Image as PilImage, ImageDraw, ImageFilter
+        paths = []
+        # Science-themed colour palettes: (top, mid, bottom)
+        palettes = [
+            ((5, 0, 30),   (0, 30, 80),   (0, 80, 150)),   # Deep-space blue
+            ((10, 0, 40),  (40, 0, 80),   (80, 20, 100)),   # Purple nebula
+            ((0, 15, 30),  (0, 50, 80),   (0, 100, 120)),   # Teal ocean
+            ((20, 5, 0),   (60, 20, 0),   (100, 40, 10)),   # Amber star
+            ((0, 20, 20),  (0, 60, 60),   (0, 120, 100)),   # Emerald aurora
+            ((15, 0, 20),  (50, 0, 60),   (90, 10, 80)),    # Magenta cosmos
+        ]
+        for i in range(count):
+            top, mid, bot = palettes[i % len(palettes)]
+            try:
+                img = PilImage.new('RGB', (1280, 720))
+                draw = ImageDraw.Draw(img)
+                for y in range(720):
+                    t = y / 719.0
+                    if t < 0.5:
+                        s = t / 0.5
+                        r = int(top[0] + (mid[0] - top[0]) * s)
+                        g = int(top[1] + (mid[1] - top[1]) * s)
+                        b = int(top[2] + (mid[2] - top[2]) * s)
+                    else:
+                        s = (t - 0.5) / 0.5
+                        r = int(mid[0] + (bot[0] - mid[0]) * s)
+                        g = int(mid[1] + (bot[1] - mid[1]) * s)
+                        b = int(mid[2] + (bot[2] - mid[2]) * s)
+                    draw.line([(0, y), (1279, y)], fill=(r, g, b))
+                # Slight blur for a soft cinematic feel
+                img = img.filter(ImageFilter.GaussianBlur(radius=3))
+                filename = f"{base_filename}_{i}_grad.jpg"
+                save_path = os.path.join(self.download_dir, filename)
+                img.save(save_path, "JPEG", quality=85)
+                paths.append(save_path)
+            except Exception as e:
+                print(f"Gradient image {i+1} error: {e}")
+        if paths:
+            print(f"Generated {len(paths)} gradient background(s) locally.")
         return paths
 
     def _search_wikimedia(self, query: str, max_results: int = 20) -> list:
@@ -299,33 +356,63 @@ class ImageFetcher:
             return []
 
     def _download_image(self, url: str, filename: str) -> str:
+        """Download a single image URL and validate it with PIL.
+        Key fixes vs. original:
+        - Proper full Chrome User-Agent (Wikimedia / CDNs reject truncated UAs)
+        - Wikimedia-specific Referer header (required by their CDN policy)
+        - Explicit logging for non-200 responses (was silent before, hiding failures)
+        """
         filename = "".join([c if c.isalnum() or c in "._-" else "_" for c in filename])
         save_path = os.path.join(self.download_dir, filename)
+        is_wikimedia = "wikimedia.org" in url or "wikipedia.org" in url
+        headers = {
+            # Full, valid Chrome UA — truncated UAs are rejected by Wikimedia CDN
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/124.0.0.0 Safari/537.36'
+            ),
+        }
+        if is_wikimedia:
+            # Wikimedia CDN requires a Referer from their own domain
+            headers['Referer'] = 'https://commons.wikimedia.org/'
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) UserAgent'}
-            # Pollinations.ai can take 30-60s to generate an image on first request
-            dl_timeout = 90 if "pollinations.ai" in url else 20
+            # Pollinations.ai can take 30-90s to generate an image on first request
+            dl_timeout = 90 if "pollinations.ai" in url else 25
             response = requests.get(url, timeout=dl_timeout, headers=headers)
-            if response.status_code == 200 and len(response.content) > 1000: # Lowered min size slightly
-                with open(save_path, 'wb') as f:
-                    f.write(response.content)
-                
-                # VALIDATE IMAGE
+
+            # ── Log non-200 responses explicitly (was silent before) ──────────
+            if response.status_code != 200:
+                short_url = url.encode('ascii', 'ignore').decode('ascii')[:90]
+                print(f"Download HTTP {response.status_code}: {short_url}")
+                return None
+
+            if len(response.content) <= 1000:
+                print(f"Download too small ({len(response.content)}B), skipping.")
+                return None
+
+            with open(save_path, 'wb') as f:
+                f.write(response.content)
+
+            # VALIDATE IMAGE
+            try:
+                from PIL import Image
+                with Image.open(save_path) as img:
+                    img.verify()  # Raises on corrupt/truncated files
+                return save_path
+            except Exception as e:
+                clean_url = url.encode('ascii', 'ignore').decode('ascii')
+                clean_e = str(e).encode('ascii', 'ignore').decode('ascii')
+                print(f"Invalid image ({clean_url[:70]}): {clean_e}")
                 try:
-                    from PIL import Image
-                    with Image.open(save_path) as img:
-                        img.verify() # Check for corruption
-                    return save_path
-                except Exception as e:
-                    clean_url = url.encode('ascii', 'ignore').decode('ascii')
-                    clean_e = str(e).encode('ascii', 'ignore').decode('ascii')
-                    print(f"Invalid image downloaded ({clean_url}): {clean_e}")
                     os.remove(save_path)
-                    return None
+                except OSError:
+                    pass
+                return None
         except Exception as e:
             clean_url = url.encode('ascii', 'ignore').decode('ascii')
             clean_e = str(e).encode('ascii', 'ignore').decode('ascii')
-            print(f"Download Error ({clean_url}): {clean_e}")
+            print(f"Download Error ({clean_url[:70]}): {clean_e}")
         return None
 
     def fetch_image(self, query: str, filename: str) -> str:

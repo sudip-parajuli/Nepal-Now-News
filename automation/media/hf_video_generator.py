@@ -87,26 +87,40 @@ def _validate_video_ffprobe(filepath: str) -> bool:
 
 
 def _fallback_pollinations_image(prompt: str, output_dir: str, scene_idx: int) -> str | None:
-    """Generate a fallback image via Pollinations.ai when HF video fails."""
+    """Generate a fallback image via Pollinations.ai when HF video fails.
+    Tries flux-schnell model first (faster generation), then bare default URL.
+    Logs the HTTP status code on failure so we know WHY it failed (402, timeout, etc.).
+    """
     import re
     clean_prompt = re.sub(r"[^a-zA-Z0-9 ]", " ", prompt).strip()
     full_prompt = f"cinematic 4k, {clean_prompt}, deep space, photorealistic, no people, dramatic lighting"
     encoded = requests.utils.quote(full_prompt)
     seed = (scene_idx * 31337) % 999999
-    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true"
     fallback_path = os.path.join(output_dir, f"scene_{scene_idx}_fallback.jpg")
-    try:
-        print(f"[HFVideoGen] Falling back to Pollinations.ai image for scene {scene_idx}...")
-        resp = requests.get(url, timeout=90)
-        if resp.status_code == 200 and len(resp.content) > 5000:
-            with open(fallback_path, "wb") as f:
-                f.write(resp.content)
-            print(f"[HFVideoGen] Fallback image saved: {fallback_path}")
-            return fallback_path
-        else:
-            print(f"[HFVideoGen] Pollinations fallback failed (status={resp.status_code})")
-    except Exception as e:
-        print(f"[HFVideoGen] Pollinations fallback error: {e}")
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    candidate_urls = [
+        f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true&model=flux-schnell",
+        f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&seed={seed}&nologo=true",
+    ]
+    print(f"[HFVideoGen] Falling back to Pollinations.ai image for scene {scene_idx}...")
+    for url in candidate_urls:
+        try:
+            resp = requests.get(url, timeout=90, headers=headers)
+            if resp.status_code == 200 and len(resp.content) > 5000:
+                with open(fallback_path, "wb") as f:
+                    f.write(resp.content)
+                print(f"[HFVideoGen] Fallback image saved: {fallback_path}")
+                return fallback_path
+            else:
+                print(f"[HFVideoGen] Pollinations fallback HTTP {resp.status_code} (size={len(resp.content)}B).")
+        except Exception as e:
+            print(f"[HFVideoGen] Pollinations fallback error: {e}")
     return None
 
 

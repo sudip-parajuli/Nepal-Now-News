@@ -121,11 +121,19 @@ class HumeTTS:
                     self.BASE_URL, headers=headers, json=payload, timeout=90
                 )
 
-                # Quota / auth errors — rotate to next key
-                if resp.status_code in (401, 402, 403, 429):
+                # Quota / auth / credit-exhaustion errors — rotate to next key.
+                # Hume returns 400 (not 402) for "Exhausted credit balance".
+                is_credit_error = (
+                    resp.status_code in (401, 402, 403, 429)
+                    or (
+                        resp.status_code == 400
+                        and any(kw in resp.text.lower() for kw in ("credit", "zero_credits", "exhausted"))
+                    )
+                )
+                if is_credit_error:
                     print(
-                        f"HumeTTS: Key {attempt} returned {resp.status_code} "
-                        f"({resp.text[:120]}). Trying next key..."
+                        f"HumeTTS: Key {attempt} quota/credit exhausted "
+                        f"(HTTP {resp.status_code}). Trying next key..."
                     )
                     continue
 
