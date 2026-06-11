@@ -386,69 +386,90 @@ class SceneRenderer:
         """
         font_path_bold = get_font_path("condensed_bold")
         font_path_reg = get_font_path("regular")
-        
-        bg_img = Image.open(bg_path).convert("RGB").resize((self.WIDTH, self.HEIGHT))
-        bg_graded = apply_cinematic_grade(bg_img)
-        
-        # Parse value: number or string
+
+        bg_path = self._ensure_background_image(bg_path, scene_idx=1)
+        bg_img = Image.open(bg_path).convert("RGB")
+        bg_graded = apply_cinematic_grade(self._cover_image(bg_img))
+
         val_str = str(stat_data.get("value", "0"))
         unit = str(stat_data.get("unit", ""))
         label = str(stat_data.get("label", "Key Statistic")).upper()
-        
-        # Try extracting digits for animation
+
         digits = "".join(c for c in val_str if c.isdigit())
         final_val = int(digits) if digits else 0
         non_digits = "".join(c for c in val_str if not c.isdigit())
-        
+
         def make_frame(t):
-            # Counter counts up over first 1.6s using ease-out
             anim_dur = min(1.6, duration)
             if t < anim_dur:
-                fraction = 1.0 - (1.0 - t / anim_dur)**3  # ease-out cubic
+                fraction = 1.0 - (1.0 - t / anim_dur) ** 3
                 cur_val = int(fraction * final_val)
             else:
                 cur_val = final_val
-                
+
             display_val = f"{cur_val:,}" + non_digits
             if unit:
                 display_val += " " + unit
-                
-            img = bg_graded.copy()
-            
-            # Left border accent bar for premium look
-            overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 100))
+
+            motion = 1.0 + 0.08 * (t / max(duration, 0.001))
+            cw = int(self.WIDTH / motion)
+            ch = int(self.HEIGHT / motion)
+            x = max(0, (self.WIDTH - cw) // 2)
+            y = max(0, (self.HEIGHT - ch) // 2)
+            img = bg_graded.crop((x, y, x + cw, y + ch)).resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS).convert("RGBA")
+
+            overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
             o_draw = ImageDraw.Draw(overlay)
-            o_draw.rectangle([(80, 0), (90, self.HEIGHT)], fill=(0, 240, 255, 255))
-            
-            # ── Starfield particles overlay ──────────────────────────────────
-            draw_starfield_overlay(o_draw, self.WIDTH, self.HEIGHT, t,
-                                   star_count=50, seed=1234, twinkle=True)
-            img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+            panel_margin = 70 if self.mode == "portrait" else 150
+            o_draw.rounded_rectangle(
+                [(panel_margin, self.HEIGHT // 2 - (260 if self.mode == "portrait" else 210)),
+                 (self.WIDTH - panel_margin, self.HEIGHT // 2 + (260 if self.mode == "portrait" else 210))],
+                radius=28,
+                fill=(5, 10, 25, 185),
+            )
+            o_draw.rectangle([(70 if self.mode == "portrait" else 120, 0), (82 if self.mode == "portrait" else 132, self.HEIGHT)], fill=(0, 240, 255, 255))
+            draw_starfield_overlay(o_draw, self.WIDTH, self.HEIGHT, t, star_count=55, seed=1234, twinkle=True)
+            img = Image.alpha_composite(img, overlay).convert("RGB")
             draw = ImageDraw.Draw(img)
-            
-            # Huge Stat Value
-            stat_font = ImageFont.truetype(font_path_bold, int(180 * (1.2 if self.mode == 'portrait' else 1.0)))
-            draw.text((150, self.HEIGHT // 2 - 120), display_val, fill=(0, 240, 255), font=stat_font)
-            
-            # Label
-            label_font = ImageFont.truetype(font_path_reg, int(45 * (1.2 if self.mode == 'portrait' else 1.0)))
-            draw.text((155, self.HEIGHT // 2 + 70), label, fill=(255, 255, 255), font=label_font)
-            
-            # Context narration printed smaller
-            narration_font = ImageFont.truetype(font_path_reg, int(32 * (1.2 if self.mode == 'portrait' else 1.0)))
-            lines = wrap_text(text, narration_font, self.WIDTH - 300)
-            if self.mode == 'portrait':
-                ny = self.HEIGHT // 2 + 180  # Center-to-lower region, safe from YT UI overlays
-            else:
-                ny = self.HEIGHT - 180
-            for line in lines:
-                draw.text((155, ny), line, fill=(200, 200, 200), font=narration_font)
-                ny += int(42 * (1.2 if self.mode == 'portrait' else 1.0))
-            
-            # ── HUD + scan-lines ─────────────────────────────────────────────
-            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode)
+
+            pulse = 1.0 + 0.08 * math.sin(t * 5.0)
+            stat_font_size = int(175 * (1.18 if self.mode == "portrait" else 1.0) * pulse)
+            stat_font = ImageFont.truetype(font_path_bold, stat_font_size)
+            try:
+                vw = stat_font.getbbox(display_val)[2] - stat_font.getbbox(display_val)[0]
+                vh = stat_font.getbbox(display_val)[3] - stat_font.getbbox(display_val)[1]
+            except AttributeError:
+                vw = draw.textlength(display_val, font=stat_font)
+                vh = stat_font_size
+            vx = (self.WIDTH - vw) // 2
+            vy = self.HEIGHT // 2 - vh // 2 - 35
+
+            for r in range(8, 0, -1):
+                draw.text((vx, vy), display_val, font=stat_font, fill=(0, 240, 255, int(55 / r)), stroke_width=r * 2)
+            draw.text((vx + 3, vy + 3), display_val, font=stat_font, fill=(0, 0, 0, 160), stroke_width=4, stroke_fill=(0, 0, 0, 180))
+            draw.text((vx, vy), display_val, font=stat_font, fill=(0, 240, 255), stroke_width=3, stroke_fill=(0, 0, 0, 180))
+
+            label_font = ImageFont.truetype(font_path_reg, int(44 * (1.18 if self.mode == "portrait" else 1.0)))
+            try:
+                lw = label_font.getbbox(label)[2] - label_font.getbbox(label)[0]
+            except AttributeError:
+                lw = draw.textlength(label, font=label_font)
+            draw.text(((self.WIDTH - lw) // 2, vy + vh + 45), label, fill=(255, 255, 255), font=label_font)
+
+            narration_font = ImageFont.truetype(font_path_reg, int(30 * (1.18 if self.mode == "portrait" else 1.0)))
+            lines = wrap_text(text, narration_font, self.WIDTH - 260)
+            ny = self.HEIGHT // 2 + (210 if self.mode == "portrait" else 145)
+            for line in lines[:3]:
+                try:
+                    line_w = narration_font.getbbox(line)[2] - narration_font.getbbox(line)[0]
+                except AttributeError:
+                    line_w = draw.textlength(line, font=narration_font)
+                draw.text(((self.WIDTH - line_w) // 2, ny), line, fill=(210, 220, 235), font=narration_font)
+                ny += int(40 * (1.18 if self.mode == "portrait" else 1.0))
+
+            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode, color=(0, 240, 255), label="STAT")
             img_arr = np.array(img)
-            img_arr = draw_scan_lines(img_arr, opacity=0.07)
+            img_arr = draw_scan_lines(img_arr, opacity=0.06)
             return img_arr
 
         clip = VideoClip(make_frame, duration=duration)
@@ -557,347 +578,322 @@ class SceneRenderer:
 
     def render_ai_video(self, video_path: str, duration: float) -> VideoClip:
         """
-        Loads, scales, and loops the downloaded AI video file, applying cinematic grading.
+        Loads, loops, and cover-crops an AI video clip without stretching.
         """
         vc = VideoFileClip(video_path)
-        
-        # Loop video to match requested duration
         if vc.duration < duration:
             from moviepy.video.fx.all import loop
             vc = loop(vc, duration=duration)
         else:
             vc = vc.subclip(0, duration)
-            
-        vc = vc.resize(newsize=(self.WIDTH, self.HEIGHT))
-        
-        # Apply cinematic grade frame by frame
-        def grade_filter(frame):
-            pil_frm = Image.fromarray(frame)
-            graded = apply_cinematic_grade(pil_frm)
-            return np.array(graded)
-            
-        return vc.fl_image(grade_filter).set_fps(30)
+
+        target_ratio = self.WIDTH / self.HEIGHT
+
+        def cover_grade(frame):
+            pil_frm = Image.fromarray(frame).convert("RGB")
+            iw, ih = pil_frm.size
+            if iw / ih > target_ratio:
+                new_h = int(iw / target_ratio)
+                y = max(0, (ih - new_h) // 2)
+                pil_frm = pil_frm.crop((0, y, iw, y + new_h))
+            else:
+                new_w = int(ih * target_ratio)
+                x = max(0, (iw - new_w) // 2)
+                pil_frm = pil_frm.crop((x, 0, x + new_w, ih))
+            pil_frm = pil_frm.resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
+            return np.array(apply_cinematic_grade(pil_frm))
+
+        return vc.fl_image(cover_grade).set_fps(30)
+
+    def _cover_image(self, img: Image.Image) -> Image.Image:
+        """Resize an image to cover the full scene without distortion."""
+        iw, ih = img.size
+        target_ratio = self.WIDTH / self.HEIGHT
+        if iw / ih > target_ratio:
+            new_h = int(iw / target_ratio)
+            y = max(0, (ih - new_h) // 2)
+            img = img.crop((0, y, iw, y + new_h))
+        else:
+            new_w = int(ih * target_ratio)
+            x = max(0, (iw - new_w) // 2)
+            img = img.crop((x, 0, x + new_w, ih))
+        return img.resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
+
+    def _ensure_background_image(self, bg_path: str, scene_idx: int = 0) -> str:
+        if bg_path and os.path.exists(bg_path):
+            return bg_path
+
+        from PIL import Image as PilImage, ImageDraw
+        fallback_dir = os.path.dirname(bg_path) if bg_path else "automation/storage"
+        os.makedirs(fallback_dir or "automation/storage", exist_ok=True)
+        palettes = [
+            ((4, 0, 28), (0, 45, 95), (0, 120, 180)),
+            ((10, 0, 45), (45, 0, 90), (110, 20, 130)),
+            ((0, 18, 35), (0, 80, 100), (0, 130, 130)),
+        ]
+        top, mid, bot = palettes[scene_idx % len(palettes)]
+        img = PilImage.new("RGB", (self.WIDTH, self.HEIGHT))
+        draw = ImageDraw.Draw(img)
+        for y in range(self.HEIGHT):
+            t = y / max(1, self.HEIGHT - 1)
+            if t < 0.5:
+                s = t / 0.5
+                r = int(top[0] + (mid[0] - top[0]) * s)
+                g = int(top[1] + (mid[1] - top[1]) * s)
+                b = int(top[2] + (mid[2] - top[2]) * s)
+            else:
+                s = (t - 0.5) / 0.5
+                r = int(mid[0] + (bot[0] - mid[0]) * s)
+                g = int(mid[1] + (bot[1] - mid[1]) * s)
+                b = int(mid[2] + (bot[2] - mid[2]) * s)
+            draw.line([(0, y), (self.WIDTH - 1, y)], fill=(r, g, b))
+        draw_starfield_overlay(draw, self.WIDTH, self.HEIGHT, scene_idx, star_count=90, twinkle=False)
+        fallback_path = bg_path or os.path.join("automation", "storage", f"fallback_scene_{scene_idx}.jpg")
+        img.save(fallback_path, "JPEG", quality=90)
+        return fallback_path
+
+    def _draw_glow_text(self, draw, text, xy, font, fill, stroke=2, glow=5):
+        for r in range(glow, 0, -1):
+            draw.text(
+                xy, text,
+                font=font,
+                fill=(fill[0], fill[1], fill[2], max(20, int(70 / r))),
+                stroke_width=r,
+            )
+        draw.text(xy, text, font=font, fill=fill, stroke_width=stroke, stroke_fill=(0, 0, 0, 180))
 
     def render_hook_question(self, bg_path: str, text: str, duration: float, question_text: str, emphasis_phrase: str = None, word_offsets: list = None, start_time: float = 0.0, topic: str = "") -> VideoClip:
         """
-        Renders a jaw-dropping premium rhetorical question opening scene.
-        Highlights and scales the scientific emphasis phrase, adds glowing underlines,
-        and uses snappy typewriter animation (perfect audio sync).
+        Renders a visual-first rhetorical question opening scene.
+        The hook is broken into 3-5 word bursts with animated background motion,
+        neon text, and a progress pulse so the first scene never feels static.
         """
+        import re
+        from PIL import Image as PilImage
+
         font_path_bold = get_font_path("bold")
         font_path_reg = get_font_path("regular")
-        
-        # Heavily blur the background image to make the question pop
-        from PIL import ImageFilter
-        bg_img = Image.open(bg_path).convert("RGB").resize((self.WIDTH, self.HEIGHT)).filter(ImageFilter.GaussianBlur(15))
-        bg_graded = apply_cinematic_grade(bg_img)
-        
+
+        bg_path = self._ensure_background_image(bg_path, scene_idx=0)
+        is_video_bg = bg_path.lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".webm"))
+        video_clip = None
+        if is_video_bg:
+            video_clip = VideoFileClip(bg_path)
+
+        try:
+            if is_video_bg:
+                base_img = Image.fromarray(video_clip.get_frame(0)).convert("RGB")
+            else:
+                base_img = Image.open(bg_path).convert("RGB")
+            base_img = self._cover_image(base_img)
+        except Exception:
+            base_img = PilImage.new("RGB", (self.WIDTH, self.HEIGHT), (5, 10, 28))
+            base_img = self._cover_image(base_img)
+
         raw_text_source = (question_text or text).strip().upper()
-        # Clean asterisks from raw source
-        raw_text_source = raw_text_source.replace('*', '')
-        
-        topic_clean = (topic or "").strip().upper()
-        is_port = self.mode == 'portrait'
-        
-        # Font Sizes (Adjusted for high-end cinematic scaling)
-        if is_port:
-            f_small_sz = 52  # nice and readable
-            f_huge_sz = 86   # extremely prominent!
-            f_main_sz = int(86 * 1.15) # scaled by 15% for main subject
-            f_reg_sz = 68
-            line_spacing = 100
-        else:
-            f_small_sz = 62
-            f_huge_sz = 100
-            f_main_sz = int(100 * 1.15) # scaled by 15% for main subject
-            f_reg_sz = 78
-            line_spacing = 120
-            
-        font_small = ImageFont.truetype(font_path_reg, f_small_sz)
-        font_huge = ImageFont.truetype(font_path_bold, f_huge_sz)
-        font_main_subj = ImageFont.truetype(font_path_bold, f_main_sz)
-        font_reg = ImageFont.truetype(font_path_bold, f_reg_sz)
-        
-        COLOR_CYAN = (0, 240, 255)
-        COLOR_GOLD = (255, 215, 0)
-        COLOR_WHITE = (255, 255, 255)
-        
-        # --- Advanced Semantic Parser ---
-        # 1. Hook starters
-        starters = [
-            "WHAT IF WE TOLD YOU THAT",
-            "WHAT IF WE TOLD YOU",
-            "CAN YOU REALLY GROW",
-            "CAN YOU REALLY",
-            "DID YOU KNOW THAT",
-            "COULD THIS BE",
-            "IS IT POSSIBLE TO",
-            "IS IT POSSIBLE",
-            "WHAT IF",
-            "HOW"
-        ]
-        
-        # Subjects (Gold) - Removed GEOMETRY and SYMMETRY so they match as features (Cyan)
-        subjects = [
-            "BISMUTH CRYSTALS", "BISMUTH CRYSTAL", "BISMUTH",
-            "A CRYSTAL", "CRYSTALS", "CRYSTAL", "PULSARS", "PULSAR",
-            "NEBULAS", "NEBULA", "BLACK HOLES", "BLACK HOLE",
-            "STARS", "STAR", "SPACE", "LIGHT", "WAVELENGTH"
-        ]
-        # Features/Action (Cyan)
-        features = []
-        emp_clean = (emphasis_phrase or "").strip().upper().replace('*', '')
-        if emp_clean:
-            features.append(emp_clean)
-        features.extend([
-            "RAINBOW-COLORED APPEARANCE",
-            "RAINBOW-COLORED", "RAINBOW COLORED",
-            "GEOMETRY AND SYMMETRY", "GEOMETRY", "SYMMETRY",
-            "DEFYS THE RULES OF", "DEFIES THE RULES OF", "DEFYS", "DEFIES",
-            "SPIN HUNDREDS OF TIMES", "SPIN HUNDREDS", "SPINNING", "SPIN",
-            "GLOWING", "GLOW", "SHINING", "SHINE", "UNLIKE ANY OTHER"
-        ])
-        
-        # Enforce exact user request hook matching
-        normalized = raw_text_source
-        starter_found = ""
-        for s in starters:
-            if normalized.startswith(s):
-                starter_found = s
-                break
-                
-        lines_to_draw = []
-        rest = normalized
-        if starter_found:
-            lines_to_draw.append({"text": starter_found, "type": "small", "font": font_small, "color": COLOR_WHITE})
-            rest = normalized[len(starter_found):].strip()
-            
-        # Parse the rest into subjects and features
-        while rest:
-            earliest_idx = -1
-            best_match = None
-            match_type = None
-            
-            for sub in subjects:
-                idx = rest.find(sub)
-                if idx != -1 and (earliest_idx == -1 or idx < earliest_idx):
-                    earliest_idx = idx
-                    best_match = sub
-                    match_type = "subject"
-                    
-            for feat in features:
-                idx = rest.find(feat)
-                if idx != -1 and (earliest_idx == -1 or idx < earliest_idx):
-                    if earliest_idx == idx and best_match and len(feat) > len(best_match):
-                        best_match = feat
-                        match_type = "feature"
-                    elif earliest_idx == -1 or idx < earliest_idx:
-                        earliest_idx = idx
-                        best_match = feat
-                        match_type = "feature"
-                        
-            if earliest_idx != -1:
-                before = rest[:earliest_idx].strip()
-                if before:
-                    lines_to_draw.append({"text": before, "type": "small", "font": font_small, "color": COLOR_WHITE})
-                lines_to_draw.append({"text": best_match, "type": match_type, "font": font_huge, "color": COLOR_GOLD if match_type == "subject" else COLOR_CYAN})
-                rest = rest[earliest_idx + len(best_match):].strip()
-            else:
-                lines_to_draw.append({"text": rest, "type": "small", "font": font_small, "color": COLOR_WHITE})
-                rest = ""
-                
-        # Merge and clean empty/duplicate items
-        cleaned = []
-        for l in lines_to_draw:
-            txt = l["text"].strip()
-            if not txt:
-                continue
-            if cleaned and cleaned[-1]["type"] == "small" and l["type"] == "small":
-                cleaned[-1]["text"] += " " + txt
-            else:
-                cleaned.append({"text": txt, "type": l["type"], "font": l["font"], "color": l["color"]})
-                
-        # Split long small text lines
-        final_lines = []
-        for l in cleaned:
-            txt = l["text"]
-            t_type = l["type"]
-            if t_type == "small" and len(txt) > 30:
-                words = txt.split()
-                cur = []
-                for w in words:
-                    cur.append(w)
-                    if len(" ".join(cur)) > 25:
-                        final_lines.append({"text": " ".join(cur), "type": "small", "font": font_small, "color": COLOR_WHITE})
+        raw_text_source = re.sub(r"\s+", " ", raw_text_source.replace("*", "")).strip()
+        if not raw_text_source:
+            raw_text_source = f"WHAT IS {topic.strip().upper()} REALLY DOING?"
+
+        is_port = self.mode == "portrait"
+        chunk_size = 4 if is_port else 6
+        words = raw_text_source.replace("\n", " ").split()
+
+        def build_chunks_from_offsets():
+            chunks = []
+            cur = []
+            if word_offsets and start_time is not None:
+                scene_words = [
+                    w for w in word_offsets
+                    if start_time - 0.05 <= w.get("start", 0) <= start_time + duration + 0.05
+                ]
+                for w in scene_words:
+                    clean = re.sub(r"\[.*?\]", "", str(w.get("word", ""))).replace("*", "").strip()
+                    if not clean:
+                        continue
+                    cur.append({"word": clean, "start": max(0.0, w.get("start", 0) - start_time), "duration": w.get("duration", 0.2)})
+                    if len(cur) >= chunk_size or clean.endswith((".", "?", "!")):
+                        chunks.append(cur)
                         cur = []
                 if cur:
-                    final_lines.append({"text": " ".join(cur), "type": "small", "font": font_small, "color": COLOR_WHITE})
-            else:
-                # Dynamic visual styles upgrade based on keywords
-                txt_upper = txt.upper()
-                if t_type == "subject" or "CRYSTAL" in txt_upper or "BISMUTH" in txt_upper:
-                    l["font"] = font_main_subj
-                    l["type"] = "main_subject"
-                    l["color"] = COLOR_GOLD
-                elif t_type == "feature" or "GEOMETRY" in txt_upper or "SYMMETRY" in txt_upper or (emp_clean and emp_clean in txt_upper):
-                    l["font"] = font_huge
-                    l["type"] = "feature"
-                    l["color"] = COLOR_CYAN
-                final_lines.append(l)
-                
-        lines_to_draw = final_lines
-                
-        total_chars = sum(len(line["text"]) for line in lines_to_draw)
-        
-        # Layout vertical positions
-        total_h = 0
-        for line in lines_to_draw:
-            is_emp = line["type"] in ("subject", "feature", "main_subject")
-            if line["type"] == "main_subject":
-                fsz = f_main_sz
-            elif line["type"] == "feature":
-                fsz = f_huge_sz
-            else:
-                fsz = f_small_sz
-            total_h += fsz + (35 if is_emp else 15)
-        start_y = (self.HEIGHT - total_h) // 2
+                    chunks.append(cur)
+            return chunks
 
-        # Snap typing speed to complete in max 3.5s (perfect narrator sync fallback)
-        typing_duration = min(3.5, duration)
+        chunks = []
+        for group in build_chunks_from_offsets():
+            if not group:
+                continue
+            chunk_text = " ".join(item["word"] for item in group)
+            chunk_start = group[0]["start"]
+            chunk_end = group[-1]["start"] + group[-1]["duration"]
+            chunks.append({"text": chunk_text, "start": chunk_start, "end": min(duration, chunk_end)})
+
+        if not chunks:
+            cur = []
+            for word in words:
+                cur.append(word)
+                if len(cur) >= chunk_size or word.endswith((".", "?", "!")):
+                    chunks.append({"text": " ".join(cur), "start": 0.0, "end": 0.0})
+                    cur = []
+            if cur:
+                chunks.append({"text": " ".join(cur), "start": 0.0, "end": 0.0})
+
+        if not chunks:
+            chunks = [{"text": raw_text_source, "start": 0.0, "end": duration}]
+
+        if word_offsets and start_time is not None:
+            equal_step = duration / max(1, len(chunks))
+            for idx, chunk in enumerate(chunks):
+                if chunk["end"] <= chunk["start"]:
+                    chunk["start"] = idx * equal_step
+                    chunk["end"] = min(duration, (idx + 1) * equal_step)
+        else:
+            equal_step = duration / max(1, len(chunks))
+            for idx, chunk in enumerate(chunks):
+                chunk["start"] = idx * equal_step
+                chunk["end"] = min(duration, (idx + 1) * equal_step)
+
+        for idx in range(1, len(chunks)):
+            if chunks[idx]["start"] <= chunks[idx - 1]["end"]:
+                chunks[idx]["start"] = min(duration - 0.05, chunks[idx - 1]["end"] + 0.02)
+            if chunks[idx]["end"] <= chunks[idx]["start"]:
+                chunks[idx]["end"] = min(duration, chunks[idx]["start"] + 0.8)
+        chunks[-1]["end"] = duration
+
+        emp_clean = (emphasis_phrase or "").strip().upper().replace("*", "")
+        f_chunk = int(96 * (1.18 if is_port else 1.0))
+        f_small = int(44 * (1.18 if is_port else 1.0))
+        font_chunk = ImageFont.truetype(font_path_bold, f_chunk)
+        font_small = ImageFont.truetype(font_path_reg, f_small)
+
+        COLOR_CYAN = (0, 240, 255)
+        COLOR_GOLD = (255, 210, 40)
+        COLOR_WHITE = (255, 255, 255)
+
+        def active_chunk_for_t(t):
+            for idx, chunk in enumerate(chunks):
+                if t < chunk["start"]:
+                    return max(0, idx - 1), 0.0
+                if t < chunk["end"]:
+                    local = max(0.0, min(1.0, (t - chunk["start"]) / max(0.001, chunk["end"] - chunk["start"])))
+                    return idx, local
+            return len(chunks) - 1, 1.0
+
+        def draw_line(draw, line, x, y, color, font, scale=1.0, alpha=255, underline=False):
+            try:
+                line_w = font.getbbox(line)[2] - font.getbbox(line)[0]
+            except AttributeError:
+                line_w = draw.textlength(line, font=font)
+            scaled_w = int(line_w * scale)
+            scaled_x = x - max(0, (scaled_w - line_w) // 2)
+            glow_color = (color[0], color[1], color[2], int(alpha * 0.35))
+            for r in range(6, 0, -1):
+                draw.text(
+                    (scaled_x, int(y * scale + (f_chunk * (1 - scale)) / 2)),
+                    line,
+                    font=font,
+                    fill=(glow_color[0], glow_color[1], glow_color[2], max(12, int(glow_color[3] / r))),
+                    stroke_width=r,
+                )
+            draw.text(
+                (scaled_x, int(y * scale + (f_chunk * (1 - scale)) / 2)),
+                line,
+                font=font,
+                fill=(color[0], color[1], color[2], alpha),
+                stroke_width=3,
+                stroke_fill=(0, 0, 0, int(alpha * 0.75)),
+            )
+            if underline:
+                base_y = int((y + f_chunk + 12) * scale + (f_chunk * (1 - scale)) / 2)
+                for r in range(3, 0, -1):
+                    draw.line(
+                        [(scaled_x, base_y), (scaled_x + scaled_w, base_y)],
+                        fill=(color[0], color[1], color[2], int(alpha * (0.45 / r))),
+                        width=r * 2,
+                    )
 
         def make_frame(t):
-            # Create frame as RGBA to allow premium alpha compositing/neon glow
-            img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(img)
-            
-            # Full screen soft transparent dark overlay instead of restrictive box
-            draw.rectangle(
-                [(0, 0), (self.WIDTH, self.HEIGHT)],
-                fill=(10, 15, 30, 180)
-            )
-            
-            # Word sync / typewriter character limit
-            if word_offsets and start_time is not None:
-                scene_words = [item for item in word_offsets if start_time - 0.05 <= item['start'] <= start_time + duration + 0.05]
-                if scene_words:
-                    words_dur = scene_words[-1]['start'] + scene_words[-1]['duration'] - scene_words[0]['start']
-                    words_dur = max(0.5, min(4.5, words_dur))
-                    ratio = min(1.0, t / words_dur)
-                    visible_chars = int(ratio * total_chars)
-                else:
-                    visible_chars = int(min(t / max(0.01, min(3.5, duration)), 1.0) * total_chars)
+            if is_video_bg and video_clip is not None:
+                frame_t = t % max(video_clip.duration, 0.001)
+                bg_img = Image.fromarray(video_clip.get_frame(frame_t)).convert("RGB")
             else:
-                visible_chars = int(min(t / max(0.01, min(3.5, duration)), 1.0) * total_chars)
-                
-            chars_drawn = 0
-            
-            y_start = start_y
-            last_x, last_y, last_font_sz = 0, 0, f_small_sz
-            cursor_drawn = False
-            
-            for line in lines_to_draw:
-                txt = line["text"]
-                font = line["font"]
-                color = line["color"]
-                l_type = line["type"]
-                is_emp = l_type in ("subject", "feature", "topic", "emphasis", "main_subject")
-                if l_type == "main_subject":
-                    font_sz = f_main_sz
-                elif is_emp:
-                    font_sz = f_huge_sz
-                else:
-                    font_sz = f_small_sz
-                
-                # Center line width calculation
-                try:
-                    line_w = font.getbbox(txt)[2] - font.getbbox(txt)[0]
-                except AttributeError:
-                    line_w = draw.textlength(txt, font=font)
-                    
-                x = (self.WIDTH - line_w) // 2
-                line_len = len(txt)
-                
-                if chars_drawn + line_len <= visible_chars:
-                    # Line completely typed
-                    if is_emp:
-                        # Draw soft neon vector glow layers behind the emphasized word
-                        for r in range(1, 6):
-                            opacity = int(55 / r)
-                            draw.text(
-                                (x, y_start), txt,
-                                fill=(color[0], color[1], color[2], opacity),
-                                font=font, stroke_width=r
-                            )
-                        # Sharp main text
-                        draw.text((x, y_start), txt, fill=color, font=font)
-                        
-                        # Glowing premium underline
-                        line_y_base = y_start + font_sz + 8
-                        for r in range(1, 4):
-                            op = int(60 / r)
-                            draw.line([(x, line_y_base), (x + line_w, line_y_base)], fill=(color[0], color[1], color[2], op), width=r * 2)
-                        draw.line([(x, line_y_base), (x + line_w, line_y_base)], fill=(255, 255, 255, 255), width=2)
-                    else:
-                        draw.text((x, y_start), txt, fill=color, font=font)
-                        
-                    chars_drawn += line_len
-                    last_x, last_y, last_font_sz = x + line_w, y_start, font_sz
-                elif chars_drawn < visible_chars:
-                    # Line partially typed
-                    part_len = visible_chars - chars_drawn
-                    part_txt = txt[:part_len]
-                    
-                    try:
-                        part_w = font.getbbox(part_txt)[2] - font.getbbox(part_txt)[0]
-                    except AttributeError:
-                        part_w = draw.textlength(part_txt, font=font)
-                        
-                    if is_emp:
-                        # Draw soft neon glow behind partial text
-                        for r in range(1, 6):
-                            opacity = int(55 / r)
-                            draw.text(
-                                (x, y_start), part_txt,
-                                fill=(color[0], color[1], color[2], opacity),
-                                font=font, stroke_width=r
-                            )
-                        draw.text((x, y_start), part_txt, fill=color, font=font)
-                        
-                        # Draw partial underline to follow typing!
-                        line_y_base = y_start + font_sz + 8
-                        draw.line([(x, line_y_base), (x + part_w, line_y_base)], fill=color, width=3)
-                    else:
-                        draw.text((x, y_start), part_txt, fill=color, font=font)
-                        
-                    cursor_x = x + part_w + 4
-                    # Blinking cursor block
-                    draw.rectangle(
-                        [(cursor_x, y_start + 8), (cursor_x + 8, y_start + font_sz - 4)],
-                        fill=COLOR_GOLD
-                    )
-                    cursor_drawn = True
-                    chars_drawn += line_len
-                    last_x, last_y, last_font_sz = cursor_x, y_start, font_sz
-                    break
-                else:
-                    break
-                
-                y_start += font_sz + (35 if is_emp else 15)
-                
-            # Keep cursor blinking at the end of text
-            if not cursor_drawn and chars_drawn >= total_chars:
-                if int(t * 3.5) % 2 == 0:
-                    draw.rectangle(
-                        [(last_x + 8, last_y + 8), (last_x + 16, last_y + last_font_sz - 4)],
-                        fill=COLOR_GOLD
-                    )
-                    
-            # Overlay composite onto cinematic blurred background
-            final_img = bg_graded.copy().convert("RGBA")
-            final_img = Image.alpha_composite(final_img, img)
-            return np.array(final_img.convert("RGB"))
+                bg_img = base_img.copy()
+            bg_img = apply_cinematic_grade(self._cover_image(bg_img))
+
+            motion = 1.0 + 0.13 * (t / max(duration, 0.001))
+            cw = int(self.WIDTH / motion)
+            ch = int(self.HEIGHT / motion)
+            x = max(0, (self.WIDTH - cw) // 2)
+            y = max(0, (self.HEIGHT - ch) // 2)
+            bg_img = bg_img.crop((x, y, x + cw, y + ch)).resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
+
+            img = bg_img.convert("RGBA")
+            overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
+            o_draw = ImageDraw.Draw(overlay)
+            for yy in range(self.HEIGHT):
+                ratio = yy / max(1, self.HEIGHT - 1)
+                alpha = int(125 + 95 * abs(ratio - 0.5) * 2)
+                o_draw.line([(0, yy), (self.WIDTH, yy)], fill=(3, 6, 18, alpha))
+            draw_starfield_overlay(o_draw, self.WIDTH, self.HEIGHT, t, star_count=70, seed=917, twinkle=True)
+            img = Image.alpha_composite(img, overlay).convert("RGB")
+            draw = ImageDraw.Draw(img)
+
+            active_idx, local = active_chunk_for_t(t)
+            chunk = chunks[active_idx]
+            chunk_text = chunk["text"]
+            is_emphasis = bool(emp_clean and emp_clean in chunk_text)
+            color = COLOR_GOLD if is_emphasis else COLOR_CYAN
+            if active_idx == 0 and not is_emphasis:
+                color = COLOR_WHITE
+
+            ease = 1.0 - (1.0 - local) ** 3
+            scale = 0.84 + 0.16 * ease + 0.025 * math.sin(local * math.pi * 2)
+            alpha = int(255 * min(1.0, local / 0.22))
+            if local > 0.72:
+                alpha = int(alpha * (1.0 - (local - 0.72) / 0.28 * 0.18))
+
+            lines = wrap_text(chunk_text, font_chunk, self.WIDTH - 170)
+            total_h = len(lines) * int(f_chunk * 1.15)
+            y_start = max(160 if is_port else 130, (self.HEIGHT - total_h) // 2)
+            for line in lines:
+                draw_line(draw, line, self.WIDTH // 2, y_start, color, font_chunk, scale=scale, alpha=alpha, underline=is_emphasis)
+                y_start += int(f_chunk * 1.15)
+
+            if active_idx > 0:
+                prev_chunk = chunks[active_idx - 1]
+                prev_alpha = int(170 * max(0.0, 1.0 - local * 1.8))
+                if prev_alpha > 10:
+                    prev_lines = wrap_text(prev_chunk["text"], font_small, self.WIDTH - 220)
+                    prev_y = max(60, y_start - int(f_chunk * 1.35) - 20)
+                    for line in prev_lines[:2]:
+                        draw.text(
+                            (self.WIDTH // 2, prev_y), line,
+                            font=font_small,
+                            fill=(210, 220, 235, prev_alpha),
+                            anchor="mm",
+                        )
+                        prev_y -= 48
+
+            progress = local
+            bar_y = self.HEIGHT - (130 if is_port else 90)
+            bar_x = 90 if is_port else 260
+            bar_w = self.WIDTH - (180 if is_port else 520)
+            bar_h = 8 if is_port else 6
+            draw.rounded_rectangle([(bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h)], radius=8, fill=(255, 255, 255, 55))
+            draw.rounded_rectangle(
+                [(bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + bar_h)],
+                radius=8,
+                fill=color + (245,),
+            )
+
+            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode, color=color, label="HOOK")
+            img_arr = np.array(img)
+            img_arr = draw_scan_lines(img_arr, opacity=0.05)
+            return img_arr
 
         clip = VideoClip(make_frame, duration=duration)
+        if video_clip is not None:
+            clip.on_closed(lambda: video_clip.close())
         return clip.set_fps(30)
 
     def render_data_bars(self, bg_path: str, text: str, duration: float, bar_data: list) -> VideoClip:
@@ -906,112 +902,123 @@ class SceneRenderer:
         """
         font_path_bold = get_font_path("condensed_bold")
         font_path_reg = get_font_path("regular")
-        
-        bg_img = Image.open(bg_path).convert("RGB").resize((self.WIDTH, self.HEIGHT))
-        bg_graded = apply_cinematic_grade(bg_img)
-        
+
+        bg_path = self._ensure_background_image(bg_path, scene_idx=3)
+        bg_img = Image.open(bg_path).convert("RGB")
+        bg_graded = apply_cinematic_grade(self._cover_image(bg_img))
+
         if not bar_data or not isinstance(bar_data, list):
-            # Fallback bar data
             bar_data = [
                 {"label": "Value A", "value": 30},
                 {"label": "Value B", "value": 75},
-                {"label": "Value C", "value": 50}
+                {"label": "Value C", "value": 50},
             ]
-            
+
         values = [float(b.get("value", 0)) for b in bar_data]
         max_val = max(values) if max(values) > 0 else 1.0
-        
-        # Design Dimensions
-        is_port = self.mode == 'portrait'
+
+        is_port = self.mode == "portrait"
         bar_count = len(bar_data)
-        chart_w = (self.WIDTH - 160) if is_port else 1200
+        chart_w = (self.WIDTH - 170) if is_port else 1200
         chart_h = (self.HEIGHT // 3) if is_port else 500
         chart_x = (self.WIDTH - chart_w) // 2
-        chart_y = (self.HEIGHT - chart_h) // 2
-        
+        chart_y = (self.HEIGHT - chart_h) // 2 - (35 if is_port else 0)
+
         bar_gap = 30 if is_port else 60
-        total_gaps_w = bar_gap * (bar_count - 1)
-        bar_w = (chart_w - total_gaps_w) // bar_count
-        
+        total_gaps_w = bar_gap * max(bar_count - 1, 0)
+        bar_w = (chart_w - total_gaps_w) // max(bar_count, 1)
+        colors = [(0, 240, 255), (255, 0, 180), (150, 0, 255), (255, 150, 0)]
+
         def make_frame(t):
-            img = bg_graded.copy()
-            
-            # Semi-transparent backing panel
+            motion = 1.0 + 0.07 * (t / max(duration, 0.001))
+            cw = int(self.WIDTH / motion)
+            ch = int(self.HEIGHT / motion)
+            x = max(0, (self.WIDTH - cw) // 2)
+            y = max(0, (self.HEIGHT - ch) // 2)
+            img = bg_graded.crop((x, y, x + cw, y + ch)).resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
+
             overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
             o_draw = ImageDraw.Draw(overlay)
+            panel_pad_x = 30 if is_port else 70
+            panel_pad_top = 95 if is_port else 95
+            panel_pad_bot = 120 if is_port else 125
             o_draw.rounded_rectangle(
-                [(chart_x - (20 if is_port else 60), chart_y - (60 if is_port else 80)), (chart_x + chart_w + (20 if is_port else 60), chart_y + chart_h + (80 if is_port else 100))],
-                radius=16,
-                fill=(10, 22, 40, 220)
+                [(chart_x - panel_pad_x, chart_y - panel_pad_top),
+                 (chart_x + chart_w + panel_pad_x, chart_y + chart_h + panel_pad_bot)],
+                radius=24,
+                fill=(7, 14, 32, 215),
             )
-            # Accent divider bar
             o_draw.rectangle(
-                [(chart_x, chart_y + chart_h), (chart_x + chart_w, chart_y + chart_h + 4)],
-                fill=(0, 240, 255, 255)
+                [(chart_x, chart_y + chart_h + 12), (chart_x + chart_w, chart_y + chart_h + 18)],
+                fill=(0, 240, 255, 255),
             )
+            draw_starfield_overlay(o_draw, self.WIDTH, self.HEIGHT, t, star_count=60, seed=4321, twinkle=True)
             img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
             draw = ImageDraw.Draw(img)
-            
-            # Title
-            title_font = ImageFont.truetype(font_path_bold, 30 if is_port else 40)
-            draw.text((chart_x, chart_y - (45 if is_port else 50)), "COMPARATIVE SCIENTIFIC ANALYSIS", fill=(0, 240, 255), font=title_font)
-            
-            # Bar growth animation: ease-out over first 1.3 seconds
-            anim_dur = min(1.3, duration)
-            fraction = 1.0 if t >= anim_dur else 1.0 - (1.0 - t / anim_dur)**3
-            
+
+            title_font = ImageFont.truetype(font_path_bold, 30 if is_port else 42)
+            title = "COMPARATIVE SCIENTIFIC ANALYSIS"
+            try:
+                tw = title_font.getbbox(title)[2] - title_font.getbbox(title)[0]
+            except AttributeError:
+                tw = draw.textlength(title, font=title_font)
+            draw.text(((self.WIDTH - tw) // 2, chart_y - (65 if is_port else 58)), title, fill=(0, 240, 255), font=title_font)
+
+            anim_dur = min(1.45, duration)
+            fraction = 1.0 if t >= anim_dur else 1.0 - (1.0 - t / anim_dur) ** 3
+
             label_font = ImageFont.truetype(font_path_reg, 18 if is_port else 24)
-            val_font = ImageFont.truetype(font_path_bold, 20 if is_port else 30)
-            
+            val_font = ImageFont.truetype(font_path_bold, 22 if is_port else 32)
+
             for i, item in enumerate(bar_data):
                 lbl = str(item.get("label", "")).upper()
                 val = float(item.get("value", 0))
-                
-                # Height calculation
                 pct = val / max_val
                 target_bar_h = int(pct * chart_h)
-                current_bar_h = int(target_bar_h * fraction)
-                
+                delay = min(0.35, duration * 0.08 * i)
+                local_t = max(0.0, min(1.0, (t - delay) / max(0.001, anim_dur - delay)))
+                bar_fraction = 1.0 if local_t >= 1.0 else 1.0 - (1.0 - local_t) ** 3
+                current_bar_h = int(target_bar_h * bar_fraction * fraction)
+
                 bx1 = chart_x + i * (bar_w + bar_gap)
                 by1 = chart_y + chart_h - current_bar_h
                 bx2 = bx1 + bar_w
                 by2 = chart_y + chart_h
-                
-                # Render bar with dynamic color gradient
-                # Choose color based on index (Cyber Cyan, Cyber Magenta, Purple, Orange)
-                colors = [
-                    (0, 240, 255),  # Cyan
-                    (255, 0, 180),  # Magenta
-                    (150, 0, 255),  # Purple
-                    (255, 120, 0)   # Orange
-                ]
+
                 bar_color = colors[i % len(colors)]
-                
-                # Draw the main bar body
+                is_highest = abs(val - max_val) < 0.0001 and bar_fraction > 0.9
+                if is_highest:
+                    glow_radius = int(18 + 8 * math.sin(t * 5.0))
+                    o_draw.ellipse([(bx1 - glow_radius, by1 - glow_radius), (bx2 + glow_radius, by2 + glow_radius)], fill=(255, 215, 0, 45))
+
                 draw.rectangle([(bx1, by1), (bx2, by2)], fill=bar_color)
-                # 3D side highlight edge
-                edge_w = 4 if is_port else 8
+                edge_w = 5 if is_port else 10
                 draw.rectangle([(bx2 - edge_w, by1), (bx2, by2)], fill=(max(0, bar_color[0] - 50), max(0, bar_color[1] - 50), max(0, bar_color[2] - 50)))
-                
-                # Render numeric value above bar
+                draw.rectangle([(bx1, by1), (bx1 + 8, by2)], fill=(255, 255, 255, 45))
+
+                val_text = f"{val:g}"
+                try:
+                    vw = val_font.getbbox(val_text)[2] - val_font.getbbox(val_text)[0]
+                except AttributeError:
+                    vw = val_font.getsize(val_text)[0]
+                vx = bx1 + (bar_w - vw) // 2
+                vy = by1 - (38 if is_port else 48)
                 if current_bar_h > 20 or t >= anim_dur:
-                    val_text = f"{val:g}"
-                    try:
-                        vw = val_font.getbbox(val_text)[2] - val_font.getbbox(val_text)[0]
-                    except AttributeError:
-                        vw = val_font.getsize(val_text)[0]
-                    vx = bx1 + (bar_w - vw) // 2
-                    draw.text((vx, by1 - (30 if is_port else 40)), val_text, fill=(255, 255, 255), font=val_font)
-                
-                # Render label below chart axis
+                    draw.text((vx, vy), val_text, fill=(255, 255, 255), font=val_font)
+                    if is_highest:
+                        draw.text((vx, vy), val_text, fill=(255, 215, 0, 120), font=val_font, stroke_width=2)
+
                 try:
                     lw = label_font.getbbox(lbl)[2] - label_font.getbbox(lbl)[0]
                 except AttributeError:
                     lw = label_font.getsize(lbl)[0]
                 lx = bx1 + (bar_w - lw) // 2
-                draw.text((lx, by2 + (12 if is_port else 20)), lbl, fill=(200, 200, 200), font=label_font)
-                
-            return np.array(img)
+                draw.text((lx, by2 + (16 if is_port else 24)), lbl, fill=(210, 220, 235), font=label_font)
+
+            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode, color=(0, 240, 255), label="DATA")
+            img_arr = np.array(img)
+            img_arr = draw_scan_lines(img_arr, opacity=0.05)
+            return img_arr
 
         clip = VideoClip(make_frame, duration=duration)
         return clip.set_fps(30)

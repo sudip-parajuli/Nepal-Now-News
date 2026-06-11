@@ -467,6 +467,13 @@ Script:
 
             final_scenes.append(s)
 
+        if final_scenes:
+            first = final_scenes[0]
+            first["visual_type"] = "hook_question"
+            first["question_text"] = first.get("question_text") or first.get("narration", "")
+            first["emphasis_phrase"] = first.get("emphasis_phrase") or " ".join(first.get("narration", "").split()[:3]).upper() or topic.upper()
+            first["image_cue"] = first.get("image_cue") or f"{topic} cinematic science background"
+
         print(f"[ScriptWriter] Final Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
         return final_scenes
 
@@ -645,10 +652,16 @@ Script:
             s.setdefault("emphasis_phrase", None)
 
             final_scenes.append(s)
-            
-            # Enforce max 5 scenes
+
             if len(final_scenes) >= 5:
                 break
+
+        if final_scenes:
+            first = final_scenes[0]
+            first["visual_type"] = "hook_question"
+            first["question_text"] = first.get("question_text") or first.get("narration", "")
+            first["emphasis_phrase"] = first.get("emphasis_phrase") or " ".join(first.get("narration", "").split()[:3]).upper() or topic.upper()
+            first["image_cue"] = first.get("image_cue") or f"{topic} cinematic science background"
 
         print(f"[ScriptWriter] Final Shorts Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
         return final_scenes

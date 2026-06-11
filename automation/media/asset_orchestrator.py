@@ -180,12 +180,11 @@ class AssetOrchestrator:
             if target_w < w:
                 x1 = (w - target_w) // 2
                 clip = clip.crop(x1=x1, y1=0, x2=x1+target_w, y2=h)
-                clip = clip.resize(newsize=(1080, 1920))
-                new_path = vid_path.replace(".mp4", "_portrait.mp4")
-                clip.write_videofile(new_path, codec="libx264", audio=False, logger=None)
-                clip.close()
-                return new_path
-            return vid_path
+            clip = clip.resize(newsize=(1080, 1920))
+            new_path = vid_path.replace(".mp4", "_portrait.mp4")
+            clip.write_videofile(new_path, codec="libx264", audio=False, logger=None)
+            clip.close()
+            return new_path
         except Exception as e:
             print(f"[AssetOrchestrator] Error cropping video {vid_path}: {e}")
             return vid_path

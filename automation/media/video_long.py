@@ -304,7 +304,8 @@ class VideoLongGenerator:
                         if apath and os.path.exists(apath):
                             clip = renderer.render_image(apath, scene.get("narration", ""), clip_duration)
                         else:
-                            clip = ColorClip(size=self.size, color=(10, 10, 25), duration=clip_duration)
+                            fallback_path = renderer._ensure_background_image(None, scene_idx=i)
+                            clip = renderer.render_image(fallback_path, scene.get("narration", ""), clip_duration)
                             
                     clip = clip.set_start(clip_start).set_position("center")
                     
