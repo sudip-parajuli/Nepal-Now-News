@@ -784,8 +784,7 @@ class SceneRenderer:
                 line_w = font.getbbox(line)[2] - font.getbbox(line)[0]
             except AttributeError:
                 line_w = draw.textlength(line, font=font)
-            scaled_w = int(line_w * scale)
-            scaled_x = x - max(0, (scaled_w - line_w) // 2)
+            scaled_x = x - line_w // 2
             glow_color = (color[0], color[1], color[2], int(alpha * 0.35))
             for r in range(6, 0, -1):
                 draw.text(
@@ -807,7 +806,7 @@ class SceneRenderer:
                 base_y = int((y + f_chunk + 12) * scale + (f_chunk * (1 - scale)) / 2)
                 for r in range(3, 0, -1):
                     draw.line(
-                        [(scaled_x, base_y), (scaled_x + scaled_w, base_y)],
+                        [(scaled_x, base_y), (scaled_x + line_w, base_y)],
                         fill=(color[0], color[1], color[2], int(alpha * (0.45 / r))),
                         width=r * 2,
                     )
@@ -854,7 +853,8 @@ class SceneRenderer:
 
             lines = wrap_text(chunk_text, font_chunk, self.WIDTH - 170)
             total_h = len(lines) * int(f_chunk * 1.15)
-            y_start = max(160 if is_port else 130, (self.HEIGHT - total_h) // 2)
+            y_start_orig = max(160 if is_port else 130, (self.HEIGHT - total_h) // 2)
+            y_start = y_start_orig
             for line in lines:
                 draw_line(draw, line, self.WIDTH // 2, y_start, color, font_chunk, scale=scale, alpha=alpha, underline=is_emphasis)
                 y_start += int(f_chunk * 1.15)
@@ -864,8 +864,8 @@ class SceneRenderer:
                 prev_alpha = int(170 * max(0.0, 1.0 - local * 1.8))
                 if prev_alpha > 10:
                     prev_lines = wrap_text(prev_chunk["text"], font_small, self.WIDTH - 220)
-                    prev_y = max(60, y_start - int(f_chunk * 1.35) - 20)
-                    for line in prev_lines[:2]:
+                    prev_y = max(60, y_start_orig - 40)
+                    for line in reversed(prev_lines[:2]):
                         draw.text(
                             (self.WIDTH // 2, prev_y), line,
                             font=font_small,
