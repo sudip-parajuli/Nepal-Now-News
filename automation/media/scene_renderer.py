@@ -859,21 +859,6 @@ class SceneRenderer:
                 draw_line(draw, line, self.WIDTH // 2, y_start, color, font_chunk, scale=scale, alpha=alpha, underline=is_emphasis)
                 y_start += int(f_chunk * 1.15)
 
-            if active_idx > 0:
-                prev_chunk = chunks[active_idx - 1]
-                prev_alpha = int(170 * max(0.0, 1.0 - local * 1.8))
-                if prev_alpha > 10:
-                    prev_lines = wrap_text(prev_chunk["text"], font_small, self.WIDTH - 220)
-                    prev_y = max(60, y_start_orig - 40)
-                    for line in reversed(prev_lines[:2]):
-                        draw.text(
-                            (self.WIDTH // 2, prev_y), line,
-                            font=font_small,
-                            fill=(210, 220, 235, prev_alpha),
-                            anchor="mm",
-                        )
-                        prev_y -= 48
-
             progress = local
             bar_y = self.HEIGHT - (130 if is_port else 90)
             bar_x = 90 if is_port else 260

@@ -474,6 +474,11 @@ Script:
             first["emphasis_phrase"] = first.get("emphasis_phrase") or " ".join(first.get("narration", "").split()[:3]).upper() or topic.upper()
             first["image_cue"] = first.get("image_cue") or f"{topic} cinematic science background"
 
+        if len(final_scenes) > 1:
+            second = final_scenes[1]
+            second["visual_type"] = "image"
+            second["image_cue"] = second.get("image_cue") or f"{topic} cinematic science background"
+
         print(f"[ScriptWriter] Final Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
         return final_scenes
 
@@ -662,6 +667,14 @@ Script:
             first["question_text"] = first.get("question_text") or first.get("narration", "")
             first["emphasis_phrase"] = first.get("emphasis_phrase") or " ".join(first.get("narration", "").split()[:3]).upper() or topic.upper()
             first["image_cue"] = first.get("image_cue") or f"{topic} cinematic science background"
+
+        # Enforce scene order: hook → image → image → text/stat/other
+        scene_type_order = ["hook_question", "image", "image"]
+        for i, forced_type in enumerate(scene_type_order):
+            if i < len(final_scenes):
+                final_scenes[i]["visual_type"] = forced_type
+                if forced_type == "image":
+                    final_scenes[i]["image_cue"] = final_scenes[i].get("image_cue") or f"{topic} cinematic science background"
 
         print(f"[ScriptWriter] Final Shorts Visual Scenes Manifest: {len(final_scenes)} scenes ({ai_count} ai_video).")
         return final_scenes
