@@ -220,7 +220,7 @@ class MetaUploader:
             self.upload_facebook_captions(fb_video_id, srt_path)
 
         # Cross-post to Instagram Business account if linked
-        self._publish_to_instagram(fb_video_id, description)
+        self._publish_to_instagram(fb_video_id, description, video_path)
         return fb_video_id
 
     def _upload_facebook_reel(self, video_path: str, description: str) -> str:
@@ -373,7 +373,7 @@ class MetaUploader:
         except Exception as e:
             print(f"Error uploading caption for locale {locale}: {e}")
 
-    def _publish_to_instagram(self, fb_video_id: str, caption: str):
+    def _publish_to_instagram(self, fb_video_id: str, caption: str, video_path: str = None):
         """Discovers the linked Instagram Business account and posts the video as an IG Reel."""
         try:
             # 1. Discover Instagram Business Account ID
@@ -390,49 +390,93 @@ class MetaUploader:
 
             print(f"Found linked Instagram Business Account ID: {ig_account_id}")
 
-            # 2. Get Facebook Video CDN Public source URL
-            # We wait up to 60 seconds (with polling) for Facebook to process the video and generate a source URL
-            source_url = None
-            video_url = f"https://graph.facebook.com/{self.api_version}/{fb_video_id}"
-            video_params = {
-                "fields": "source",
-                "access_token": self.access_token
-            }
-            
-            print("Waiting for Facebook to generate CDN video source URL...")
-            for poll in range(12): # Poll every 10 seconds for up to 2 minutes
-                video_res = requests.get(video_url, params=video_params)
-                source_url = video_res.json().get("source")
-                if source_url:
-                    break
-                time.sleep(10)
+            creation_id = None
 
-            if not source_url:
-                print("Could not retrieve Facebook video source URL. Instagram cross-posting aborted.")
-                return
+            # Try direct Resumable Binary Upload if video_path is available
+            if video_path and os.path.exists(video_path):
+                print(f"Attempting direct Resumable Binary Upload for Instagram Reel: {video_path}...")
+                try:
+                    container_url = f"https://graph.facebook.com/{self.api_version}/{ig_account_id}/media"
+                    container_payload = {
+                        "media_type": "REELS",
+                        "upload_type": "resumable",
+                        "caption": caption,
+                        "access_token": self.access_token
+                    }
+                    c_res = requests.post(container_url, data=container_payload)
+                    c_data = c_res.json()
+                    
+                    cid = c_data.get("ig_container_id") or c_data.get("id")
+                    upload_uri = c_data.get("uri") or (f"https://rupload.facebook.com/ig-api-upload/{self.api_version}/{cid}" if cid else None)
+                    
+                    if cid and upload_uri:
+                        file_size = os.path.getsize(video_path)
+                        with open(video_path, "rb") as f:
+                            video_data = f.read()
 
-            print(f"Successfully retrieved Facebook video source URL: {source_url[:60]}...")
+                        headers = {
+                            "Authorization": f"OAuth {self.access_token}",
+                            "offset": "0",
+                            "file_size": str(file_size),
+                            "Content-Type": "application/octet-stream"
+                        }
+                        upload_res = requests.post(upload_uri, data=video_data, headers=headers)
+                        if upload_res.status_code == 200:
+                            print("Instagram Reels binary upload successful.")
+                            creation_id = cid
+                        else:
+                            print(f"Instagram Reels binary upload failed (status {upload_res.status_code}): {upload_res.text}")
+                    else:
+                        print(f"Failed to initialize Instagram Reels resumable container: {c_res.text}")
+                except Exception as ex:
+                    print(f"Exception during Instagram Resumable Upload: {ex}")
 
-            # 3. Create Instagram Reels Media Container
-            container_url = f"https://graph.facebook.com/{self.api_version}/{ig_account_id}/media"
-            container_payload = {
-                "media_type": "REELS",
-                "video_url": source_url,
-                "caption": caption,
-                "access_token": self.access_token
-            }
-            c_res = requests.post(container_url, data=container_payload)
-            creation_id = c_res.json().get("ig_container_id") or c_res.json().get("id")
+            # Fallback to Facebook CDN URL if direct upload did not succeed
             if not creation_id:
-                print(f"Failed to create Instagram Reels container: {c_res.text}")
-                return
+                print("Falling back to Facebook CDN video URL for Instagram post...")
+                # 2. Get Facebook Video CDN Public source URL
+                # We wait up to 60 seconds (with polling) for Facebook to process the video and generate a source URL
+                source_url = None
+                video_url = f"https://graph.facebook.com/{self.api_version}/{fb_video_id}"
+                video_params = {
+                    "fields": "source",
+                    "access_token": self.access_token
+                }
+                
+                print("Waiting for Facebook to generate CDN video source URL...")
+                for poll in range(12): # Poll every 10 seconds for up to 2 minutes
+                    video_res = requests.get(video_url, params=video_params)
+                    source_url = video_res.json().get("source")
+                    if source_url:
+                        break
+                    time.sleep(10)
+
+                if not source_url:
+                    print("Could not retrieve Facebook video source URL. Instagram cross-posting aborted.")
+                    return
+
+                print(f"Successfully retrieved Facebook video source URL: {source_url[:60]}...")
+
+                # 3. Create Instagram Reels Media Container (URL based)
+                container_url = f"https://graph.facebook.com/{self.api_version}/{ig_account_id}/media"
+                container_payload = {
+                    "media_type": "REELS",
+                    "video_url": source_url,
+                    "caption": caption,
+                    "access_token": self.access_token
+                }
+                c_res = requests.post(container_url, data=container_payload)
+                creation_id = c_res.json().get("ig_container_id") or c_res.json().get("id")
+                if not creation_id:
+                    print(f"Failed to create Instagram Reels container via fallback URL: {c_res.text}")
+                    return
 
             print(f"Instagram Reels container created! ID: {creation_id}. Processing on Instagram...")
 
             # 4. Poll IG Container processing state until FINISHED
             status_url = f"https://graph.facebook.com/{self.api_version}/{creation_id}"
             status_params = {
-                "fields": "status_code",
+                "fields": "status_code,status",
                 "access_token": self.access_token
             }
             
@@ -440,8 +484,10 @@ class MetaUploader:
             for poll in range(20): # Poll every 10 seconds for up to 200 seconds
                 time.sleep(10)
                 status_res = requests.get(status_url, params=status_params)
-                status_code = status_res.json().get("status_code")
-                print(f"IG Reels Container Status: {status_code}")
+                res_json = status_res.json()
+                status_code = res_json.get("status_code")
+                status_detail = res_json.get("status")
+                print(f"IG Reels Container Status: {status_code} (Detail: {status_detail})")
                 if status_code == "FINISHED":
                     processing_success = True
                     break
