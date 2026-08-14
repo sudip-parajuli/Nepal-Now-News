@@ -881,6 +881,99 @@ class SceneRenderer:
             clip.on_closed(lambda: video_clip.close())
         return clip.set_fps(30)
 
+    def render_subscribe_badge(self, duration: float, main_text: str = "SUBSCRIBE",
+                                sub_text: str = "for more mind-bending science") -> VideoClip:
+        """
+        Renders a small pulsing 'Subscribe' pill + bell icon meant to be composited
+        as a transparent overlay on top of the final seconds of a video, rather than
+        replacing the visual. Uses color-keying (a near-black key unlikely to occur
+        naturally) so it can be layered without needing a real alpha-supporting
+        VideoClip pipeline.
+        """
+        KEY_COLOR = (1, 2, 3)
+        font_path_bold = get_font_path("bold")
+        font_path_reg = get_font_path("regular")
+        is_port = self.mode == 'portrait'
+
+        main_font = ImageFont.truetype(font_path_bold, int(56 if is_port else 42))
+        sub_font = ImageFont.truetype(font_path_reg, int(28 if is_port else 22))
+
+        cx = self.WIDTH // 2
+        cy = self.HEIGHT - (300 if is_port else 170)
+
+        # ── Measure text once so the pill always fits it, at any scale ─────────
+        dummy = Image.new("RGB", (1, 1))
+        dd = ImageDraw.Draw(dummy)
+        text_bbox = dd.textbbox((0, 0), main_text, font=main_font)
+        text_w = text_bbox[2] - text_bbox[0]
+
+        bell_r_base = 20
+        pad_left = 30       # left edge -> bell center
+        bell_to_text = 34   # bell edge -> text start
+        pad_right = 36       # text end -> right edge
+
+        base_pill_w = pad_left + bell_r_base + bell_to_text + text_w + pad_right
+        base_pill_h = 96 if not is_port else 108
+        bell_cx_offset = -(base_pill_w // 2) + pad_left  # relative to cx
+        text_x_offset = bell_cx_offset + bell_r_base + bell_to_text  # relative to cx
+
+        def make_frame(t):
+            img = Image.new("RGB", (self.WIDTH, self.HEIGHT), KEY_COLOR)
+            draw = ImageDraw.Draw(img)
+
+            # Entrance: pop in over the first 0.35s, then a gentle continuous pulse
+            entrance = min(1.0, t / 0.35)
+            ease = 1.0 - (1.0 - entrance) ** 3
+            pulse = 1.0 + 0.05 * math.sin(max(0.0, t - 0.35) * 3.2)
+            scale = ease * pulse
+
+            pill_w, pill_h = int(base_pill_w * scale), int(base_pill_h * scale)
+            if pill_w <= 0 or pill_h <= 0:
+                return np.array(img)
+
+            # Soft glow ring
+            glow_r = int(14 * (0.6 + 0.4 * math.sin(t * 3.2)))
+            draw.rounded_rectangle(
+                [(cx - pill_w // 2 - glow_r, cy - pill_h // 2 - glow_r),
+                 (cx + pill_w // 2 + glow_r, cy + pill_h // 2 + glow_r)],
+                radius=(pill_h // 2 + glow_r), fill=(255, 30, 60)
+            )
+            # Main red pill (YouTube-subscribe red)
+            draw.rounded_rectangle(
+                [(cx - pill_w // 2, cy - pill_h // 2), (cx + pill_w // 2, cy + pill_h // 2)],
+                radius=pill_h // 2, fill=(230, 20, 40)
+            )
+            # Bell icon (simple geometric bell, left of text)
+            bell_cx = cx + int(bell_cx_offset * scale)
+            bell_cy = cy
+            bell_r = int(bell_r_base * scale)
+            if bell_r > 1:
+                wobble = math.sin(t * 6.0) * 6 if t < 1.2 else 0
+                draw.arc(
+                    [(bell_cx - bell_r, bell_cy - bell_r), (bell_cx + bell_r, bell_cy + bell_r)],
+                    start=200 + wobble, end=340 + wobble, fill=(255, 255, 255), width=max(2, int(4 * scale))
+                )
+                draw.ellipse(
+                    [(bell_cx - 3, bell_cy + bell_r - 4), (bell_cx + 3, bell_cy + bell_r + 2)],
+                    fill=(255, 255, 255)
+                )
+
+            if entrance > 0.5:
+                text_alpha_scale = min(1.0, (entrance - 0.5) / 0.5)
+                text_x = cx + int(text_x_offset * scale)
+                if text_alpha_scale > 0.3:
+                    draw.text((text_x, cy), main_text, font=main_font, fill=(255, 255, 255), anchor="lm")
+
+            if entrance >= 1.0:
+                draw.text((cx, cy + pill_h // 2 + 34), sub_text, font=sub_font, fill=(225, 225, 235), anchor="mm")
+
+            return np.array(img)
+
+        clip = VideoClip(make_frame, duration=duration).set_fps(30)
+        from moviepy.video.fx.all import mask_color
+        clip = mask_color(clip, color=KEY_COLOR, thr=6, s=6)
+        return clip
+
     def render_data_bars(self, bg_path: str, text: str, duration: float, bar_data: list) -> VideoClip:
         """
         Compares multiple values using animated 3D-styled data bars.

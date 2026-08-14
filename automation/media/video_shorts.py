@@ -748,6 +748,16 @@ class VideoShortsGenerator:
                 except Exception as cap_err:
                     print(f"[Shorts] Caption overlay failed: {cap_err}")
 
+            # ── 5b. Subscribe badge overlay on the final seconds ───────────────
+            try:
+                badge_dur = min(3.0, total_duration)
+                if badge_dur > 1.0:
+                    sub_clip = renderer.render_subscribe_badge(badge_dur, sub_text="for more daily deep space")
+                    sub_clip = sub_clip.set_start(max(0.0, total_duration - badge_dur)).set_position("center")
+                    clips.append(sub_clip)
+            except Exception as badge_err:
+                print(f"[Shorts] Subscribe badge overlay error: {badge_err}")
+
             # ── 6. Background music ───────────────────────────────────────────
             music_files = []
             for mdir in ["automation/music/science"]:

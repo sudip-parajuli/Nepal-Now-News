@@ -148,10 +148,14 @@ class ScriptWriter:
         - Duration: 35-45 seconds of speech.
         - Tone: Calm, educational, documentary-style.
         - Structure:
-            1. Hook: Start with a mind-blowing fact or intriguing question.
-            2. Content: Explain 2-3 key scientific aspects clearly and engagingly.
+            1. Hook: The FIRST sentence must create an open loop within 2 seconds of speech (a fact or question so
+               surprising the viewer feels they'll regret scrolling past it). Never start with throat-clearing like
+               "Did you know" without an immediate payoff word in the same sentence.
+            2. Content: Explain 2-3 key scientific aspects clearly and engagingly, each one escalating in surprise
+               value from the last (never front-load the biggest fact — save something for the final third so
+               viewers who skip ahead still get a payoff, which protects average view percentage).
             3. Engagement: END with a thought-provoking question for the audience to encourage comments and engagement.
-        
+
         Rules:
         - Avoid clicks or exaggeration.
         - Be scientifically accurate.
@@ -194,16 +198,25 @@ class ScriptWriter:
 
         STRICT NARRATIVE RULES:
         1. COGNITIVE DISSONANCE: Your hook must create immediate curiosity or a feeling that "this shouldn't be possible."
-        2. NO VAGUE FILLERS: Never use phrases like "in the realm of", "profound implications", or "testament to curiosity". 
+        2. NO VAGUE FILLERS: Never use phrases like "in the realm of", "profound implications", or "testament to curiosity".
         3. SPECIFICITY: Use precise names, dates, and numbers. Cite specific scientists or missions.
         4. CAUSAL DEPTH: Every mechanism must be explained causally. Use "X happens because of Z" logic, not just "X causes Y."
         5. SENTENCE RHYTHM: Vary sentence length. Use short, punchy sentences (3-5 words) after long explanatory ones for impact.
         6. NO ROBOTIC TONE: Read this as if you are a brilliant friend explaining a secret of the universe.
+        7. MID-VIDEO RE-HOOK (critical for retention): Right around the midpoint of the script, insert a short curiosity
+           "re-hook" — a pivot sentence like "But here's the part that took scientists years to accept..." or "And this is
+           where it gets strange." This resets viewer attention exactly where most people drift off in a 6-minute video.
+           Do not label it, just weave it in as a natural transition sentence.
 
         STRUCTURE & LENGTH:
-        Target approximately 900 words (~6 minutes). 
-        Structure: hook → background context → core science mechanism → recent discovery or application → broader implications → memorable closing line.
-        End on a single surprising or poetic image that reframes the topic.
+        Target approximately 900 words (~6 minutes).
+        Structure: hook → background context → core science mechanism → mid-video re-hook (see rule 7) → recent discovery
+        or application → broader implications → memorable closing line.
+        The closing line must do two things in one or two natural sentences: (a) land a surprising or poetic image that
+        reframes the topic, and (b) flow directly into a brief, non-cheesy invitation to subscribe for more — phrased
+        like a curious friend, not an ad (e.g. "...and if that idea keeps you up at night, there's more of this waiting
+        for you here every week — subscribe and see where it leads."). Never use the generic phrase "smash the subscribe
+        button" or similar clickbait phrasing.
 
         VISUAL CUES:
         This is for an image-based workflow. Every 2 sentences, add a short [bracketed image cue] in plain language (e.g. [macro photo of bismuth crystals] or [NASA animation of a pulsar]).
