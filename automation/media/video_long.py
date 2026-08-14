@@ -585,6 +585,20 @@ class VideoLongGenerator:
                     print(f"PopUp render error: {e}")
                     continue
 
+        # ── Subscribe badge: pulsing pill overlay on the final seconds ─────────
+        # Placed over the existing outro visual (not a separate slide) so it doesn't
+        # interrupt the story, but still nudges the subscribe action right as the
+        # payoff/closing line lands — this is when intent-to-subscribe is highest.
+        try:
+            badge_dur = min(5.0, total_duration)
+            if badge_dur > 1.0:
+                sub_renderer = SceneRenderer(mode='landscape')
+                sub_clip = sub_renderer.render_subscribe_badge(badge_dur)
+                sub_clip = sub_clip.set_start(max(0.0, total_duration - badge_dur)).set_position("center")
+                caption_clips.append(sub_clip)
+        except Exception as e:
+            print(f"[VideoLong] Subscribe badge overlay error: {e}")
+
         final_video = CompositeVideoClip([final_bg] + caption_clips, size=self.size).set_audio(audio)
         
         audio_mix = [audio.volumex(1.15)]

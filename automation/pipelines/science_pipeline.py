@@ -209,6 +209,50 @@ class SciencePipeline(BasePipeline):
                 print(f"WARNING: Thumbnail upload failed: {ute}")
 
 
+    def _build_chapters(self, scene_timings: list, scenes: list) -> str:
+        """
+        Builds a YouTube-compliant chapter list ("00:00 Title" per line) from the
+        rendered scene timings. Chapters give viewers a visible roadmap in the
+        progress bar/description, which reduces "is this worth my time" drop-off
+        early in long-form videos. YouTube requires: first chapter at 0:00, at
+        least 3 chapters, each >= 10s.
+        """
+        if not scene_timings or not scenes or len(scene_timings) != len(scenes):
+            return ""
+
+        def fmt(t):
+            t = max(0, int(t))
+            h, rem = divmod(t, 3600)
+            m, s = divmod(rem, 60)
+            return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+        def title_for(scene):
+            for key in ("emphasis_phrase", "question_text", "named_entity"):
+                val = scene.get(key)
+                if val:
+                    words = str(val).replace("*", "").strip().split()
+                    if words:
+                        return " ".join(w.capitalize() for w in words[:6])
+            narration = str(scene.get("narration", "")).replace("*", "").strip()
+            words = narration.split()
+            return " ".join(words[:6]).capitalize() if words else "Deep Dive"
+
+        chapters = []
+        last_start = -100
+        for scene, timing in zip(scenes, scene_timings):
+            start = timing.get("start", 0)
+            if start - last_start < 10 and chapters:
+                continue  # merge into previous chapter, YouTube requires >=10s spacing
+            chapters.append((start, title_for(scene)))
+            last_start = start
+
+        if len(chapters) < 3:
+            return ""
+
+        chapters[0] = (0, chapters[0][1])
+        lines = [f"{fmt(t)} {title}" for t, title in chapters]
+        return "\n".join(lines)
+
     async def _run_daily(self, topic: str, is_test: bool):
         # 2. Generate Expanded Script (plain text for TTS — unchanged)
         script = self.script_writer.expand_science_script(topic)
@@ -252,7 +296,10 @@ class SciencePipeline(BasePipeline):
             word_offsets,
             media_paths=media_paths,
             asset_manifest=asset_manifest,
-            burn_captions=False,  # YouTube provides subtitles via uploaded SRT
+            # Burn captions directly into the frame. Most viewers watch muted/on mobile
+            # and never toggle CC — an uploaded SRT alone was invisible to ~99% of viewers,
+            # which was silently killing retention on the long-form videos.
+            burn_captions=True,
         )
 
         # 8. Cleanup temp job assets after successful render
@@ -286,13 +333,19 @@ class SciencePipeline(BasePipeline):
             yt_title_daily = f"The Science of {topic}: Explained"
         print(f"YouTube Daily title: {yt_title_daily}")
 
-        # 12. Upload
+        # 12. Upload (with chapters built from the actual rendered scene timings —
+        # gives viewers a visible roadmap and reduces early "is this worth it" drop-off)
+        chapters = ""
+        if hasattr(vgen_long, "scene_timings") and hasattr(vgen_long, "scenes"):
+            chapters = self._build_chapters(vgen_long.scene_timings, vgen_long.scenes)
+
         if True:
             video_id = await self._upload(
                 video_path,
                 yt_title_daily,
                 script, topic,
-                is_test=is_test, is_shorts=False, srt_path=srt_path
+                is_test=is_test, is_shorts=False, srt_path=srt_path,
+                chapters=chapters,
             )
 
             # Meta Upload
@@ -332,7 +385,7 @@ class SciencePipeline(BasePipeline):
         
         return media_paths
 
-    async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True, srt_path=None):
+    async def _upload(self, video_path, title, script, topic, is_test=False, is_shorts=True, srt_path=None, chapters=""):
         if is_test:
             print(f"TEST MODE: Skipping upload for {title}")
             print(f"--- Science Pipeline Completed ---")
@@ -341,9 +394,14 @@ class SciencePipeline(BasePipeline):
         print("Initializing YouTube service...")
         youtube_service = YouTubeAuth.get_service(os.getenv("YOUTUBE_TOKEN_BASE64"))
         self.uploader = YouTubeUploader(youtube_service)
-        
+
         hashtags = self.config.get('hashtags', "#science #facts #universe")
-        description = f"{script}\n\n#Science #Education {hashtags}"
+        cta = "\n\n🔔 Subscribe for more mind-bending science, twice a week.\n👍 If this blew your mind, drop a like — it tells YouTube to show it to more people."
+        description_parts = [script, cta]
+        if chapters:
+            description_parts.append(f"\n\nCHAPTERS:\n{chapters}")
+        description_parts.append(f"\n\n#Science #Education {hashtags}")
+        description = "".join(description_parts)
         tags = ["science", "facts", "universe", "space", "educational"]
         if is_shorts: tags.append("shorts")
         
