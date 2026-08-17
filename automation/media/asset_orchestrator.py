@@ -58,13 +58,19 @@ class AssetOrchestrator:
             narration = scene.get("narration", "")
             image_cue = scene.get("image_cue")
             if not image_cue or image_cue == "None":
-                image_cue = f"{topic} space astronomy"
+                # Generic fallback — previously hardcoded "{topic} space astronomy" here, which
+                # meant any scene missing an image_cue (regardless of the video's actual subject —
+                # chemistry, biology, neuroscience...) silently searched for space photos instead.
+                image_cue = f"{topic} science"
             
             ai_video_prompt = scene.get("ai_video_prompt", "")
 
             # ── Schema Defaults & Downgrades ──────────────────────────────────
             if visual_type == "kinetic_stat" and not scene.get("stat_data"):
                 print(f"[AssetOrchestrator] Scene {idx}: Downgrading kinetic_stat to typewriter_text due to missing stat_data")
+                visual_type = "typewriter_text"
+            if visual_type == "data_bars" and not scene.get("bar_data"):
+                print(f"[AssetOrchestrator] Scene {idx}: Downgrading data_bars to typewriter_text due to missing bar_data")
                 visual_type = "typewriter_text"
 
             emphasis_phrase = scene.get("emphasis_phrase")
@@ -124,9 +130,12 @@ class AssetOrchestrator:
 
             # Fetch background image for all other scene types to draw overlay styles on top of
             print(f"[AssetOrchestrator] Scene {idx}: fetching background image for type '{visual_type}'...")
+            # Second query used to always append "space astronomy" regardless of topic, which
+            # dragged every non-space scene (chemistry, biology, psychology...) toward irrelevant
+            # deep-space b-roll. Use a topic-neutral second phrasing instead.
             queries = [
                 f"{image_cue} cinematic 4k",
-                f"{image_cue} space astronomy",
+                f"{image_cue} documentary photography",
             ]
             # Sleep slightly to avoid DDG rate limits between scenes
             if idx > 0:

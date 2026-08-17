@@ -261,10 +261,10 @@ class ScriptWriter:
         Context: {extra_context}
 
         Requirements:
-        1. Terms must be ready-to-search queries (e.g. "Hubble telescope nebula deep space", "close up macro leaf cells").
-        2. STRICTLY NO HUMANS, NO FACES, NO PEOPLE, NO CHARACTERS, NO TEXT, NO CARTOONS, NO ANIMATION, NO ANIMALS, NO MOVIES. ONLY PURE SCIENCE.
+        1. Terms must be ready-to-search queries (e.g. "Hubble telescope nebula deep space", "close up macro leaf cells", "MRI scan of human brain", "chimpanzee troop rainforest").
+        2. Prefer real photography over illustrations: no cartoons, memes, movie stills, screenshots, or text-heavy graphics. Real people or animals are welcome WHEN the script's topic is actually about them (anatomy, animal behavior, a named scientist, a historical discovery) — do not force every query toward abstract space/nebula imagery if the topic is biology, chemistry, or another non-space field.
         3. For each segment of the script (Intro, Body sections, Conclusion), provide diverse queries.
-        4. Prioritize cinematic, 4k, macro, or animation styles.
+        4. Prioritize cinematic, 4k, macro, or documentary styles relevant to the actual subject matter.
         5. Return ONLY the search terms, one per line. No numbers or bullet points.
         """
         
@@ -297,7 +297,7 @@ class ScriptWriter:
         self.last_thumbnail_data = {
             "hook_phrase": topic[:25].upper(),
             "supporting_fact": "A scientific discovery.",
-            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific documentary style",
             "thumbnail_subject_query": ""
         }
 
@@ -337,7 +337,7 @@ STRICT SCENE & FORMAT CONSTRAINTS:
 Additionally, generate metadata for the YouTube THUMBNAIL:
 - `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
 - `supporting_fact`: Short supporting fact/stat in 5-8 words.
-- `thumbnail_bg_query`: DDG search term for a space/science background.
+- `thumbnail_bg_query`: DDG search term for a cinematic background image relevant to THIS topic (not necessarily space — match the actual subject).
 - `thumbnail_subject_query`: DDG search term for a main subject image to composite.
 
 Return ONLY a valid JSON object of this structure:
@@ -504,7 +504,7 @@ Script:
         self.last_thumbnail_data = {
             "hook_phrase": topic[:25].upper(),
             "supporting_fact": "A scientific discovery.",
-            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific documentary style",
             "thumbnail_subject_query": ""
         }
 
@@ -513,12 +513,12 @@ Script:
 You are a visual director for a science YouTube channel called "Daily Deep Space".
 You will be given a narration script about "{topic}".
 Break the script into EXACTLY 5 visual SCENES total for a YouTube Short.
-For each scene assign one of these 5 visual types following this STRICT mix:
+For each scene assign one of these 6 visual types following this STRICT mix:
 - 1 `hook_question` (must be the opening scene 1)
 - 1-2 `typewriter_text`
 - 1-2 `image` or `ai_video` (max 1 `ai_video` total)
-- 0-1 `kinetic_stat`
-DO NOT use data_bars.
+- 0-1 `kinetic_stat` OR `data_bars` (never both in the same Short — use whichever actually
+  fits the script's content: a single overwhelming number vs. a 3-4 way comparison)
 
 1. `hook_question`   - Use for chapter openings, rhetorical questions.
    Fields: "question_text": string, "emphasis_phrase": string (key words/phrase in ALL CAPS, never null).
@@ -530,17 +530,20 @@ DO NOT use data_bars.
    Fields: "named_entity": string (optional, to display as lower third).
 5. `ai_video`        - Use for abstract phenomena (space, physics, microscopic).
    Fields: "ai_video_prompt": text-to-video prompt. Max 1 scenes of this type!
+6. `data_bars`       - Use for comparing 3-4 values (an animated bar chart).
+   Fields: "bar_data": list of 3-4 objects, each with "label" (string) and "value" (number).
 
 STRICT RULES FOR FIELDS:
 1. `image_cue` MUST be a specific, descriptive, non-empty search query (never null, never the word 'None' or empty string).
 2. For `hook_question` scenes, you MUST provide `question_text` and a non-empty `emphasis_phrase` string (key words/phrase in ALL CAPS).
 3. For `typewriter_text` scenes, `typewriter_words` MUST be a list of dictionaries where each dictionary contains {{"word": "example", "weight": "bold"}} or {{"word": "example", "weight": "md"}}. Give important emphasis words a weight of "bold", and regular words a weight of "md".
 4. For `kinetic_stat` scenes, you MUST provide non-null `stat_data` containing "value", "unit", and "label". If a scene does not have statistical data, do not use `kinetic_stat`.
+5. For `data_bars` scenes, you MUST provide non-null `bar_data` with 3-4 {{"label", "value"}} objects. Only use it if the script actually compares multiple values.
 
 Additionally, generate metadata for the YouTube THUMBNAIL (portrait format):
 - `hook_phrase`: Max 4 words, ALL CAPS, creates curiosity or shock. Never generic titles like "THE SCIENCE OF".
 - `supporting_fact`: Short supporting fact/stat in 5-8 words.
-- `thumbnail_bg_query`: DDG search term for a space/science background.
+- `thumbnail_bg_query`: DDG search term for a cinematic background image relevant to THIS topic (not necessarily space — match the actual subject).
 - `thumbnail_subject_query`: DDG search term for a main subject image to composite.
 
 Return ONLY a valid JSON object of this structure:
@@ -555,7 +558,8 @@ Return ONLY a valid JSON object of this structure:
       "named_entity": null,
       "ai_video_prompt": "",
       "question_text": null,
-      "emphasis_phrase": null
+      "emphasis_phrase": null,
+      "bar_data": null
     }}
   ],
   "thumbnail_data": {{
@@ -647,18 +651,18 @@ Script:
             if not isinstance(s, dict):
                 continue
             vtype = s.get("visual_type", "image")
-            if vtype not in ["typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question"]:
+            if vtype not in ["typewriter_text", "kinetic_stat", "image", "ai_video", "hook_question", "data_bars"]:
                 vtype = "image"
-            
+
             if vtype == "ai_video":
                 if ai_count >= 1:
                     print("[ScriptWriter] Enforcing ai_video cap — downgrading scene to image")
                     vtype = "image"
                 else:
                     ai_count += 1
-            
+
             s["visual_type"] = vtype
-            
+
             # Ensure all required fields exist to prevent KeyErrors later
             s.setdefault("narration", "")
             s.setdefault("image_cue", f"{topic} science background")
@@ -668,6 +672,7 @@ Script:
             s.setdefault("ai_video_prompt", "")
             s.setdefault("question_text", None)
             s.setdefault("emphasis_phrase", None)
+            s.setdefault("bar_data", None)
 
             final_scenes.append(s)
 
@@ -704,19 +709,19 @@ Script:
             
             return {
                 "text": hook or topic[:25].upper(),
-                "image_prompt": thumb.get("thumbnail_bg_query", f"cinematic 4k photo of {topic}, scientific, deep space"),
+                "image_prompt": thumb.get("thumbnail_bg_query", f"cinematic 4k photo of {topic}, scientific documentary style"),
                 "hook_phrase": hook or topic[:25].upper(),
                 "supporting_fact": thumb.get("supporting_fact", "A scientific revelation."),
-                "thumbnail_bg_query": thumb.get("thumbnail_bg_query", f"cinematic 4k photo of {topic}, scientific, deep space"),
+                "thumbnail_bg_query": thumb.get("thumbnail_bg_query", f"cinematic 4k photo of {topic}, scientific documentary style"),
                 "thumbnail_subject_query": thumb.get("thumbnail_subject_query", "")
             }
         
         # Generic fallback
         return {
             "text": topic[:25].upper(),
-            "image_prompt": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "image_prompt": f"cinematic 4k photo of {topic}, scientific documentary style",
             "hook_phrase": topic[:25].upper(),
             "supporting_fact": "A scientific revelation.",
-            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific, deep space",
+            "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific documentary style",
             "thumbnail_subject_query": ""
         }

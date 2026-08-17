@@ -60,6 +60,12 @@ automation/storage/*.png
 !automation/musics/**/*.wav
 !automation/music/**/*.mp3
 !automation/media/assets/*.mp4
+# SFX are tiny, deterministically-generated (automation/media/sfx/generate_sfx.py) files
+# that MUST ship with the repo — without this exemption the blanket "*.mp3" rule above
+# silently excluded them, so a fresh CI checkout had NO sfx files at all and every
+# whoosh/dong/sweep/riser/impact/shimmer SFX cue in every rendered video was a no-op
+# (all the `if os.path.exists(sfx_path)` guards throughout the renderer just skipped).
+!automation/media/sfx/*.mp3
 !automation/media/assets/*.png
 *.log
 
