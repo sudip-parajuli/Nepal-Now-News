@@ -241,171 +241,34 @@ class VideoShortsGenerator:
             if not font: font = ImageFont.load_default()
 
             print("DEBUG: Using Pop-Up Word caption style (scale-in, bold, keyword highlight)")
-            
-            # ── Font: Heavy/Extra-Bold sans-serif ─────────────────────────────────
-            POP_FONT_SIZE = 88
-            pop_font = None
-            pop_font_paths = [
-                "automation/media/assets/Montserrat-Black.ttf",
-                "automation/media/assets/Montserrat-ExtraBold.ttf",
-                "C:\\Windows\\Fonts\\ariblk.ttf",   # Arial Black
-                "C:\\Windows\\Fonts\\impact.ttf",    # Impact
-                "C:\\Windows\\Fonts\\arialbd.ttf",   # Arial Bold
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-            ]
-            for _fp in pop_font_paths:
-                if os.path.exists(_fp):
-                    try:
-                        pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
-                        print(f"PopUp Font loaded: {_fp}")
-                        break
-                    except: continue
-            if not pop_font:
-                pop_font = font  # last-resort fallback
 
-            # ── Keyword detection ─────────────────────────────────────────────────
-            _STOP = {
-                'the','a','an','is','are','was','were','be','been','being',
-                'of','in','on','at','to','for','and','or','but','so','yet',
-                'it','its','this','that','these','those','with','from','by',
-                'as','into','do','does','did','not','no','have','has','had',
-                'will','would','can','could','should','may','might','what',
-                'which','who','when','where','why','how','if','than','then',
-                'there','here','they','we','he','she','you','i','my','your',
-                'our','their','his','her','also','just','even','up','out',
-                'about','over','more','very','such','each',
-            }
+            from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
 
-            def _is_keyword(w):
-                clean = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
-                if not clean: return False
-                if clean in _STOP: return False
-                if '*' in w: return True        # explicitly marked in script
-                if len(clean) >= 6: return True  # long words = content words
-                return False
+            pop_font = get_pop_font(88)
+            pop_chunks = build_pop_chunks(word_offsets)
 
-            # ── Render one chunk as RGBA PIL image with per-word colors ──────────
-            def _render_popup(words_list, highlight_mask):
-                STROKE = 3
-                SHADOW = 4
-                HP, VP = 28, 22
+            # Below center, clear of the bottom safe area reserved for the Shorts title/
+            # description/engagement rail — matches create_shorts_from_scenes.
+            caption_y = int(self.size[1] * 0.60)
+            badge_dur = min(3.0, duration)
+            badge_start = max(0.0, duration - badge_dur)
 
-                dummy = Image.new('RGB', (1, 1))
-                dd = ImageDraw.Draw(dummy)
-                sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
-            def _render_popup(words_list, highlight_mask):
-                STROKE = 3
-                SHADOW = 4
-                HP, VP = 28, 22
-                MAX_W = 900 # Safe width for 1080p Shorts
-
-                dummy = Image.new('RGB', (1, 1))
-                dd = ImageDraw.Draw(dummy)
-                sp_bbox = dd.textbbox((0, 0), " ", font=pop_font)
-                sp_w = max(sp_bbox[2] - sp_bbox[0], 12)
-
-                lines = []
-                current_line = []
-                current_w = 0
-                max_h = 0
-                
-                for idx, wrd in enumerate(words_list):
-                    bb = dd.textbbox((0, 0), wrd, font=pop_font)
-                    ww, wh = bb[2]-bb[0], bb[3]-bb[1]
-                    max_h = max(max_h, wh)
-                    
-                    if current_line and current_w + ww + sp_w > MAX_W:
-                        lines.append(current_line)
-                        current_line = []
-                        current_w = 0
-                        
-                    current_line.append((idx, wrd, ww, wh))
-                    current_w += ww + sp_w if current_line else ww
-                
-                if current_line:
-                    lines.append(current_line)
-
-                # Calculate total image dimensions
-                line_widths = []
-                for line in lines:
-                    lw = sum(w[2] for w in line) + sp_w * (max(len(line) - 1, 0))
-                    line_widths.append(lw)
-                
-                total_w = max(line_widths) if line_widths else 0
-                total_h = len(lines) * max_h + max(len(lines) - 1, 0) * 10
-                
-                img_w = int(total_w + HP*2 + STROKE*2 + SHADOW + 4)
-                img_h = int(total_h + VP*2 + STROKE*2 + SHADOW + 4)
-
-                img = Image.new('RGBA', (img_w, img_h), (0, 0, 0, 0))
-                d = ImageDraw.Draw(img)
-                
-                y = VP + STROKE
-                for line_idx, line in enumerate(lines):
-                    # Center line horizontally
-                    line_w = line_widths[line_idx]
-                    x = (img_w - line_w) // 2
-                    
-                    for idx, wrd, ww, _ in line:
-                        clr = '#FFD700' if highlight_mask[idx] else 'white'
-                        d.text((x+SHADOW, y+SHADOW), wrd, font=pop_font, fill=(0,0,0,160))
-                        for dx in range(-STROKE, STROKE+1):
-                            for dy in range(-STROKE, STROKE+1):
-                                if dx == 0 and dy == 0: continue
-                                d.text((x+dx, y+dy), wrd, font=pop_font, fill='black')
-                        d.text((x, y), wrd, font=pop_font, fill=clr)
-                        x += ww + sp_w
-                    y += max_h + 10
-                    
-                return img
-
-            # ── Group word_offsets into 2-3 word chunks ───────────────────────────
-            pop_chunks = []
-            cur_chunk, cur_len = [], 0
-            for w in word_offsets:
-                wclean = re.sub(r'\[.*?\]', '', w['word'].replace('*', '')).strip()
-                if not wclean: continue
-                # Flush at 3 words or after punctuation
-                if cur_len >= 3 or (cur_len >= 2 and wclean.endswith(('.','?','!',','))):
-                    pop_chunks.append(cur_chunk)
-                    cur_chunk, cur_len = [], 0
-                cur_chunk.append({**w, 'display': wclean})
-                cur_len += 1
-                if wclean.endswith(('.', '?', '!')):
-                    pop_chunks.append(cur_chunk)
-                    cur_chunk, cur_len = [], 0
-            if cur_chunk:
-                pop_chunks.append(cur_chunk)
-
-            # ── Render each chunk with 80→100% scale-in pop animation ─────────────
             for i, chunk in enumerate(pop_chunks):
-                if not chunk: continue
+                if not chunk:
+                    continue
                 chunk_start = chunk[0]['start']
-                
-                if i < len(pop_chunks) - 1 and pop_chunks[i+1]:
-                    next_start = pop_chunks[i+1][0]['start']
+                if badge_dur > 1.0 and chunk_start >= badge_start - 0.2:
+                    continue  # yield the frame to the subscribe badge
+
+                if i < len(pop_chunks) - 1 and pop_chunks[i + 1]:
+                    next_start = pop_chunks[i + 1][0]['start']
                     chunk_dur = max(next_start - chunk_start, 0.1)
                 else:
                     chunk_end = chunk[-1]['start'] + chunk[-1]['duration']
                     chunk_dur = max(chunk_end - chunk_start, 0.35)
 
-                words_display = [c['display'].upper() for c in chunk]
-                hi_mask       = [_is_keyword(c['word']) for c in chunk]
-
                 try:
-                    pil_img  = _render_popup(words_display, hi_mask)
-                    pop_clip = ImageClip(np.array(pil_img))
-                    # Pop-in: scale 80% → 100% over first 0.18 s
-                    anim_dur = min(0.18, chunk_dur * 0.35)
-                    pop_clip = pop_clip.resize(
-                        lambda t, ad=anim_dur: min(1.0, 0.80 + 0.20 * (t / ad))
-                    )
-                    pop_clip = (pop_clip
-                                .set_start(chunk_start)
-                                .set_duration(chunk_dur)
-                                .set_position('center'))
+                    pop_clip = make_pop_caption_clip(chunk, chunk_dur, pop_font, max_w=900, caption_y=caption_y)
                     clips.append(pop_clip)
                 except Exception as e:
                     print(f"PopUp render error: {e}")
@@ -417,8 +280,17 @@ class VideoShortsGenerator:
                 if not hasattr(self, 'sfx_clips'): self.sfx_clips = []
                 self.sfx_clips.insert(0, dong)
 
-
-        
+            # Subscribe badge on the final seconds — this legacy path previously had no
+            # subscribe nudge at all (only create_shorts_from_scenes did).
+            try:
+                if badge_dur > 1.0:
+                    from .scene_renderer import SceneRenderer
+                    sub_renderer = SceneRenderer(mode='portrait')
+                    sub_clip = sub_renderer.render_subscribe_badge(badge_dur, sub_text="for more daily deep space")
+                    sub_clip = sub_clip.set_start(badge_start).set_position("center")
+                    clips.append(sub_clip)
+            except Exception as badge_err:
+                print(f"[Shorts] Subscribe badge overlay error: {badge_err}")
 
         
         music_files = []
@@ -570,6 +442,9 @@ class VideoShortsGenerator:
                         )
                     elif scene_type == "ai_video":
                         clip = renderer.render_ai_video(asset_path, dur)
+                    elif scene_type == "data_bars":
+                        bar_data = scene.get("bar_data")
+                        clip = renderer.render_data_bars(asset_path, narration, dur, bar_data)
                     elif scene_type == "image":
                         named_ent = scene.get("named_entity", "")
                         clip = renderer.render_image(asset_path, narration, dur, named_ent)
@@ -614,7 +489,16 @@ class VideoShortsGenerator:
                 if i < len(capped_clips) - 1:
                     flash = ColorClip(size=(1080, 1920), color=(255, 255, 255), duration=flash_dur)
                     final_clips.append(flash)
-                    self.sfx_events.append({"time": curr_pos, "file": "whoosh.mp3"})
+                    # Distinct SFX for the scene being landed on — a stat/chart should
+                    # punch, not just whoosh like every other cut.
+                    next_type = scenes[i + 1].get("visual_type", "image") if i + 1 < len(scenes) else "image"
+                    if next_type in ("kinetic_stat", "data_bars"):
+                        transition_sfx = "impact.mp3"
+                    elif next_type == "hook_question":
+                        transition_sfx = "riser.mp3"
+                    else:
+                        transition_sfx = "whoosh.mp3"
+                    self.sfx_events.append({"time": curr_pos, "file": transition_sfx})
                     curr_pos += flash_dur
 
             combined = concatenate_videoclips(final_clips, method="compose")
@@ -629,99 +513,31 @@ class VideoShortsGenerator:
 
             clips = [combined]
 
-            # ── 5. Overlay pop-up captions (reuse existing logic) ─────────────
+            # Subscribe badge occupies the bottom area for the final few seconds — reserve
+            # that window so late captions don't render on top of / behind it (see 5b).
+            badge_dur = min(3.0, total_duration)
+            badge_start = max(0.0, total_duration - badge_dur)
+
+            # ── 5. Overlay pop-up captions ──────────────────────────────────────
             if word_offsets:
                 try:
-                    from PIL import ImageFont, ImageDraw, Image as PilImage
-                    import re
+                    from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
 
-                    POP_FONT_SIZE = 88
-                    pop_font = None
-                    pop_font_paths = [
-                        "automation/fonts/Barlow-CondensedBold.ttf",
-                        "automation/fonts/Barlow-Bold.ttf",
-                        "automation/media/assets/Montserrat-Black.ttf",
-                        "automation/media/assets/Montserrat-ExtraBold.ttf",
-                        "C:\\Windows\\Fonts\\ariblk.ttf",
-                        "C:\\Windows\\Fonts\\impact.ttf",
-                        "C:\\Windows\\Fonts\\arialbd.ttf",
-                    ]
-                    for _fp in pop_font_paths:
-                        if os.path.exists(_fp):
-                            try:
-                                pop_font = ImageFont.truetype(_fp, POP_FONT_SIZE)
-                                break
-                            except Exception:
-                                continue
-                    if not pop_font:
-                        pop_font = ImageFont.load_default()
+                    pop_font = get_pop_font(88)
+                    pop_chunks = build_pop_chunks(word_offsets)
 
-                    _STOP = {
-                        'the','a','an','is','are','was','were','of','in','on',
-                        'at','to','for','and','or','but','it','this','with','from',
-                        'by','as','do','not','have','will','can','if','than','they',
-                        'we','he','she','you','i','my','your',
-                    }
-
-                    def _is_kw(w):
-                        c = re.sub(r'[^a-zA-Z0-9]', '', w).lower()
-                        if not c or c in _STOP: return False
-                        return '*' in w or len(c) >= 6
-
-                    def _render_pop(words_list, hi_mask):
-                        MAX_W, STROKE, SHADOW, HP, VP = 900, 3, 4, 28, 22
-                        dummy = PilImage.new('RGB', (1, 1))
-                        dd = ImageDraw.Draw(dummy)
-                        sp_w = max(dd.textbbox((0,0)," ",font=pop_font)[2]-dd.textbbox((0,0)," ",font=pop_font)[0], 12)
-                        lines, cur_l, cur_w, max_h = [], [], 0, 0
-                        for i2, wrd in enumerate(words_list):
-                            bb = dd.textbbox((0,0),wrd,font=pop_font)
-                            ww, wh = bb[2]-bb[0], bb[3]-bb[1]
-                            max_h = max(max_h, wh)
-                            if cur_l and cur_w + ww + sp_w > MAX_W:
-                                lines.append(cur_l); cur_l=[]; cur_w=0
-                            cur_l.append((i2, wrd, ww, wh))
-                            cur_w += ww + (sp_w if cur_l else 0)
-                        if cur_l: lines.append(cur_l)
-                        lws = [sum(x[2] for x in ln)+sp_w*max(len(ln)-1,0) for ln in lines]
-                        tw = max(lws) if lws else 0
-                        th = len(lines)*max_h + max(len(lines)-1,0)*10
-                        iw = int(tw+HP*2+STROKE*2+SHADOW+4)
-                        ih = int(th+VP*2+STROKE*2+SHADOW+4)
-                        img = PilImage.new('RGBA',(iw,ih),(0,0,0,0))
-                        d = ImageDraw.Draw(img)
-                        y2 = VP+STROKE
-                        for li, ln in enumerate(lines):
-                            lx = (iw-lws[li])//2
-                            for i2, wrd, ww, _ in ln:
-                                clr='#FFD700' if hi_mask[i2] else 'white'
-                                d.text((lx+SHADOW,y2+SHADOW),wrd,font=pop_font,fill=(0,0,0,160))
-                                for dx2 in range(-STROKE,STROKE+1):
-                                    for dy2 in range(-STROKE,STROKE+1):
-                                        if dx2==0 and dy2==0: continue
-                                        d.text((lx+dx2,y2+dy2),wrd,font=pop_font,fill='black')
-                                d.text((lx,y2),wrd,font=pop_font,fill=clr)
-                                lx += ww+sp_w
-                            y2 += max_h+10
-                        return img
-
-                    pop_chunks, cur_c, cur_n = [], [], 0
-                    for w in word_offsets:
-                        wc = re.sub(r'\[.*?\]', '', w['word'].replace('*','')).strip()
-                        if not wc: continue
-                        if cur_n >= 3 or (cur_n >= 2 and wc.endswith(('.','?','!',','))):
-                            pop_chunks.append(cur_c); cur_c=[]; cur_n=0
-                        cur_c.append({**w, 'display': wc}); cur_n += 1
-                        if wc.endswith(('.','?','!')):
-                            pop_chunks.append(cur_c); cur_c=[]; cur_n=0
-                    if cur_c: pop_chunks.append(cur_c)
-
-                    caption_y = 1920 // 2 - 100  # perfectly centered in portrait frame to avoid YT description blocking
+                    # Below center but well clear of the bottom ~20% YouTube reserves for the
+                    # Shorts title/description/engagement rail — previously dead-center (44.8%
+                    # down), which read as visually awkward and fought with mid-frame subjects.
+                    caption_y = int(1920 * 0.60)
                     for i, chunk in enumerate(pop_chunks):
-                        if not chunk: continue
+                        if not chunk:
+                            continue
                         cs = chunk[0]['start']
-                        
-                        # Find matching scene type to suppress bottom captions for typewriter/hook scenes
+                        if badge_dur > 1.0 and cs >= badge_start - 0.2:
+                            continue  # yield the frame to the subscribe badge
+
+                        # Find matching scene type to suppress captions over typewriter/hook scenes
                         active_type = "image"
                         for s_idx, timing in enumerate(scene_timings):
                             if timing["start"] <= cs <= timing["end"]:
@@ -729,18 +545,12 @@ class VideoShortsGenerator:
                                 break
                         if active_type in ("hook_question", "typewriter_text", "kinetic_stat"):
                             continue
-                        if i < len(pop_chunks)-1 and pop_chunks[i+1]:
-                            cd = max(pop_chunks[i+1][0]['start'] - cs, 0.1)
+                        if i < len(pop_chunks) - 1 and pop_chunks[i + 1]:
+                            cd = max(pop_chunks[i + 1][0]['start'] - cs, 0.1)
                         else:
-                            cd = max(chunk[-1]['start']+chunk[-1]['duration']-cs, 0.35)
-                        wds = [c['display'].upper() for c in chunk]
-                        hi  = [_is_kw(c['word']) for c in chunk]
+                            cd = max(chunk[-1]['start'] + chunk[-1]['duration'] - cs, 0.35)
                         try:
-                            pil_img = _render_pop(wds, hi)
-                            pop_clip = ImageClip(np.array(pil_img))
-                            ad = min(0.18, cd*0.35)
-                            pop_clip = pop_clip.resize(lambda t, a=ad: min(1.0, 0.80+0.20*(t/a)))
-                            pop_clip = pop_clip.set_start(cs).set_duration(cd).set_position(('center', caption_y))
+                            pop_clip = make_pop_caption_clip(chunk, cd, pop_font, max_w=900, caption_y=caption_y)
                             clips.append(pop_clip)
                         except Exception as cap_e:
                             print(f"Caption chunk error: {cap_e}")
@@ -750,10 +560,9 @@ class VideoShortsGenerator:
 
             # ── 5b. Subscribe badge overlay on the final seconds ───────────────
             try:
-                badge_dur = min(3.0, total_duration)
                 if badge_dur > 1.0:
                     sub_clip = renderer.render_subscribe_badge(badge_dur, sub_text="for more daily deep space")
-                    sub_clip = sub_clip.set_start(max(0.0, total_duration - badge_dur)).set_position("center")
+                    sub_clip = sub_clip.set_start(badge_start).set_position("center")
                     clips.append(sub_clip)
             except Exception as badge_err:
                 print(f"[Shorts] Subscribe badge overlay error: {badge_err}")

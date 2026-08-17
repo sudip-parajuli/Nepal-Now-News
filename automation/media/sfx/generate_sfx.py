@@ -114,6 +114,76 @@ def generate_transition_sweep(duration=0.25, sample_rate=44100):
     return samples
 
 
+def generate_riser(duration=1.4, sample_rate=44100):
+    """
+    A building tension riser — rising pitch + rising noise energy, meant to sit under
+    a hook_question / opening scene right as the hook lands, distinct from the short
+    'dong' bell (previously the only hook SFX; riser.mp3 was referenced in code as a
+    fallback but never actually generated).
+    """
+    n = int(duration * sample_rate)
+    samples = []
+    for i in range(n):
+        t = i / sample_rate
+        progress = t / duration
+        env = progress ** 1.5  # builds in volume toward the end
+        # Rising tone
+        freq = 120 + 500 * progress ** 2
+        tone = math.sin(2 * math.pi * freq * t)
+        # Rising filtered-noise energy layered on top
+        noise = 0.0
+        for h_freq in [300, 600, 950, 1400, 2100]:
+            noise += math.sin(h_freq * 2 * math.pi * t + h_freq * 0.0007 * i) / 5
+        sample = (tone * 0.6 + noise * 0.4) * env * 0.55
+        samples.append(sample)
+    return samples
+
+
+def generate_impact(duration=0.5, sample_rate=44100):
+    """
+    A punchy low-end 'impact' hit for kinetic_stat / data_bars reveals — a sharp
+    transient with a quick sub-bass thump, distinct from the airy whoosh used for
+    plain cuts, so a big number or chart landing actually feels like a landing.
+    """
+    n = int(duration * sample_rate)
+    samples = []
+    for i in range(n):
+        t = i / sample_rate
+        # Sharp attack, fast-ish decay
+        env = math.exp(-t * 9)
+        attack = 1 - math.exp(-t * 400)
+        # Sub-bass thump with a quick downward pitch bend
+        thump_freq = 90 * math.exp(-t * 6) + 45
+        thump = math.sin(2 * math.pi * thump_freq * t)
+        # A little high-frequency click for definition
+        click = math.sin(2 * math.pi * 1800 * t) * math.exp(-t * 60)
+        sample = (thump * 0.8 + click * 0.3) * env * attack * 0.8
+        samples.append(sample)
+    return samples
+
+
+def generate_shimmer(duration=0.6, sample_rate=44100):
+    """
+    A bright ascending sparkle for data_bars / chart reveals — several high, quickly
+    arpeggiated tones with a soft envelope, evokes numbers 'settling into place'.
+    """
+    n = int(duration * sample_rate)
+    samples = []
+    notes = [880.0, 1108.7, 1318.5, 1760.0]  # A5, C#6, E6, A6 — bright major arpeggio
+    note_len = duration / len(notes)
+    for i in range(n):
+        t = i / sample_rate
+        note_idx = min(int(t / note_len), len(notes) - 1)
+        note_t = t - note_idx * note_len
+        env = math.exp(-note_t * 7) * (1 - math.exp(-note_t * 200))
+        freq = notes[note_idx]
+        sample = math.sin(2 * math.pi * freq * t) * env * 0.35
+        # Light shimmer harmonic
+        sample += math.sin(2 * math.pi * freq * 2 * t) * env * 0.1
+        samples.append(sample)
+    return samples
+
+
 if __name__ == '__main__':
     print("[SFX] Generating science transition sound effects...")
 
@@ -128,5 +198,17 @@ if __name__ == '__main__':
     # Generate sweep
     sweep_wav = write_wav('sweep.wav', generate_transition_sweep())
     convert_to_mp3(sweep_wav)
+
+    # Generate riser (hook / opening tension build)
+    riser_wav = write_wav('riser.wav', generate_riser())
+    convert_to_mp3(riser_wav)
+
+    # Generate impact (stat / chart reveal punch)
+    impact_wav = write_wav('impact.wav', generate_impact())
+    convert_to_mp3(impact_wav)
+
+    # Generate shimmer (chart / data reveal sparkle)
+    shimmer_wav = write_wav('shimmer.wav', generate_shimmer())
+    convert_to_mp3(shimmer_wav)
 
     print("[SFX] All SFX generated successfully!")

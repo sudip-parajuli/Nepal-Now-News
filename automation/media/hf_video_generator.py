@@ -93,7 +93,7 @@ def _fallback_pollinations_image(prompt: str, output_dir: str, scene_idx: int) -
     """
     import re
     clean_prompt = re.sub(r"[^a-zA-Z0-9 ]", " ", prompt).strip()
-    full_prompt = f"cinematic 4k, {clean_prompt}, deep space, photorealistic, no people, dramatic lighting"
+    full_prompt = f"cinematic 4k, {clean_prompt}, photorealistic, dramatic lighting"
     encoded = requests.utils.quote(full_prompt)
     seed = (scene_idx * 31337) % 999999
     fallback_path = os.path.join(output_dir, f"scene_{scene_idx}_fallback.jpg")

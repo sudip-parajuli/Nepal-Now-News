@@ -14,11 +14,34 @@ upload:
 schedule:
   daily_times: ["07:00", "18:30"] # NPT
 topics:
-  - "Space"
-  - "Universe"
-  - "Galaxy"
-  - "Ocean"
-  - "Science facts"
+  # NOTE: previously just 5 categories ("Space","Universe","Galaxy","Ocean","Science facts"),
+  # 3 of which were near-duplicate astronomy buckets. With random.choice() that meant ~60% of
+  # every video landed on deep-space content by chance alone, which is why the channel's
+  # history (automation/storage/posted_science.json) is dominated by the same handful of
+  # topics repeated hundreds of times (Fast Radio Bursts, Bioluminescent Bays, Gravitational
+  # Lensing, the Great Attractor...). Expanded to cover science as a whole, with each
+  # category now visited round-robin (see science_topic_generator.py) instead of randomly,
+  # so every field gets equal air time before anything repeats.
+  - "Space & Astronomy"
+  - "Physics & Quantum Mechanics"
+  - "Chemistry & Materials Science"
+  - "Human Biology & Anatomy"
+  - "Neuroscience & the Brain"
+  - "Genetics & Evolution"
+  - "Ocean & Marine Life"
+  - "Earth Science & Geology"
+  - "Weather & Climate Science"
+  - "Paleontology & Dinosaurs"
+  - "Animal Kingdom & Zoology"
+  - "Microbiology & Viruses"
+  - "Psychology & Human Behavior"
+  - "Mathematics & Logic"
+  - "Technology & Artificial Intelligence"
+  - "Engineering & Robotics"
+  - "Medicine & the Human Body"
+  - "Energy & the Physics of Everyday Life"
+  - "Astrobiology & the Search for Life"
+  - "Environmental Science & Ecology"
 tone: "Calm, educational"
 hashtags: "#DailyDeepSpace #BeyondEarth #SpaceFacts #ScienceShorts #Universe #Cosmos"
 branding:

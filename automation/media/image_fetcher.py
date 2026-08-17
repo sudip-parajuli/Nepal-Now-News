@@ -84,7 +84,7 @@ class ImageFetcher:
         if len(paths) < 3:
             needed = 4 - len(paths)
             print(f"All image sources failed. Generating {needed} AI image(s) via Pollinations.ai...")
-            ai_prompt = topic_context or (unique_queries[0] if unique_queries else "deep space cosmos")
+            ai_prompt = topic_context or (unique_queries[0] if unique_queries else "science documentary")
             ai_paths = self._generate_pollinations_images(ai_prompt, base_filename, count=needed)
             paths.extend(ai_paths)
 
@@ -143,12 +143,18 @@ class ImageFetcher:
                         type_image="photo"
                     )
                     if results:
+                        # Previously also banned "person/face/human/man/woman/animal/pet/
+                        # creature/horse" outright. That made sense when every video was
+                        # about deep space, but now that topics span biology, medicine,
+                        # neuroscience, psychology and zoology, those bans were actively
+                        # filtering out the MOST relevant photography for those topics.
+                        # Keep only the filters that reject non-photographic/irrelevant
+                        # content regardless of subject.
                         forbidden = ["diagram", "chart", "graph", "vector", "drawing",
                                      "illustration", "map", "infographic", "logo",
-                                     "person", "face", "human", "man", "woman",
-                                     "interview", "talking", "portrait", "cartoon",
+                                     "interview", "talking", "cartoon",
                                      "animation", "anime", "animated", "movie",
-                                     "horse", "animal", "pet", "creature", "character"]
+                                     "meme", "clipart", "character"]
                         scored_results = []
                         for r in results:
                             url = r.get('image', '').lower()
@@ -238,7 +244,7 @@ class ImageFetcher:
         """
         paths = []
         clean_prompt = re.sub(r'[^a-zA-Z0-9 ]', ' ', prompt).strip()
-        full_prompt = f"cinematic 4k photo of {clean_prompt}, deep space, photorealistic, no people"
+        full_prompt = f"cinematic 4k photo of {clean_prompt}, photorealistic, high detail"
         encoded = requests.utils.quote(full_prompt)
         for i in range(count):
             seed = random.randint(1000, 999999)
