@@ -5,6 +5,8 @@ import re
 from collections import Counter
 from typing import List
 
+from .script_writer import is_llm_failure
+
 class ScienceTopicGenerator:
     def __init__(self, history_file: str, topics: List[str]):
         self.history_file = history_file
@@ -107,6 +109,19 @@ class ScienceTopicGenerator:
         for attempt in range(2):
             candidate = script_writer._call_with_retry(prompt)
             candidate = candidate.replace('"', '').strip()
+            # A total LLM outage (every Gemini key + every Groq fallback failing) must
+            # never flow downstream as if it were a real topic — a past incident let the
+            # literal failure-sentinel string get used as the video's topic/title, and its
+            # narration was the TTS reading out the error message on a published video.
+            # Fail the whole pipeline run loudly instead (no upload happens) so a
+            # provider-side outage shows up as a failed CI run, not a live broken video.
+            if is_llm_failure(candidate):
+                raise RuntimeError(
+                    "ScienceTopicGenerator: LLM topic generation failed on every "
+                    "Gemini key and every Groq fallback — aborting rather than "
+                    "publishing the error as content. Check API keys/quotas/model "
+                    "availability."
+                )
             sub_topic = candidate
             if self._normalize(candidate) not in seen_normalized:
                 break

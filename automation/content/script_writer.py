@@ -7,6 +7,20 @@ import json
 import re
 from typing import List, Dict
 
+# Sentinel returned by _call_with_retry when every Gemini key AND every Groq fallback
+# has failed. Callers that use this directly as content (not through one of the
+# methods below that already check for it) MUST check for this before using the
+# result — a past incident let this literal string get published as a video's topic/
+# narration when Gemini's model was deprecated and Groq's fallback model was retired
+# in the same window, so every LLM call failed and nothing caught it before upload.
+LLM_FAILURE_SENTINEL = "Error: Maximum retries reached for all LLM keys and fallbacks."
+
+
+def is_llm_failure(text: str) -> bool:
+    """True if `text` is (or starts with) the _call_with_retry failure sentinel."""
+    return bool(text) and text.strip().startswith("Error: Maximum retries reached")
+
+
 class ScriptWriter:
     def __init__(self, api_key: str = None):
         # Gather all Gemini keys from env
@@ -41,7 +55,13 @@ class ScriptWriter:
 
         self.clients = [patch_gemini_client(genai.Client(api_key=k)) for k in self.api_keys]
         self.client = self.clients[0] if self.clients else None
-        self.model_id = 'gemini-2.0-flash'
+        # Ordered by preference. "gemini-flash-latest" is Google's stable alias that
+        # always points at their current-generation Flash model — using it (instead of a
+        # pinned dated ID like the old "gemini-2.0-flash") is what actually prevents this
+        # from breaking again next time Google retires a specific version. The pinned IDs
+        # after it are just a safety net in case the alias itself is ever unavailable.
+        self.model_candidates = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash']
+        self.model_id = self.model_candidates[0]
         self.groq_api_keys = [
             os.getenv("GROQ_API_KEY"),
             os.getenv("GROQ_API_KEY2"),
@@ -62,19 +82,37 @@ class ScriptWriter:
             except ImportError:
                 pass
         self.groq_client = self.groq_clients[0] if self.groq_clients else None
+        # Same idea as model_candidates above: Groq retired llama-3.3-70b-versatile in
+        # June 2026, which — combined with the Gemini model deprecation — meant BOTH the
+        # primary provider and its fallback failed simultaneously and broke production.
+        # openai/gpt-oss-120b is Groq's own recommended replacement.
+        self.groq_model_candidates = ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b', 'llama-3.3-70b-versatile']
+        self.groq_model_id = self.groq_model_candidates[0]
 
+    @staticmethod
+    def _is_model_not_found(err_msg_lower: str) -> bool:
+        """Detects 'this model id doesn't exist / was retired' errors specifically, as
+        opposed to transient errors — so we can skip straight to the next candidate model
+        instead of burning the whole retry budget re-trying a model that will never work."""
+        return (
+            "404" in err_msg_lower
+            and ("model" in err_msg_lower or "not_found" in err_msg_lower)
+        ) or "no longer available" in err_msg_lower or "decommissioned" in err_msg_lower
 
     def _call_with_retry(self, prompt: str, max_retries: int = 5) -> str:
         """Calls Gemini rotating through keys, falling back to Groq only if all fail or hit quota."""
         if not self.clients:
             print("WARNING: No Gemini clients available. Trying Groq immediately...")
-        
+
         # Try each Gemini client sequentially
         for client_idx, client in enumerate(self.clients):
-            for attempt in range(max_retries):
+            model_idx = self.model_candidates.index(self.model_id) if self.model_id in self.model_candidates else 0
+            attempt = 0
+            while attempt < max_retries:
+                model_id = self.model_candidates[model_idx]
                 try:
                     response = client.models.generate_content(
-                        model=self.model_id,
+                        model=model_id,
                         contents=prompt,
                         safety_settings=[
                             types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_NONE'),
@@ -83,34 +121,45 @@ class ScriptWriter:
                             types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_NONE'),
                         ]
                     )
+                    self.model_id = model_id  # remember what worked, start there next call
                     return response.text.strip()
                 except Exception as e:
                     err_msg = str(e).lower()
                     is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
-                    
+
+                    if self._is_model_not_found(err_msg) and model_idx < len(self.model_candidates) - 1:
+                        model_idx += 1
+                        print(f"Gemini model '{model_id}' unavailable, trying '{self.model_candidates[model_idx]}'...")
+                        continue  # doesn't consume retry budget — this model will never succeed
+
                     if is_quota_error:
                         print(f"Gemini Key {client_idx+1} Quota Exceeded/429. Trying next key...")
                         break  # Break out of attempts loop for this key, move to next key
-                    
+
                     # For non-quota errors, retry with exponential backoff on the current key
-                    if attempt < max_retries - 1:
+                    attempt += 1
+                    if attempt < max_retries:
                         wait_time = (2 ** attempt) + random.uniform(0, 1)
-                        print(f"LLM Error on Key {client_idx+1}: {e}. Retrying in {wait_time:.2f} seconds... (Attempt {attempt+1}/{max_retries})")
+                        print(f"LLM Error on Key {client_idx+1}: {e}. Retrying in {wait_time:.2f} seconds... (Attempt {attempt}/{max_retries})")
                         time.sleep(wait_time)
                     else:
                         print(f"LLM Key {client_idx+1} failed after {max_retries} attempts. Trying next key...")
                         break
-        
+
         # If all Gemini keys fail or are exhausted, try Groq fallback
         if self.groq_clients:
             print("All Gemini keys exhausted. Trying Groq fallback...")
             for client_idx, groq_client in enumerate(self.groq_clients):
-                for attempt in range(max_retries):
+                model_idx = (self.groq_model_candidates.index(self.groq_model_id)
+                             if self.groq_model_id in self.groq_model_candidates else 0)
+                attempt = 0
+                while attempt < max_retries:
+                    model_id = self.groq_model_candidates[model_idx]
                     try:
                         groq_client.moderations.create(input=prompt)
                         chat_completion = groq_client.chat.completions.create(
                             messages=[{"role": "user", "content": prompt}],
-                            model="llama-3.3-70b-versatile",
+                            model=model_id,
                             max_tokens=4096,
                             user="science-automation",
                         )
@@ -121,20 +170,27 @@ class ScriptWriter:
                             break
                         result = (msg.content or "").strip()
                         if result:
+                            self.groq_model_id = model_id
                             return result
                     except Exception as groq_err:
                         err_msg = str(groq_err).lower()
                         is_quota_error = "quota" in err_msg or "429" in err_msg or "exhausted" in err_msg
-                        
+
+                        if self._is_model_not_found(err_msg) and model_idx < len(self.groq_model_candidates) - 1:
+                            model_idx += 1
+                            print(f"Groq model '{model_id}' unavailable, trying '{self.groq_model_candidates[model_idx]}'...")
+                            continue
+
                         if is_quota_error:
                             print(f"Groq Key {client_idx+1} Quota Exceeded/429. Trying next key...")
                             break
-                        
-                        print(f"Groq fallback Key {client_idx+1} attempt {attempt+1} failed: {groq_err}")
-                        if attempt < max_retries - 1:
+
+                        attempt += 1
+                        print(f"Groq fallback Key {client_idx+1} attempt {attempt} failed: {groq_err}")
+                        if attempt < max_retries:
                             time.sleep((2 ** attempt) + 1)
-                            
-        return "Error: Maximum retries reached for all LLM keys and fallbacks."
+
+        return LLM_FAILURE_SENTINEL
 
     def _dummy_placeholder(self):
         pass
@@ -164,7 +220,7 @@ class ScriptWriter:
         - DO NOT include music cues or labels like [Narrator].
         """
         script = self._call_with_retry(prompt)
-        if "Maximum retries" in script or not script.strip():
+        if is_llm_failure(script) or not script.strip():
             return f"Did you know that the science of *{topic}* contains mysteries that continue to challenge researchers? Across the cosmos, these phenomena push the boundaries of physics, reminding us of how much remains to be discovered."
         return self.clean_script(script)
     def expand_science_script(self, topic: str) -> str:
@@ -227,7 +283,7 @@ class ScriptWriter:
         """
         
         script = self._call_with_retry(prompt)
-        if "Maximum retries" in script or not script.strip():
+        if is_llm_failure(script) or not script.strip():
             return f"The universe is full of mysteries, and *{topic}* is one of the most intriguing. For centuries, researchers have sought to understand its complex mechanisms. From molecular scales to cosmic proportions, this phenomenon continues to redefine our understanding of nature. As we look closer, we uncover secrets that challenge our conventional theories. In the end, it reminds us that our search for knowledge is an endless journey."
         return self.clean_script(script)
 
