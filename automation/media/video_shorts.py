@@ -244,7 +244,7 @@ class VideoShortsGenerator:
 
             from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
 
-            pop_font = get_pop_font(88)
+            pop_font = get_pop_font(102)
             pop_chunks = build_pop_chunks(word_offsets)
 
             # Below center, clear of the bottom safe area reserved for the Shorts title/
@@ -523,7 +523,7 @@ class VideoShortsGenerator:
                 try:
                     from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
 
-                    pop_font = get_pop_font(88)
+                    pop_font = get_pop_font(102)
                     pop_chunks = build_pop_chunks(word_offsets)
 
                     # Below center but well clear of the bottom ~20% YouTube reserves for the

@@ -429,7 +429,7 @@ class VideoLongGenerator:
         
         from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
 
-        pop_font = get_pop_font(95)
+        pop_font = get_pop_font(110)
         pop_chunks = build_pop_chunks(word_offsets)
 
         # Subscribe badge occupies the bottom area for the final few seconds — reserve

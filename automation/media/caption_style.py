@@ -7,9 +7,13 @@ sync (different fonts, different colors, no background pill) across video_shorts
 everywhere, and lets us upgrade the look in one place:
   - solid rounded backdrop pill behind the text (readability over busy b-roll, and the
     "boxed caption" look used by most high-retention Shorts editors)
-  - brand-consistent font (Barlow, matches the rest of the channel's on-screen text)
-  - warm gold keyword highlight instead of plain yellow, tuned for contrast against the
-    dark backdrop pill
+  - brand-consistent font (Barlow, matches the rest of the channel's on-screen text),
+    sized larger than the original pass for readability on small mobile screens
+  - true per-word karaoke-synced highlight: the gold color follows whichever word is
+    actually being spoken at that instant, driven by the TTS word timings. The
+    original version instead statically highlighted every word 6+ characters long for
+    the whole 2-3 word chunk regardless of which one was playing — visually arbitrary
+    and not synced to the audio at all.
 """
 import os
 import re
@@ -35,19 +39,6 @@ _FONT_PATHS = [
     "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
 ]
 
-_STOPWORDS = {
-    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-    'of', 'in', 'on', 'at', 'to', 'for', 'and', 'or', 'but', 'so', 'yet',
-    'it', 'its', 'this', 'that', 'these', 'those', 'with', 'from', 'by',
-    'as', 'into', 'do', 'does', 'did', 'not', 'no', 'have', 'has', 'had',
-    'will', 'would', 'can', 'could', 'should', 'may', 'might', 'what',
-    'which', 'who', 'when', 'where', 'why', 'how', 'if', 'than', 'then',
-    'there', 'here', 'they', 'we', 'he', 'she', 'you', 'i', 'my', 'your',
-    'our', 'their', 'his', 'her', 'also', 'just', 'even', 'up', 'out',
-    'about', 'over', 'more', 'very', 'such', 'each',
-}
-
-
 def get_pop_font(size: int) -> ImageFont.FreeTypeFont:
     for path in _FONT_PATHS:
         if os.path.exists(path):
@@ -56,15 +47,6 @@ def get_pop_font(size: int) -> ImageFont.FreeTypeFont:
             except Exception:
                 continue
     return ImageFont.load_default()
-
-
-def is_keyword(word: str) -> bool:
-    clean = re.sub(r'[^a-zA-Z0-9]', '', word).lower()
-    if not clean or clean in _STOPWORDS:
-        return False
-    if '*' in word:
-        return True
-    return len(clean) >= 6
 
 
 def build_pop_chunks(word_offsets: list, max_words: int = 3) -> list:
@@ -151,9 +133,13 @@ def render_caption_pill(words_display: list, highlight_mask: list, font, max_w: 
 
 
 def make_pop_caption_clip(chunk: list, chunk_dur: float, font, max_w: int = 900, caption_y: int = 0):
-    """Builds a fully positioned, ready-to-append ImageClip for one caption chunk
-    (already `.set_start()`'d from the chunk's absolute timing), with a quick rise +
-    fade pop-in.
+    """Builds a fully positioned, ready-to-append clip for one caption chunk (already
+    `.set_start()`'d from the chunk's absolute timing), with a quick rise + fade pop-in.
+
+    Internally this is a short sequence of same-sized pill images — one per word in the
+    chunk, each with only that word gold — stitched back to back at the word's own TTS
+    timing, so the highlight visibly tracks the narration instead of highlighting
+    "long words" for the whole chunk regardless of which one is playing.
 
     NOTE: deliberately animates via `fadein()` + a position offset rather than
     `.resize()`. MoviePy 1.0.3's callable-resize path corrupts the RGBA alpha mask of
@@ -162,23 +148,42 @@ def make_pop_caption_clip(chunk: list, chunk_dur: float, font, max_w: int = 900,
     backdrop — silently rounds down to fully transparent). fadein() and position both
     leave the mask untouched, so the backdrop renders correctly.
     """
-    from moviepy.editor import ImageClip
+    from moviepy.editor import ImageClip, CompositeVideoClip
 
     words_display = [c['display'].upper() for c in chunk]
-    hi_mask = [is_keyword(c['word']) for c in chunk]
-    pil_img = render_caption_pill(words_display, hi_mask, font, max_w=max_w)
-
+    n = len(chunk)
     chunk_start = chunk[0]['start']
-    anim_dur = min(0.15, chunk_dur * 0.4)
 
-    clip = ImageClip(np.array(pil_img)).set_duration(chunk_dur)
+    # Chunk-relative start time for each word, clamped to stay within [0, chunk_dur)
+    # and monotonically increasing even if upstream timestamps have tiny overlaps.
+    local_starts = []
+    prev = 0.0
+    for w in chunk:
+        s = max(prev, min(chunk_dur - 0.02, w['start'] - chunk_start))
+        local_starts.append(max(0.0, s))
+        prev = s
+
+    word_clips = []
+    base_size = None
+    for i in range(n):
+        hi_mask = [j == i for j in range(n)]
+        pil_img = render_caption_pill(words_display, hi_mask, font, max_w=max_w)
+        base_size = base_size or pil_img.size
+        word_dur = (local_starts[i + 1] if i + 1 < n else chunk_dur) - local_starts[i]
+        word_clips.append(
+            ImageClip(np.array(pil_img)).set_start(local_starts[i]).set_duration(max(0.05, word_dur))
+        )
+
+    combined = CompositeVideoClip(word_clips, size=base_size).set_duration(chunk_dur)
+
+    anim_dur = min(0.15, chunk_dur * 0.4)
     try:
-        clip = clip.fadein(anim_dur)
+        combined = combined.fadein(anim_dur)
     except Exception:
         pass
     rise_px = 16
-    clip = clip.set_position(
+    combined = combined.set_position(
         lambda t, ad=anim_dur, y=caption_y: ('center', y + int(rise_px * (1.0 - min(1.0, t / max(ad, 0.001)))))
     )
-    clip = clip.set_start(chunk_start)
-    return clip
+    combined = combined.set_start(chunk_start)
+    return combined

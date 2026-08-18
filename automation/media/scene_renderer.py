@@ -475,33 +475,70 @@ class SceneRenderer:
         clip = VideoClip(make_frame, duration=duration)
         return clip.set_fps(30)
 
+    def _build_lower_third_overlay(self, named_entity: str):
+        """Shared by render_image()'s photo and video paths — builds the same named-entity
+        pill overlay once so both backgrounds get identical treatment."""
+        font_path_bold = get_font_path("bold")
+        font_path_reg = get_font_path("regular")
+        dummy = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(dummy)
+        lt_overlay, bx, by = render_lower_third(
+            draw, named_entity,
+            ImageFont.truetype(font_path_bold, int(36 * (1.2 if self.mode == 'portrait' else 1.0))),
+            ImageFont.truetype(font_path_reg, int(24 * (1.2 if self.mode == 'portrait' else 1.0))),
+            self.WIDTH, self.HEIGHT,
+            self.mode
+        )
+        t_draw = ImageDraw.Draw(lt_overlay)
+        t_draw.text((bx + 30, by + 15), named_entity.upper(), fill=(0, 240, 255, 255), font=ImageFont.truetype(font_path_bold, int(32 * (1.1 if self.mode == 'portrait' else 1.0))))
+        t_draw.text((bx + 30, by + 50), "SCIENTIFIC EVIDENCE", fill=(200, 200, 200, 255), font=ImageFont.truetype(font_path_reg, int(18 * (1.1 if self.mode == 'portrait' else 1.0))))
+        return lt_overlay
+
+    def _render_image_scene_video_bg(self, video_path: str, duration: float, named_entity: str = None) -> VideoClip:
+        """Real stock-video b-roll used for an 'image'-type scene (see asset_orchestrator.py
+        — Pexels/Pixabay video search). Gives it the same cinematic grade / HUD / lower-third
+        treatment as a static photo background instead of playing the raw clip unstyled."""
+        vc = VideoFileClip(video_path)
+        if vc.duration < duration:
+            from moviepy.video.fx.all import loop
+            vc = loop(vc, duration=duration)
+        else:
+            vc = vc.subclip(0, duration)
+
+        lt_overlay = self._build_lower_third_overlay(named_entity) if named_entity else None
+
+        def process(frame, t):
+            pil_frm = Image.fromarray(frame).convert("RGB")
+            graded = apply_cinematic_grade(self._cover_image(pil_frm))
+            if self.mode != 'portrait':
+                graded = apply_lens_flare(graded, t=t, intensity=0.2)
+
+            graded_rgba = graded.convert("RGBA")
+            hud_overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
+            hud_draw = ImageDraw.Draw(hud_overlay)
+            draw_data_hud(hud_draw, self.WIDTH, self.HEIGHT, t, mode=self.mode,
+                          color=(0, 240, 255), label="SCIENCE")
+            graded_rgba = Image.alpha_composite(graded_rgba, hud_overlay)
+            if lt_overlay:
+                graded_rgba = Image.alpha_composite(graded_rgba, lt_overlay)
+            return np.array(graded_rgba.convert("RGB"))
+
+        return vc.fl(lambda gf, t: process(gf(t), t)).set_fps(30)
+
     def render_image(self, bg_path: str, text: str, duration: float, named_entity: str = None) -> VideoClip:
         """
         Applies a Ken Burns zoom/pan, cinematic grades, and adds lower thirds if named_entity exists.
+        Transparently delegates to a video-background path when bg_path is a real video clip
+        (e.g. Pexels/Pixabay stock-video b-roll routed here for an 'image'-type scene).
         """
-        font_path_bold = get_font_path("bold")
-        font_path_reg = get_font_path("regular")
-        
+        if str(bg_path).lower().endswith((".mp4", ".mov", ".avi", ".mkv", ".webm")):
+            return self._render_image_scene_video_bg(bg_path, duration, named_entity)
+
         pil_img = Image.open(bg_path).convert("RGB")
         img_w, img_h = pil_img.size
-        
+
         # Setup lower third pill once if present
-        lt_overlay = None
-        if named_entity:
-            # Generate the lower-third text overlay off-screen
-            dummy = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(dummy)
-            lt_overlay, bx, by = render_lower_third(
-                draw, named_entity,
-                ImageFont.truetype(font_path_bold, int(36 * (1.2 if self.mode == 'portrait' else 1.0))),
-                ImageFont.truetype(font_path_reg, int(24 * (1.2 if self.mode == 'portrait' else 1.0))),
-                self.WIDTH, self.HEIGHT,
-                self.mode
-            )
-            # Draw lower-third text inside the pill
-            t_draw = ImageDraw.Draw(lt_overlay)
-            t_draw.text((bx + 30, by + 15), named_entity.upper(), fill=(0, 240, 255, 255), font=ImageFont.truetype(font_path_bold, int(32 * (1.1 if self.mode == 'portrait' else 1.0))))
-            t_draw.text((bx + 30, by + 50), "SCIENTIFIC EVIDENCE", fill=(200, 200, 200, 255), font=ImageFont.truetype(font_path_reg, int(18 * (1.1 if self.mode == 'portrait' else 1.0))))
+        lt_overlay = self._build_lower_third_overlay(named_entity) if named_entity else None
 
         self.image_scene_count += 1
         pan_type = self.image_scene_count % 3
@@ -587,36 +624,38 @@ class SceneRenderer:
         else:
             vc = vc.subclip(0, duration)
 
-        target_ratio = self.WIDTH / self.HEIGHT
-
         def cover_grade(frame):
             pil_frm = Image.fromarray(frame).convert("RGB")
-            iw, ih = pil_frm.size
-            if iw / ih > target_ratio:
-                new_h = int(iw / target_ratio)
-                y = max(0, (ih - new_h) // 2)
-                pil_frm = pil_frm.crop((0, y, iw, y + new_h))
-            else:
-                new_w = int(ih * target_ratio)
-                x = max(0, (iw - new_w) // 2)
-                pil_frm = pil_frm.crop((x, 0, x + new_w, ih))
-            pil_frm = pil_frm.resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
-            return np.array(apply_cinematic_grade(pil_frm))
+            return np.array(apply_cinematic_grade(self._cover_image(pil_frm)))
 
         return vc.fl_image(cover_grade).set_fps(30)
 
     def _cover_image(self, img: Image.Image) -> Image.Image:
-        """Resize an image to cover the full scene without distortion."""
+        """Resize an image to cover the full scene without distortion.
+
+        BUGFIX: the two branches below were previously swapped — when the source was
+        proportionally WIDER than the target (iw/ih > target_ratio), it computed a crop
+        HEIGHT of `iw / target_ratio`, which for a wide image is always taller than the
+        image itself (e.g. a 1280x720 photo into a 1080x1920 portrait target computed a
+        2275px crop height from a 720px-tall source). PIL's crop() doesn't clamp an
+        out-of-bounds box — it pads the overflow with solid black — so this silently
+        rendered a large black void over most of the frame for any background whose
+        aspect ratio didn't already closely match the target. Long-form (16:9) was hit
+        hardest since, unlike Shorts, there's no pre-crop step normalizing fetched
+        images before they reach this function.
+        The fix: when the source is wider than target, crop WIDTH (keep full height);
+        when it's narrower/taller than target, crop HEIGHT (keep full width).
+        """
         iw, ih = img.size
         target_ratio = self.WIDTH / self.HEIGHT
         if iw / ih > target_ratio:
-            new_h = int(iw / target_ratio)
-            y = max(0, (ih - new_h) // 2)
-            img = img.crop((0, y, iw, y + new_h))
-        else:
             new_w = int(ih * target_ratio)
             x = max(0, (iw - new_w) // 2)
             img = img.crop((x, 0, x + new_w, ih))
+        else:
+            new_h = int(iw / target_ratio)
+            y = max(0, (ih - new_h) // 2)
+            img = img.crop((0, y, iw, y + new_h))
         return img.resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
 
     def _ensure_background_image(self, bg_path: str, scene_idx: int = 0) -> str:

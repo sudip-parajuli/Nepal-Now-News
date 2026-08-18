@@ -57,6 +57,20 @@ class ThumbnailGenerator:
         print(f"Thumbnail saved at: {output_path}")
         return output_path
 
+    def _fetch_best_photo(self, query: str, filename: str, portrait: bool = False) -> str:
+        """Tries Pexels/Pixabay (reliable official APIs, no rate-limit risk) first, then
+        falls back to the DDG search below. Returns a local file path, or None."""
+        from . import stock_media
+        if stock_media.has_stock_api_keys():
+            base = filename.rsplit('.', 1)[0]
+            paths = stock_media.fetch_real_photos(query, 1, self.output_dir, base, portrait=portrait)
+            if paths:
+                return paths[0]
+        url = self._search_image_url(query)
+        if url:
+            return self._download_url(url, filename)
+        return None
+
     def _search_image_url(self, query: str) -> str:
         """Searches DuckDuckGo and returns the first valid image URL."""
         from duckduckgo_search import DDGS
@@ -152,10 +166,9 @@ class ThumbnailGenerator:
                 bg_file = first_asset_path
                 
         if not bg_file:
-            bg_url = self._search_image_url(bg_query)
-            if bg_url:
-                bg_file = self._download_url(bg_url, "temp_thumb_bg.jpg")
-            
+            bg_file = self._fetch_best_photo(bg_query, "temp_thumb_bg.jpg", portrait=is_portrait)
+
+
         if bg_file and os.path.exists(bg_file):
             canvas = Image.open(bg_file).resize(self.size, Image.Resampling.LANCZOS)
         else:
@@ -166,12 +179,10 @@ class ThumbnailGenerator:
             else:
                 canvas = Image.new('RGB', self.size, color=(10, 18, 30))
                 
-        # 2. Fetch Subject Image via DDG
-        sub_url = self._search_image_url(subject_query)
-        sub_file = None
-        if sub_url:
-            sub_file = self._download_url(sub_url, "temp_thumb_subject.jpg")
-            
+        # 2. Fetch Subject Image (Pexels/Pixabay first, DDG fallback)
+        sub_file = self._fetch_best_photo(subject_query, "temp_thumb_subject.jpg", portrait=is_portrait)
+
+
         if not sub_file or not os.path.exists(sub_file):
             print("[Thumbnail] Subject search failed, using Pollinations.ai fallback for subject.")
             fallback_sub = self._fetch_ai_subject(subject_query)

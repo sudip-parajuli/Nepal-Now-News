@@ -6,8 +6,10 @@ from typing import List, Dict
 
 from .hf_video_generator import generate_hf_video
 from .image_fetcher import ImageFetcher
+from . import stock_media
 
-MAX_AI_VIDEO_PER_JOB = 3   # Per-video cap to protect HF monthly quota
+MAX_AI_VIDEO_PER_JOB = 3     # Per-video cap to protect HF monthly quota
+MAX_STOCK_VIDEO_PER_JOB = 5  # Per-video cap to keep download/render time bounded
 
 
 class AssetOrchestrator:
@@ -51,7 +53,8 @@ class AssetOrchestrator:
             "scenes": [],
         }
 
-        ai_video_count = 0  # Per-video budget tracker
+        ai_video_count = 0    # Per-video budget tracker
+        stock_video_count = 0  # Real stock-video b-roll budget tracker
 
         for idx, scene in enumerate(scenes):
             visual_type = scene.get("visual_type", "image")
@@ -128,6 +131,29 @@ class AssetOrchestrator:
                     else:
                         visual_type = "image"  # If video failed, treat as image
 
+            # Real stock-video b-roll for plain "image" scenes — an actual moving clip
+            # that matches the subject beats a static Ken-Burns photo, and Pexels/Pixabay
+            # are official APIs (not scraping), so this doesn't add DDG rate-limit risk.
+            # Skipped entirely (falls through to the image fetch below) when no API key
+            # is configured, or once the per-job budget is used up.
+            if (visual_type == "image" and stock_media.has_stock_api_keys()
+                    and stock_video_count < MAX_STOCK_VIDEO_PER_JOB):
+                print(f"[AssetOrchestrator] Scene {idx}: trying real stock-video b-roll for '{image_cue}'...")
+                video_paths = stock_media.fetch_real_videos(
+                    image_cue, 1, job_dir, f"job_{job_id}_scene{idx}",
+                    portrait=(aspect_ratio == "9:16"),
+                )
+                if video_paths:
+                    asset_path = video_paths[0]
+                    if aspect_ratio == "9:16":
+                        asset_path = self._crop_video_to_portrait(asset_path)
+                    scene_entry["asset_type"] = "video"
+                    scene_entry["asset_path"] = asset_path
+                    stock_video_count += 1
+                    manifest["scenes"].append(scene_entry)
+                    self._save_manifest(manifest)
+                    continue
+
             # Fetch background image for all other scene types to draw overlay styles on top of
             print(f"[AssetOrchestrator] Scene {idx}: fetching background image for type '{visual_type}'...")
             # Second query used to always append "space astronomy" regardless of topic, which
@@ -145,6 +171,7 @@ class AssetOrchestrator:
                 queries,
                 base_filename=f"job_{job_id}_scene{idx}",
                 topic_context=topic,
+                portrait=(aspect_ratio == "9:16"),
             )
             if paths:
                 asset_path = paths[0]
@@ -161,6 +188,7 @@ class AssetOrchestrator:
 
         print(f"[AssetOrchestrator] Job {job_id} complete. "
               f"{ai_video_count} AI video clip(s), "
+              f"{stock_video_count} real stock-video clip(s), "
               f"{sum(1 for s in manifest['scenes'] if s['asset_type']=='image')} image background(s).")
         return manifest
 
