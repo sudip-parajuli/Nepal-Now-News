@@ -5,13 +5,16 @@ import random
 import time
 import re
 
+from . import stock_media
+
 class ImageFetcher:
     def __init__(self, download_dir="automation/storage/temp_images"):
         self.download_dir = download_dir
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
 
-    def fetch_multi_images(self, queries: list, base_filename: str, topic_context: str = None) -> list:
+    def fetch_multi_images(self, queries: list, base_filename: str, topic_context: str = None,
+                            portrait: bool = False) -> list:
         paths = []
         # Flatten and deduplicate queries
         flat_queries = []
@@ -22,9 +25,23 @@ class ImageFetcher:
         images_needed = max(len(queries), 4)  # Always try to get at least 4 images
         images_per_search = 4 if len(unique_queries) > 1 else images_needed
 
+        # --- Tier 0: Pexels / Pixabay (official free APIs — reliable, no scraping/rate
+        # limits like DDG below). Skipped automatically if no API key is configured. ---
+        if stock_media.has_stock_api_keys() and unique_queries:
+            for q in unique_queries[:3]:
+                if len(paths) >= images_needed:
+                    break
+                found = stock_media.fetch_real_photos(
+                    q, images_needed - len(paths), self.download_dir,
+                    f"{base_filename}_{len(paths)}", portrait=portrait,
+                )
+                paths.extend(found)
+
         # --- Tier 1: DDG (try up to 5 queries, not just 3) ---
         ddg_failed_count = 0
         for i, q in enumerate(unique_queries[:5]):
+            if len(paths) >= images_needed:
+                break
             refined_q = (q if "photo" in q.lower() else f"{q} science photo") + " -watermark -stock"
             print(f"Searching images for: {refined_q}...")
             results = self._search_ddg_only(refined_q, max_results=15)
