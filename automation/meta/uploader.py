@@ -513,3 +513,116 @@ class MetaUploader:
                 print(f"Failed to publish Instagram Reel: {pub_res.text}")
         except Exception as e:
             print(f"Error in _publish_to_instagram: {e}")
+
+    # ── Photo posts (text + image, for the daily FB/IG content) ──────────────────
+
+    def upload_photo_post(self, image_path: str, caption: str) -> str:
+        """Posts a photo+caption to the Facebook Page, then cross-posts the same
+        photo to the linked Instagram Business account. Returns the Facebook photo
+        ID, or None if the Facebook upload itself failed (Instagram cross-posting
+        failing independently still leaves the Facebook post live)."""
+        if not self.access_token or not self.page_id:
+            print("Meta posting credentials missing. Skipping Meta photo post.")
+            return None
+        if not image_path or not os.path.exists(image_path):
+            print(f"Meta photo post: image not found at {image_path}")
+            return None
+
+        fb_photo_id, fb_image_url = self._upload_facebook_photo(image_path, caption)
+        if not fb_photo_id:
+            print("Facebook photo upload failed. Cannot cross-post to Instagram.")
+            return None
+        print(f"Facebook photo published successfully! ID: {fb_photo_id}")
+
+        if fb_image_url:
+            self._publish_photo_to_instagram(fb_image_url, caption)
+        else:
+            print("No public image URL available from Facebook — skipping Instagram photo cross-post.")
+
+        return fb_photo_id
+
+    def _upload_facebook_photo(self, image_path: str, caption: str):
+        """Uploads a photo to the FB Page via binary multipart upload.
+        Returns (photo_id, public_image_url) — either may be None on failure."""
+        try:
+            url = f"https://graph.facebook.com/{self.api_version}/{self.page_id}/photos"
+            payload = {"caption": caption, "access_token": self.access_token}
+            with open(image_path, "rb") as f:
+                files = {"source": f}
+                res = requests.post(url, data=payload, files=files)
+            res_data = res.json()
+            photo_id = res_data.get("id") or res_data.get("post_id")
+            if not photo_id:
+                print(f"Facebook photo upload failed: {res.text}")
+                if "error" in res_data:
+                    err_msg = res_data["error"].get("message", "")
+                    if "pages_manage_posts" in err_msg or "permission" in err_msg.lower():
+                        print("\n" + "!" * 80)
+                        print("CRITICAL: Meta Access Token lacks required permissions (e.g. pages_manage_posts).")
+                        print("Update your META_ACCESS_TOKEN GitHub Secret with a PAGE access token that has")
+                        print("pages_manage_posts, pages_read_engagement, and pages_show_list.")
+                        print("!" * 80 + "\n")
+                return None, None
+
+            # Fetch a public CDN URL for this photo so Instagram can fetch it too —
+            # same pattern already used for video cross-posting (upload to Facebook
+            # first, reuse its CDN URL for Instagram's URL-based media container).
+            image_url = None
+            try:
+                info_url = f"https://graph.facebook.com/{self.api_version}/{photo_id}"
+                info_res = requests.get(info_url, params={"fields": "images", "access_token": self.access_token})
+                images = info_res.json().get("images", [])
+                if images:
+                    image_url = images[0].get("source")  # first entry is the largest resolution
+            except Exception as e:
+                print(f"Could not retrieve Facebook photo CDN URL: {e}")
+
+            return photo_id, image_url
+        except Exception as e:
+            print(f"Error in _upload_facebook_photo: {e}")
+            return None, None
+
+    def _publish_photo_to_instagram(self, image_url: str, caption: str):
+        """Discovers the linked Instagram Business account and posts a single photo."""
+        try:
+            discovery_url = f"https://graph.facebook.com/{self.api_version}/{self.page_id}"
+            params = {"fields": "instagram_business_account", "access_token": self.access_token}
+            disc_res = requests.get(discovery_url, params=params)
+            ig_account_id = disc_res.json().get("instagram_business_account", {}).get("id")
+            if not ig_account_id:
+                print("No linked Instagram Business Account found on Facebook Page. Skipping IG cross-posting.")
+                return
+
+            print(f"Found linked Instagram Business Account ID: {ig_account_id}")
+
+            container_url = f"https://graph.facebook.com/{self.api_version}/{ig_account_id}/media"
+            container_payload = {
+                "image_url": image_url,
+                "caption": caption,
+                "access_token": self.access_token,
+            }
+            c_res = requests.post(container_url, data=container_payload)
+            creation_id = c_res.json().get("id")
+            if not creation_id:
+                print(f"Failed to create Instagram photo media container: {c_res.text}")
+                return
+
+            # Photo containers are usually ready almost immediately (unlike video/Reels,
+            # which need the long processing poll above), but retry briefly in case
+            # Instagram hasn't finished fetching the image yet.
+            publish_url = f"https://graph.facebook.com/{self.api_version}/{ig_account_id}/media_publish"
+            publish_payload = {"creation_id": creation_id, "access_token": self.access_token}
+            for attempt in range(3):
+                pub_res = requests.post(publish_url, data=publish_payload)
+                pub_data = pub_res.json()
+                if "id" in pub_data:
+                    print(f"Instagram photo published successfully! Media ID: {pub_data['id']}")
+                    return
+                err_msg = pub_data.get("error", {}).get("message", "")
+                if attempt < 2 and ("not ready" in err_msg.lower() or "media" in err_msg.lower()):
+                    time.sleep(5)
+                    continue
+                print(f"Failed to publish Instagram photo: {pub_res.text}")
+                return
+        except Exception as e:
+            print(f"Error in _publish_photo_to_instagram: {e}")

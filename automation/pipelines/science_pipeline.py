@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 import random
 from .base_pipeline import BasePipeline
@@ -72,16 +73,20 @@ class SciencePipeline(BasePipeline):
 
     async def run(self, mode="shorts", is_test=False):
         print(f"--- Starting Science Pipeline [{mode}] for {self.config.get('channel_id')} ---")
-        
-        # 1. Generate Topic
-        topic = self.topic_gen.get_next_topic(self.script_writer)
-        print(f"Topic: {topic}")
-        
+
         if mode == "shorts":
+            topic = self.topic_gen.get_next_topic(self.script_writer)
+            print(f"Topic: {topic}")
             await self._run_shorts(topic, is_test)
         elif mode == "daily":
+            topic = self.topic_gen.get_next_topic(self.script_writer)
+            print(f"Topic: {topic}")
             await self._run_daily(topic, is_test)
-        
+        elif mode == "social_post":
+            # Doesn't use the video topic generator — Facebook/Instagram posts rotate
+            # through their own content types (see _next_social_post_type below).
+            await self._run_social_post(is_test)
+
         # Cleanup temporary files
         self.cleanup_storage()
         print(f"--- Science Pipeline [{mode}] Completed ---")
@@ -364,6 +369,114 @@ class SciencePipeline(BasePipeline):
                 self.uploader.upload_thumbnail(video_id, thumb_path)
 
 
+
+    _SOCIAL_POST_TYPES = ["discovery", "breaking_news", "myth_bust", "fun_fact"]
+    _SOCIAL_QUEUE_PATH = "automation/storage/social_post_queue.json"
+    _SOCIAL_HISTORY_PATH = "automation/storage/posted_social.json"
+
+    def _next_social_post_type(self) -> str:
+        """Round-robin through the 4 post types (same pattern as
+        ScienceTopicGenerator's category rotation) so every type gets equal air time
+        across the day's 4 posts instead of drifting toward whatever random.choice()
+        happens to favor."""
+        queue = []
+        if os.path.exists(self._SOCIAL_QUEUE_PATH):
+            try:
+                with open(self._SOCIAL_QUEUE_PATH, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, list) and loaded and all(t in self._SOCIAL_POST_TYPES for t in loaded):
+                    queue = loaded
+            except Exception:
+                pass
+        if not queue:
+            queue = list(self._SOCIAL_POST_TYPES)
+            random.shuffle(queue)
+        post_type = queue.pop(0)
+        os.makedirs(os.path.dirname(self._SOCIAL_QUEUE_PATH), exist_ok=True)
+        with open(self._SOCIAL_QUEUE_PATH, "w", encoding="utf-8") as f:
+            json.dump(queue, f)
+        return post_type
+
+    def _load_social_history(self) -> list:
+        if os.path.exists(self._SOCIAL_HISTORY_PATH):
+            try:
+                with open(self._SOCIAL_HISTORY_PATH, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return []
+        return []
+
+    def _save_social_history(self, topic: str):
+        history = self._load_social_history()
+        history.append(topic)
+        os.makedirs(os.path.dirname(self._SOCIAL_HISTORY_PATH), exist_ok=True)
+        with open(self._SOCIAL_HISTORY_PATH, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+
+    async def _run_social_post(self, is_test: bool):
+        """Generates and posts one text+photo update to Facebook/Instagram: a science
+        discovery, real breaking news, a myth-bust, or a fun fact (rotating daily)."""
+        from ..content.news_fetcher import fetch_recent_headlines
+        from ..media.watermark import add_watermark
+        from ..media.visual_relevance import is_visually_relevant
+
+        post_type = self._next_social_post_type()
+        print(f"Social post type: {post_type}")
+
+        # Ground breaking_news / myth_bust in real, recent headlines (Google News RSS —
+        # free, no key). Can't detect "what's trending on social media right now"
+        # specifically without a paid trends API, but this keeps both categories
+        # anchored to real current coverage instead of pure LLM invention.
+        headlines = []
+        if post_type == "breaking_news":
+            headlines = fetch_recent_headlines("science discovery breakthrough research", count=6)
+        elif post_type == "myth_bust":
+            headlines = fetch_recent_headlines("science myth debunked fact check", count=6, when="7d")
+
+        recent_history = self._load_social_history()
+        content = self.script_writer.generate_social_post(
+            post_type, headlines=headlines, recent_history=recent_history
+        )
+        caption = content.get("caption", "")
+        if not caption:
+            print("Social post generation failed on all providers — skipping this run without posting.")
+            return
+
+        image_query = content.get("image_query") or "science abstract background"
+        topic_label = content.get("topic") or post_type
+        print(f"Post topic: {topic_label}")
+        print(f"Caption:\n{caption}")
+
+        # Real photo first (NASA/Pexels/Pixabay/DDG, same fallback chain the video
+        # pipeline uses), AI-generated only if nothing relevant turns up.
+        candidates = self.image_fetcher.fetch_multi_images(
+            [f"{image_query} cinematic 4k", f"{image_query} photo"],
+            base_filename="social_post",
+            topic_context=image_query,
+        )
+        chosen_image = None
+        for path in candidates[:3]:
+            if is_visually_relevant(path, caption):
+                chosen_image = path
+                break
+        if not chosen_image and candidates:
+            print("None of the fetched images passed the relevance check — using the best available anyway "
+                  "rather than posting nothing.")
+            chosen_image = candidates[0]
+        if not chosen_image:
+            print("No image could be fetched or generated for this post — skipping.")
+            return
+
+        watermarked_path = add_watermark(chosen_image, "@dailydeepspace")
+
+        if is_test:
+            print(f"TEST MODE: Skipping Meta post. Image: {watermarked_path}")
+        else:
+            from ..meta.uploader import MetaUploader
+            meta_uploader = MetaUploader()
+            meta_uploader.upload_photo_post(watermarked_path, caption)
+
+        self._save_social_history(topic_label)
 
     async def _fetch_media(self, topic, script, count_per_kw=1, is_long_form=False):
         print(f"Fetching multi-segment media (long_form={is_long_form})...")
