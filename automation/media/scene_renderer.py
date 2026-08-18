@@ -266,9 +266,11 @@ class SceneRenderer:
         font_bold = ImageFont.truetype(font_path_bold, f_bold_sz)
         font_reg = ImageFont.truetype(font_path_reg, f_reg_sz)
         
-        COLOR_NORMAL = (200, 200, 200)
-        # Select a random premium highlight color
-        COLOR_HIGHLIGHT = random.choice([(0, 240, 255), (255, 170, 0), (0, 255, 150)])
+        # White/gold matches the color language used everywhere else on-screen (captions,
+        # the hook_question opener) — previously this randomly picked cyan/orange/green
+        # per render, which was one more inconsistent "look" scattered through a video.
+        COLOR_NORMAL = (255, 255, 255)
+        COLOR_HIGHLIGHT = (255, 199, 40)
         
         # Calculate line wrapping
         lines = []
@@ -879,10 +881,19 @@ class SceneRenderer:
             active_idx, local = active_chunk_for_t(t)
             chunk = chunks[active_idx]
             chunk_text = chunk["text"]
-            is_emphasis = bool(emp_clean and emp_clean in chunk_text)
-            color = COLOR_GOLD if is_emphasis else COLOR_CYAN
-            if active_idx == 0 and not is_emphasis:
-                color = COLOR_WHITE
+            # BUGFIX: this used to compare emp_clean (always uppercased) against
+            # chunk_text in its ORIGINAL narration case (chunks built from word_offsets
+            # keep normal sentence casing, not ALL CAPS) — a case-sensitive `in` check
+            # between an uppercase phrase and mixed-case text essentially never matched
+            # in real usage, so the gold emphasis highlight almost never actually fired.
+            is_emphasis = bool(emp_clean and emp_clean in chunk_text.upper())
+            # Text color now matches the rest of the video's caption language (white /
+            # gold-for-emphasis) instead of its own cyan/gold scheme — previously this
+            # opening hook was the one place that still looked like a distinct, older
+            # style. The cyan sci-fi accent is kept, but only for the HUD/progress-bar
+            # chrome below, not the words themselves.
+            text_color = COLOR_GOLD if is_emphasis else COLOR_WHITE
+            accent_color = COLOR_GOLD if is_emphasis else COLOR_CYAN
 
             ease = 1.0 - (1.0 - local) ** 3
             scale = 0.84 + 0.16 * ease + 0.025 * math.sin(local * math.pi * 2)
@@ -893,9 +904,43 @@ class SceneRenderer:
             lines = wrap_text(chunk_text, font_chunk, self.WIDTH - 170)
             total_h = len(lines) * int(f_chunk * 1.15)
             y_start_orig = max(160 if is_port else 130, (self.HEIGHT - total_h) // 2)
+
+            # Pill backdrop behind the hook text, matching the caption pill used
+            # everywhere else in the video (see caption_style.py) instead of floating
+            # text directly over the b-roll.
+            line_widths = []
+            for line in lines:
+                try:
+                    bbox = font_chunk.getbbox(line)
+                    line_widths.append(bbox[2] - bbox[0])
+                except AttributeError:
+                    line_widths.append(draw.textlength(line, font=font_chunk))
+            max_line_w = max(line_widths) if line_widths else 0
+            pill_pad_x, pill_pad_y = 50, 32
+            pill_w = int((max_line_w + pill_pad_x * 2) * scale)
+            pill_h = int((total_h + pill_pad_y * 2) * scale)
+            pill_cx = self.WIDTH // 2
+            pill_cy = y_start_orig + total_h // 2 - int(f_chunk * 0.12)
+            # Fixed opacity rather than tied to `alpha` above: `alpha` is meant to fade
+            # the text in/out at chunk boundaries, but PIL's ImageDraw.text() ignores
+            # the alpha channel of an RGBA fill when drawing onto an RGB-mode image (the
+            # text below is always fully opaque regardless of `alpha`) — pill_overlay,
+            # drawn separately and alpha_composited in properly, DOES honor alpha, so
+            # tying it to the same variable made the pill visibly fade in/out under text
+            # that wasn't fading at all. Matches caption_style.PILL_FILL's opacity.
+            pill_overlay = Image.new("RGBA", (self.WIDTH, self.HEIGHT), (0, 0, 0, 0))
+            p_draw = ImageDraw.Draw(pill_overlay)
+            p_draw.rounded_rectangle(
+                [(pill_cx - pill_w // 2, pill_cy - pill_h // 2),
+                 (pill_cx + pill_w // 2, pill_cy + pill_h // 2)],
+                radius=32, fill=(8, 13, 24, 232),
+            )
+            img = Image.alpha_composite(img.convert("RGBA"), pill_overlay).convert("RGB")
+            draw = ImageDraw.Draw(img)
+
             y_start = y_start_orig
             for line in lines:
-                draw_line(draw, line, self.WIDTH // 2, y_start, color, font_chunk, scale=scale, alpha=alpha, underline=is_emphasis)
+                draw_line(draw, line, self.WIDTH // 2, y_start, text_color, font_chunk, scale=scale, alpha=alpha, underline=is_emphasis)
                 y_start += int(f_chunk * 1.15)
 
             progress = local
@@ -907,10 +952,10 @@ class SceneRenderer:
             draw.rounded_rectangle(
                 [(bar_x, bar_y), (bar_x + int(bar_w * progress), bar_y + bar_h)],
                 radius=8,
-                fill=color + (245,),
+                fill=accent_color + (245,),
             )
 
-            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode, color=color, label="HOOK")
+            draw_data_hud(draw, self.WIDTH, self.HEIGHT, t, mode=self.mode, color=accent_color, label="HOOK")
             img_arr = np.array(img)
             img_arr = draw_scan_lines(img_arr, opacity=0.05)
             return img_arr

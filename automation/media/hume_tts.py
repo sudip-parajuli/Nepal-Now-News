@@ -105,6 +105,18 @@ class HumeTTS:
             "format": {"type": "mp3"},
             "num_generations": 1,
         }
+        # Request real word-level timestamps (Octave 2). Without these two fields the
+        # API silently omits timing data entirely — the response still has a "snippets"
+        # key, just with no `timestamps` inside it, which is why this previously always
+        # fell through to the WPM-based *estimate* below. That estimate assumes a
+        # constant speaking rate, which drifts audibly out of sync with the actual
+        # narration (pauses, emphasis, variable pacing) — invisible with the old
+        # whole-chunk caption highlighting, but very visible with real per-word karaoke
+        # sync. A voice is required for version "2" to return timestamps; only request
+        # it when we actually have one (falls back to the WPM estimate otherwise).
+        if chosen_voice:
+            payload["version"] = "2"
+            payload["include_timestamp_types"] = ["word"]
 
         # Try each key in sequence
         for attempt, api_key in enumerate(self.api_keys, start=1):
@@ -187,42 +199,85 @@ class HumeTTS:
         """
         import logging
         logger = logging.getLogger("HumeTTS")
-        
+
         offsets = []
 
-        # Format 1: snippets[].timestamps (dict with begin/end)
-        for snippet in generation.get("snippets", []):
+        # Format 1 (current, Octave 2 with include_timestamp_types=["word"]):
+        # generation["snippets"] is a list of lists (one inner list per utterance), each
+        # containing snippet dicts with a "timestamps" list of
+        # {"text": "word", "type": "word", "time": {"begin": ms, "end": ms}}.
+        raw_snippets = generation.get("snippets", [])
+        flat_snippets = []
+        for group in raw_snippets:
+            if isinstance(group, list):
+                flat_snippets.extend(group)
+            elif isinstance(group, dict):
+                flat_snippets.append(group)
+
+        for snippet in flat_snippets:
             if not isinstance(snippet, dict):
                 continue
-            ts = snippet.get("timestamps", {})
-            word = snippet.get("text", "").strip()
-            if isinstance(ts, dict) and word:
+            for t in snippet.get("timestamps", []) or []:
+                if not isinstance(t, dict):
+                    continue
+                if t.get("type") not in (None, "word"):
+                    continue  # skip phoneme-level entries if both types were requested
+                word = str(t.get("text", "")).strip()
+                if not word:
+                    continue
+                time_obj = t.get("time", {})
                 try:
-                    # In some API versions ts['begin'] is a list of floats
-                    b_val = ts.get("begin", ts.get("start", 0.0))
-                    begin = float(b_val[0]) if isinstance(b_val, list) else float(b_val)
-                    e_val = ts.get("end", begin + 0.3)
-                    end = float(e_val[-1]) if isinstance(e_val, list) else float(e_val)
-                    offsets.append({"word": word, "start": begin, "duration": end - begin})
+                    begin_ms = float(time_obj.get("begin", 0.0))
+                    end_ms = float(time_obj.get("end", begin_ms + 300))
+                    offsets.append({
+                        "word": word,
+                        "start": begin_ms / 1000.0,
+                        "duration": max(0.05, (end_ms - begin_ms) / 1000.0),
+                    })
                 except Exception:
                     pass
-            elif isinstance(ts, list):
-                for t in ts:
-                    if not isinstance(t, dict):
-                        continue
-                    w = t.get("word", "").strip()
+
+        # Format 2 (older/alternate shape seen in earlier API versions): flat
+        # snippets[].timestamps as a dict or list with begin/end directly (no "time" wrapper,
+        # values already in seconds).
+        if not offsets:
+            for snippet in flat_snippets:
+                if not isinstance(snippet, dict):
+                    continue
+                ts = snippet.get("timestamps", {})
+                word = snippet.get("text", "").strip()
+                # `ts and` matters: snippet.get("timestamps", {}) defaults to an empty
+                # dict when the key is simply absent (e.g. timestamps weren't requested/
+                # returned), and without this check an empty-but-still-a-dict `ts` was
+                # treated as valid single-word timing — using the WHOLE snippet's text
+                # (often a full sentence) as "one word" with a fabricated 0.3s duration,
+                # instead of correctly falling through to the per-word WPM estimate below.
+                if isinstance(ts, dict) and ts and word:
                     try:
-                        b_val = t.get("begin", t.get("start", 0.0))
+                        b_val = ts.get("begin", ts.get("start", 0.0))
                         begin = float(b_val[0]) if isinstance(b_val, list) else float(b_val)
-                        e_val = t.get("end", begin + 0.3)
+                        e_val = ts.get("end", begin + 0.3)
                         end = float(e_val[-1]) if isinstance(e_val, list) else float(e_val)
-                        if w:
-                            offsets.append({"word": w, "start": begin, "duration": end - begin})
+                        offsets.append({"word": word, "start": begin, "duration": end - begin})
                     except Exception:
                         pass
+                elif isinstance(ts, list):
+                    for t in ts:
+                        if not isinstance(t, dict):
+                            continue
+                        w = t.get("word", "").strip()
+                        try:
+                            b_val = t.get("begin", t.get("start", 0.0))
+                            begin = float(b_val[0]) if isinstance(b_val, list) else float(b_val)
+                            e_val = t.get("end", begin + 0.3)
+                            end = float(e_val[-1]) if isinstance(e_val, list) else float(e_val)
+                            if w:
+                                offsets.append({"word": w, "start": begin, "duration": end - begin})
+                        except Exception:
+                            pass
 
         if not offsets:
-            # Format 2: word_timestamps[] (alternative)
+            # Format 3: word_timestamps[] (alternative)
             for wt in generation.get("word_timestamps", []):
                 word = wt.get("word", "").strip()
                 begin = float(wt.get("begin", wt.get("start", 0.0)))
