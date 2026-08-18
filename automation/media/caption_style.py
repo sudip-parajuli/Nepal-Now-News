@@ -20,6 +20,15 @@ import re
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
+# Single source of truth for WHERE caption-style text sits, shared by the pop-up word
+# captions here AND scene_renderer.py's hook_question/typewriter hero text — previously
+# each had its own position (pop captions at 60% down, hook_question dead-center via
+# (HEIGHT - text_h)//2), so the opening hook visibly jumped to a different spot than
+# every other caption in the video. 0.70 sits below center (clear of the main subject)
+# but above YouTube's bottom ~15-20% title/description/engagement-rail safe zone.
+PORTRAIT_CAPTION_Y_FRACTION = 0.70
+LANDSCAPE_CAPTION_Y_FRACTION = 0.78
+
 # Caption-specific accent — deliberately distinct from the cyan HUD/lower-third accent
 # so highlighted words pop against both the pill and the cyan sci-fi overlay elements.
 HIGHLIGHT_COLOR = (255, 199, 40)

@@ -6,6 +6,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 from moviepy.editor import VideoClip, ImageClip, VideoFileClip
 
+from .caption_style import PORTRAIT_CAPTION_Y_FRACTION, LANDSCAPE_CAPTION_Y_FRACTION
+
 # Size constants will be handled by SceneRenderer instance
 
 def get_font_path(style="bold") -> str:
@@ -298,7 +300,11 @@ class SceneRenderer:
         total_chars = sum(len(item['word']) for line in lines for item in line)
         
         total_h = len(lines) * line_spacing
-        start_y = (self.HEIGHT - total_h) // 2
+        # Same vertical anchor as every other caption in the video (pop-up captions,
+        # hook_question) instead of this scene's own dead-center position — previously
+        # typewriter_text was yet another place text jumped to a different spot.
+        caption_frac = PORTRAIT_CAPTION_Y_FRACTION if self.mode == 'portrait' else LANDSCAPE_CAPTION_Y_FRACTION
+        start_y = int(self.HEIGHT * caption_frac) - total_h // 2
         
         def make_frame(t):
             # Plane blank page with a sleek premium dark gray color
@@ -802,7 +808,10 @@ class SceneRenderer:
         chunks[-1]["end"] = duration
 
         emp_clean = (emphasis_phrase or "").strip().upper().replace("*", "")
-        f_chunk = int(96 * (1.18 if is_port else 1.0))
+        # Reduced from 96/113pt (landscape/portrait) — at the old size, a 4-6 word hook
+        # chunk with the new pill backdrop dominated the frame. Now close to (rather
+        # than well above) the regular pop-caption size for a consistent scale.
+        f_chunk = int(70 * (1.18 if is_port else 1.0))
         f_small = int(44 * (1.18 if is_port else 1.0))
         font_chunk = ImageFont.truetype(font_path_bold, f_chunk)
         font_small = ImageFont.truetype(font_path_reg, f_small)
@@ -826,17 +835,27 @@ class SceneRenderer:
             except AttributeError:
                 line_w = draw.textlength(line, font=font)
             scaled_x = x - line_w // 2
+            # BUGFIX: this used to be `y*scale + (f_chunk*(1-scale))/2`, which scales the
+            # RAW absolute Y pixel coordinate. That's only a subtle few-pixel drift when y
+            # is small (text near the old vertical-center position), but once the caption
+            # position moved lower on screen (much larger y), the same formula produced a
+            # 100+ pixel jump during the pop-in — visibly detaching the text from the
+            # pill backdrop drawn at the (unscaled) target position. A small, fixed-size
+            # rise that's independent of y's absolute value gives the same "pop up into
+            # place" feel without moving the text away from its backdrop.
+            pop_rise = int(max(0.0, 1.0 - scale) * 40)
+            draw_y = y + pop_rise
             glow_color = (color[0], color[1], color[2], int(alpha * 0.35))
             for r in range(6, 0, -1):
                 draw.text(
-                    (scaled_x, int(y * scale + (f_chunk * (1 - scale)) / 2)),
+                    (scaled_x, draw_y),
                     line,
                     font=font,
                     fill=(glow_color[0], glow_color[1], glow_color[2], max(12, int(glow_color[3] / r))),
                     stroke_width=r,
                 )
             draw.text(
-                (scaled_x, int(y * scale + (f_chunk * (1 - scale)) / 2)),
+                (scaled_x, draw_y),
                 line,
                 font=font,
                 fill=(color[0], color[1], color[2], alpha),
@@ -844,7 +863,7 @@ class SceneRenderer:
                 stroke_fill=(0, 0, 0, int(alpha * 0.75)),
             )
             if underline:
-                base_y = int((y + f_chunk + 12) * scale + (f_chunk * (1 - scale)) / 2)
+                base_y = draw_y + f_chunk + 12
                 for r in range(3, 0, -1):
                     draw.line(
                         [(scaled_x, base_y), (scaled_x + line_w, base_y)],
@@ -903,7 +922,12 @@ class SceneRenderer:
 
             lines = wrap_text(chunk_text, font_chunk, self.WIDTH - 170)
             total_h = len(lines) * int(f_chunk * 1.15)
-            y_start_orig = max(160 if is_port else 130, (self.HEIGHT - total_h) // 2)
+            # Same vertical anchor as every other caption (pop-up captions,
+            # typewriter_text) instead of this scene's own dead-center position —
+            # previously the opening hook was the one place captions still sat in the
+            # middle of the frame, right over the main subject.
+            caption_frac = PORTRAIT_CAPTION_Y_FRACTION if is_port else LANDSCAPE_CAPTION_Y_FRACTION
+            y_start_orig = max(160 if is_port else 130, int(self.HEIGHT * caption_frac) - total_h // 2)
 
             # Pill backdrop behind the hook text, matching the caption pill used
             # everywhere else in the video (see caption_style.py) instead of floating
