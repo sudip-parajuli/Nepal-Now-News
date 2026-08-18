@@ -7,9 +7,12 @@ from typing import List, Dict
 from .hf_video_generator import generate_hf_video
 from .image_fetcher import ImageFetcher
 from . import stock_media
+from . import visual_relevance
 
 MAX_AI_VIDEO_PER_JOB = 3     # Per-video cap to protect HF monthly quota
 MAX_STOCK_VIDEO_PER_JOB = 5  # Per-video cap to keep download/render time bounded
+RELEVANCE_CHECK_ENABLED = os.getenv("DISABLE_VISUAL_RELEVANCE_CHECK", "").strip().lower() not in ("1", "true", "yes")
+MAX_RELEVANCE_CHECKS_PER_SCENE = 3  # bound latency/Gemini-quota usage per scene
 
 
 class AssetOrchestrator:
@@ -131,6 +134,12 @@ class AssetOrchestrator:
                     else:
                         visual_type = "image"  # If video failed, treat as image
 
+            # Description used for the AI relevance check and, if needed, the AI-image
+            # fallback below — the actual narration is far more specific than the
+            # (sometimes garbled, e.g. from the bare-fallback scene builder) search
+            # query used to fetch candidates in the first place.
+            relevance_desc = narration.strip() or image_cue
+
             # Real stock-video b-roll for plain "image" scenes — an actual moving clip
             # that matches the subject beats a static Ken-Burns photo, and Pexels/Pixabay
             # are official APIs (not scraping), so this doesn't add DDG rate-limit risk.
@@ -139,12 +148,13 @@ class AssetOrchestrator:
             if (visual_type == "image" and stock_media.has_stock_api_keys()
                     and stock_video_count < MAX_STOCK_VIDEO_PER_JOB):
                 print(f"[AssetOrchestrator] Scene {idx}: trying real stock-video b-roll for '{image_cue}'...")
-                video_paths = stock_media.fetch_real_videos(
-                    image_cue, 1, job_dir, f"job_{job_id}_scene{idx}",
+                video_candidates = stock_media.fetch_real_videos(
+                    image_cue, MAX_RELEVANCE_CHECKS_PER_SCENE, job_dir, f"job_{job_id}_scene{idx}",
                     portrait=(aspect_ratio == "9:16"),
                 )
-                if video_paths:
-                    asset_path = video_paths[0]
+                chosen_video = self._pick_relevant_asset(video_candidates, relevance_desc)
+                if chosen_video:
+                    asset_path = chosen_video
                     if aspect_ratio == "9:16":
                         asset_path = self._crop_video_to_portrait(asset_path)
                     scene_entry["asset_type"] = "video"
@@ -153,6 +163,9 @@ class AssetOrchestrator:
                     manifest["scenes"].append(scene_entry)
                     self._save_manifest(manifest)
                     continue
+                elif video_candidates:
+                    print(f"[AssetOrchestrator] Scene {idx}: none of {len(video_candidates)} stock video "
+                          f"candidate(s) passed the relevance check for '{relevance_desc[:60]}...' — trying images.")
 
             # Fetch background image for all other scene types to draw overlay styles on top of
             print(f"[AssetOrchestrator] Scene {idx}: fetching background image for type '{visual_type}'...")
@@ -173,8 +186,16 @@ class AssetOrchestrator:
                 topic_context=topic,
                 portrait=(aspect_ratio == "9:16"),
             )
-            if paths:
-                asset_path = paths[0]
+            chosen_image = self._pick_relevant_asset(paths, relevance_desc)
+            if not chosen_image and paths:
+                # Every fetched candidate failed the relevance check — generate one
+                # with AI from the actual narration instead of using a real photo we
+                # already determined doesn't match the script.
+                print(f"[AssetOrchestrator] Scene {idx}: none of {len(paths)} image candidate(s) passed the "
+                      f"relevance check for '{relevance_desc[:60]}...' — generating an AI image instead.")
+                chosen_image = self._generate_relevant_ai_image(relevance_desc, f"job_{job_id}_scene{idx}_ai")
+            if chosen_image:
+                asset_path = chosen_image
                 if aspect_ratio == "9:16":
                     asset_path = self._crop_image_to_portrait(asset_path)
                 scene_entry["asset_type"] = "image"
@@ -235,6 +256,35 @@ class AssetOrchestrator:
             print(f"[AssetOrchestrator] Cleaned up temp dir: {job_dir}")
 
     # ── Internals ──────────────────────────────────────────────────────────────
+
+    def _pick_relevant_asset(self, candidates: List[str], description: str) -> str | None:
+        """
+        Returns the first candidate (image or video path) that an AI relevance check
+        confirms plausibly matches `description` (the scene's actual narration —
+        far more specific than the search query that fetched these candidates).
+        Checks at most MAX_RELEVANCE_CHECKS_PER_SCENE candidates to bound latency and
+        Gemini quota usage. Returns None if none of the checked candidates pass —
+        callers should fall back to AI image generation in that case.
+        """
+        if not candidates:
+            return None
+        if not RELEVANCE_CHECK_ENABLED or not description:
+            return candidates[0]
+        for path in candidates[:MAX_RELEVANCE_CHECKS_PER_SCENE]:
+            if visual_relevance.is_visually_relevant(path, description):
+                return path
+        return None
+
+    def _generate_relevant_ai_image(self, description: str, base_filename: str) -> str | None:
+        """Last resort when no fetched photo/video passes the relevance check: generate
+        one with Pollinations.ai using the scene's actual narration as the prompt,
+        rather than falling back to a generic/possibly-irrelevant real photo."""
+        try:
+            paths = self.image_fetcher._generate_pollinations_images(description, base_filename, count=1)
+            return paths[0] if paths else None
+        except Exception as e:
+            print(f"[AssetOrchestrator] AI relevance-fallback image generation failed: {e}")
+            return None
 
     def _save_manifest(self, manifest: dict):
         path = os.path.join(manifest["job_dir"], "manifest.json")

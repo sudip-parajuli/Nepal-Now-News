@@ -242,14 +242,15 @@ class VideoShortsGenerator:
 
             print("DEBUG: Using Pop-Up Word caption style (scale-in, bold, keyword highlight)")
 
-            from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
+            from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip, PORTRAIT_CAPTION_Y_FRACTION
 
             pop_font = get_pop_font(102)
             pop_chunks = build_pop_chunks(word_offsets)
 
-            # Below center, clear of the bottom safe area reserved for the Shorts title/
-            # description/engagement rail — matches create_shorts_from_scenes.
-            caption_y = int(self.size[1] * 0.60)
+            # Shared position constant — matches hook_question's text and
+            # create_shorts_from_scenes below, so every caption in the video (including
+            # the opening hook) sits at the same spot instead of jumping around.
+            caption_y = int(self.size[1] * PORTRAIT_CAPTION_Y_FRACTION)
             badge_dur = min(3.0, duration)
             badge_start = max(0.0, duration - badge_dur)
 
@@ -521,15 +522,15 @@ class VideoShortsGenerator:
             # ── 5. Overlay pop-up captions ──────────────────────────────────────
             if word_offsets:
                 try:
-                    from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
+                    from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip, PORTRAIT_CAPTION_Y_FRACTION
 
                     pop_font = get_pop_font(102)
                     pop_chunks = build_pop_chunks(word_offsets)
 
-                    # Below center but well clear of the bottom ~20% YouTube reserves for the
-                    # Shorts title/description/engagement rail — previously dead-center (44.8%
-                    # down), which read as visually awkward and fought with mid-frame subjects.
-                    caption_y = int(1920 * 0.60)
+                    # Shared position constant — same spot as hook_question's text and the
+                    # legacy create_shorts() path above, so every caption in the video sits
+                    # in the same place instead of jumping around between scenes.
+                    caption_y = int(1920 * PORTRAIT_CAPTION_Y_FRACTION)
                     for i, chunk in enumerate(pop_chunks):
                         if not chunk:
                             continue

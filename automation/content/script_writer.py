@@ -21,6 +21,30 @@ def is_llm_failure(text: str) -> bool:
     return bool(text) and text.strip().startswith("Error: Maximum retries reached")
 
 
+def _sentence_to_image_cue(sentence: str, topic: str, max_words: int = 8) -> str:
+    """
+    Builds a search-friendly image cue from one script sentence, for the bare-fallback
+    scene builder used only when the LLM completely fails to return a structured scene
+    list. Previously every fallback scene reused the exact same
+    f"{topic} space background" query regardless of the sentence's actual content — so
+    a fallback-generated video fetched the same handful of loosely-related (and
+    space-biased regardless of topic) photos for every single scene, no matter what
+    the narration was actually about.
+    """
+    clean = re.sub(r'\*', '', sentence)
+    clean = re.sub(r'[^a-zA-Z0-9 ]', ' ', clean)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    words = [w for w in clean.split() if len(w) > 2][:max_words]
+    if words:
+        return " ".join(words)
+    # Sentence was too short/empty — fall back to a cleaned topic (strip a "What if"/
+    # "Did you know" wrapper and the trailing "?" so it reads as a plain search phrase
+    # instead of a literal question).
+    cleaned_topic = re.sub(r'^(what if|did you know)\s+', '', topic.strip(), flags=re.IGNORECASE)
+    cleaned_topic = cleaned_topic.rstrip('?').strip()
+    return cleaned_topic or "science"
+
+
 class ScriptWriter:
     def __init__(self, api_key: str = None):
         # Gather all Gemini keys from env
@@ -493,7 +517,7 @@ Script:
                 scenes.append({
                     "narration": s + ".",
                     "visual_type": "image",
-                    "image_cue": f"{topic} space background",
+                    "image_cue": _sentence_to_image_cue(s, topic),
                     "typewriter_words": None,
                     "stat_data": None,
                     "named_entity": None,
@@ -691,7 +715,7 @@ Script:
                 scenes.append({
                     "narration": s + ".",
                     "visual_type": "image",
-                    "image_cue": f"{topic} space background",
+                    "image_cue": _sentence_to_image_cue(s, topic),
                     "typewriter_words": None,
                     "stat_data": None,
                     "named_entity": None,

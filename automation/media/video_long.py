@@ -427,7 +427,7 @@ class VideoLongGenerator:
         final_bg = CompositeVideoClip(bg_clips, size=self.size)
         caption_clips = []
         
-        from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip
+        from .caption_style import get_pop_font, build_pop_chunks, make_pop_caption_clip, LANDSCAPE_CAPTION_Y_FRACTION
 
         pop_font = get_pop_font(110)
         pop_chunks = build_pop_chunks(word_offsets)
@@ -437,11 +437,10 @@ class VideoLongGenerator:
         badge_dur = min(5.0, total_duration)
         badge_start = max(0.0, total_duration - badge_dur)
 
-        # Lower-third placement instead of dead-center — previously captions sat at
-        # y=540 (exact vertical center), permanently covering the middle of every shot
-        # (faces, subjects, charts). Traditional subtitle position, clear of both the
-        # frame's visual center and the subscribe badge (which is suppressed here too).
-        caption_y = int(self.size[1] * 0.74)
+        # Shared position constant (also used by hook_question's text in
+        # scene_renderer.py) — lower-third placement instead of dead-center, clear of
+        # both the frame's visual center and the subscribe badge (suppressed below too).
+        caption_y = int(self.size[1] * LANDSCAPE_CAPTION_Y_FRACTION)
 
         if burn_captions:
             for i, chunk in enumerate(pop_chunks):
