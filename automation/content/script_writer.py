@@ -805,3 +805,114 @@ Script:
             "thumbnail_bg_query": f"cinematic 4k photo of {topic}, scientific documentary style",
             "thumbnail_subject_query": ""
         }
+
+    def generate_social_post(self, post_type: str, headlines: List[Dict] = None,
+                              recent_history: List[str] = None) -> Dict[str, str]:
+        """
+        Generates a Facebook/Instagram text+photo post. `post_type` is one of
+        "discovery", "breaking_news", "myth_bust", "fun_fact". `headlines` (from
+        news_fetcher.fetch_recent_headlines) grounds breaking_news/myth_bust in real,
+        recent coverage instead of pure invention. Returns:
+          {"topic": str, "caption": str, "image_query": str}
+        """
+        headlines = headlines or []
+        recent_history = recent_history or []
+
+        headlines_block = ""
+        if headlines:
+            lines = [f"- {h['title']}" + (f" ({h['source']})" if h.get('source') else "")
+                     for h in headlines[:6]]
+            headlines_block = (
+                "Here are real, recent science-related headlines you can draw from "
+                "(optional — skip them if none genuinely fit):\n" + "\n".join(lines)
+            )
+
+        type_instructions = {
+            "discovery": (
+                "Write about a genuinely fascinating, true, and SPECIFIC scientific discovery or "
+                "phenomenon (a landmark historical discovery, or something from real research). Make it "
+                "read like a surprising story, not a textbook fact."
+            ),
+            "breaking_news": (
+                "Write about real, current science news.\n" + headlines_block + "\n"
+                "Pick the single most interesting item and explain what actually happened and why it "
+                "matters, in plain language — don't just restate the headline."
+            ),
+            "myth_bust": (
+                "Pick ONE specific, widely-believed science myth or piece of misinformation and debunk "
+                "it clearly.\n" + headlines_block + "\n"
+                "Structure: state the myth people believe, then the actual fact, then briefly explain why "
+                "the myth took hold or what the real explanation is. Genuinely educational, never "
+                "condescending toward people who believed it."
+            ),
+            "fun_fact": (
+                "Share one punchy, mind-blowing, TRUE science fact — the kind that makes someone stop "
+                "scrolling and say 'wait, really?!'"
+            ),
+        }
+        instruction = type_instructions.get(post_type, type_instructions["discovery"])
+
+        avoid_block = ""
+        if recent_history:
+            avoid_block = "Avoid repeating these recent post topics:\n" + "\n".join(
+                f"- {h}" for h in recent_history[-15:]
+            )
+
+        prompt = f"""
+        You are writing a Facebook/Instagram post for a science education page called
+        "Daily Deep Space" (@dailydeepspace).
+
+        {instruction}
+
+        {avoid_block}
+
+        Requirements:
+        - Caption length: 60-120 words. The first line is a punchy hook (it's the only part
+          shown before "See more", so it must work standalone).
+        - Tone: curious, awe-driven, accessible. Never dry, never textbook-like.
+        - Use 1-3 well-placed emoji, not more.
+        - End with a short, genuine question inviting comments — not generic "comment below!!" spam.
+        - Add a final line with 6-10 relevant hashtags (mix broad: #Science #Space with
+          specific-to-this-topic tags). Always include #DailyDeepSpace.
+        - Be scientifically accurate. Never exaggerate or make unverifiable claims.
+
+        Also provide a short (4-8 word) plain-English image search phrase describing what photo
+        would best illustrate this specific post (e.g. "Hubble telescope deep field galaxies",
+        "human brain neurons illustration", "great white shark underwater").
+
+        Return ONLY valid JSON:
+        {{
+          "topic": "3-6 word summary of what this post is about (internal tracking only)",
+          "caption": "the full caption text, ready to post, including the hashtag line",
+          "image_query": "the image search phrase"
+        }}
+        """
+
+        raw = self._call_with_retry(prompt)
+        if is_llm_failure(raw):
+            print("[ScriptWriter] Social post generation failed on all providers.")
+            return {
+                "topic": post_type,
+                "caption": "",
+                "image_query": "",
+            }
+
+        try:
+            cleaned = self.clean_json_response(raw)
+            data = json.loads(cleaned)
+            if isinstance(data, dict) and str(data.get("caption", "")).strip():
+                return {
+                    "topic": str(data.get("topic", post_type)).strip() or post_type,
+                    "caption": str(data.get("caption", "")).strip(),
+                    "image_query": str(data.get("image_query", "")).strip() or "science abstract background",
+                }
+        except Exception as e:
+            print(f"[ScriptWriter] Social post JSON parse error: {e}")
+
+        # LLM responded but not in the requested JSON shape — use the raw text as the
+        # caption rather than discarding a perfectly usable response.
+        return {
+            "topic": post_type,
+            "caption": raw.strip()[:600],
+            "image_query": "science abstract background",
+        }

@@ -1,22 +1,33 @@
 name: Science Video Automation
 
 run-name: >-
-  ${{ 
-    github.event_name == 'workflow_dispatch' 
-    && format('Manual: {0}', github.event.inputs.pipeline) 
+  ${{
+    github.event_name == 'workflow_dispatch'
+    && format('Manual: {0}', github.event.inputs.pipeline)
     || (github.event.schedule == '15 1,12 * * *' && 'Scheduled: Science Shorts')
-    || (github.event.schedule == '0 22 * * 3,0' && 'Scheduled: Long-Form Deep Dive')
+    || (github.event.schedule == '15 3 * * *' && 'Scheduled: Facebook/Instagram Post')
+    || (github.event.schedule == '15 7 * * *' && 'Scheduled: Facebook/Instagram Post')
+    || (github.event.schedule == '15 11 * * *' && 'Scheduled: Facebook/Instagram Post')
+    || (github.event.schedule == '15 15 * * *' && 'Scheduled: Facebook/Instagram Post')
     || (github.event.schedule == '0 3 * * *' && 'Scheduled: AI Comment Replies')
     || 'Science Automation Run'
   }}
 
+# NOTE: the long-form ("science_long"/daily) pipeline is intentionally not on a
+# schedule below — long-form output wasn't meeting the bar and is now edited
+# manually outside this automation. The pipeline code and manual-dispatch option
+# are left in place (harmless, reversible) in case it's ever wanted again; it
+# just never fires on its own anymore. Shorts + a new 4x/day Facebook/Instagram
+# text+photo post are now the only scheduled content.
 on:
   schedule:
     # Science Fact Shorts (7:00 AM & 6:30 PM NPT)
     - cron: '15 1,12 * * *'
-    # Science Long Form (Wed/Sun at 22:00 UTC -> 3:45 AM NPT next day)
-    # Optimized for USA Evening, UK Late Night, Australia Morning
-    - cron: '0 22 * * 3,0'
+    # Facebook/Instagram photo+caption posts, 4x/day (09:00, 13:00, 17:00, 21:00 NPT)
+    - cron: '15 3 * * *'
+    - cron: '15 7 * * *'
+    - cron: '15 11 * * *'
+    - cron: '15 15 * * *'
     # AI Comment Reply (Once daily at 3:00 AM UTC)
     - cron: '0 3 * * *'
   workflow_dispatch:
@@ -29,6 +40,7 @@ on:
         options:
           - science
           - science_long
+          - social_post
           - comments
       is_test:
         description: 'Run in test mode (no upload)'
@@ -94,9 +106,11 @@ jobs:
           python automation/main.py --mode shorts $FLAGS
 
       - name: Run Science Detailed (Long Form)
+        # No longer scheduled — long-form is now edited manually outside this
+        # automation. Left as a manual-dispatch-only option (harmless, reversible)
+        # rather than deleted, in case it's ever wanted again.
         if: |
-          github.event.schedule == '0 22 * * 3,0' || 
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'science_long')
+          github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'science_long'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
@@ -120,6 +134,27 @@ jobs:
           FLAGS=""
           if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
           python automation/main.py --mode daily $FLAGS
+
+      - name: Run Social Media Post (Facebook/Instagram)
+        if: |
+          github.event.schedule == '15 3 * * *' ||
+          github.event.schedule == '15 7 * * *' ||
+          github.event.schedule == '15 11 * * *' ||
+          github.event.schedule == '15 15 * * *' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.pipeline == 'social_post')
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY2: ${{ secrets.GROQ_API_KEY2 }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.is_test }}" == "true" ]; then FLAGS="--test"; fi
+          python automation/main.py --mode social_post $FLAGS
 
       - name: Run AI Comment Replier
         if: |
